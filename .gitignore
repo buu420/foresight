@@ -1,0 +1,11 @@
+.build/
+.tools/
+.worktrees/
+.superpowers/
+artifacts/
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.log
