@@ -11,6 +11,14 @@ $expectedHash = '6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178
 $stageDirectory = Join-Path $PSScriptRoot '..\native\prism\v0.17.3'
 $stageDll = Join-Path $stageDirectory 'win-x86\prism.dll'
 
+function Get-PeMachine([string]$Path) {
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 0x40 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Not a PE file: $Path" }
+    $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+    if ($peOffset -lt 0 -or $peOffset + 6 -gt $bytes.Length -or [BitConverter]::ToUInt32($bytes, $peOffset) -ne 0x00004550) { throw "Invalid PE header: $Path" }
+    return [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+}
+
 git -C $SourceDirectory checkout --detach v0.17.3
 $commit = (git -C $SourceDirectory rev-parse HEAD).Trim().ToUpperInvariant()
 if ($commit -ne $expectedCommit) { throw "Prism tag commit mismatch: $commit" }
@@ -35,9 +43,13 @@ if ($Rebuild) {
     cmake --build $buildDirectory --config Release
     $rebuiltArtifact = Get-ChildItem -LiteralPath $buildDirectory -Filter prism.dll -Recurse | Select-Object -First 1
     if (-not $rebuiltArtifact) { throw 'The pinned Prism source build did not produce prism.dll.' }
-    Write-Host "Rebuilt pinned Prism source: $($rebuiltArtifact.FullName)"
+    if ((Get-PeMachine $rebuiltArtifact.FullName) -ne 0x014C) { throw "The rebuilt Prism candidate is not Win32: $($rebuiltArtifact.FullName)" }
+    $rebuiltHash = (Get-FileHash -LiteralPath $rebuiltArtifact.FullName -Algorithm SHA256).Hash
+    Write-Host "Rebuilt Win32 Prism review candidate: $($rebuiltArtifact.FullName)"
+    Write-Host "Rebuilt candidate SHA-256: $rebuiltHash (not staged)"
 }
 
+# Only the separately reviewed, hash-pinned artifact is eligible for staging.
 if ((Get-FileHash -LiteralPath $ReviewedArtifact -Algorithm SHA256).Hash -ne $expectedHash) {
     throw 'Prism artifact hash does not match the reviewed Win32 build.'
 }
