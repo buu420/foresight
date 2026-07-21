@@ -8,7 +8,7 @@ public sealed class AccessibilityState
     private static readonly IReadOnlyList<Announcement> NoAnnouncements = Array.Empty<Announcement>();
 
     private ScreenKind? _activeScreen;
-    private string? _lastSemanticIdentity;
+    private AccessibilityEvent? _lastSemanticIdentity;
 
     public int Generation { get; private set; }
 
@@ -116,21 +116,47 @@ public sealed class AccessibilityState
 
     private IReadOnlyList<Announcement> ApplyTimedDescription(TimedDescription timedDescription)
     {
-        return _activeScreen == ScreenKind.OpeningMovie && Generation == timedDescription.Generation
-            ? [Queue(timedDescription.Text, timedDescription.Generation)]
-            : NoAnnouncements;
+        if (_activeScreen != ScreenKind.OpeningMovie ||
+            Generation != timedDescription.Generation ||
+            !Remember(timedDescription))
+        {
+            return NoAnnouncements;
+        }
+
+        return [Queue(timedDescription.Text, timedDescription.Generation)];
     }
 
     private bool Remember(AccessibilityEvent accessibilityEvent)
     {
-        var semanticIdentity = accessibilityEvent.ToString();
-        if (semanticIdentity == _lastSemanticIdentity)
+        if (HasSameSemanticIdentity(_lastSemanticIdentity, accessibilityEvent))
         {
             return false;
         }
 
-        _lastSemanticIdentity = semanticIdentity;
+        _lastSemanticIdentity = Snapshot(accessibilityEvent);
         return true;
+    }
+
+    private static bool HasSameSemanticIdentity(
+        AccessibilityEvent? previous,
+        AccessibilityEvent current)
+    {
+        if (previous is ConfirmationOpened previousConfirmation &&
+            current is ConfirmationOpened currentConfirmation)
+        {
+            return previousConfirmation.Prompt == currentConfirmation.Prompt &&
+                previousConfirmation.SelectedIndex == currentConfirmation.SelectedIndex &&
+                previousConfirmation.Choices.SequenceEqual(currentConfirmation.Choices, StringComparer.Ordinal);
+        }
+
+        return previous == current;
+    }
+
+    private static AccessibilityEvent Snapshot(AccessibilityEvent accessibilityEvent)
+    {
+        return accessibilityEvent is ConfirmationOpened confirmationOpened
+            ? confirmationOpened with { Choices = confirmationOpened.Choices.ToArray() }
+            : accessibilityEvent;
     }
 
     private static Announcement Interrupt(string text) =>

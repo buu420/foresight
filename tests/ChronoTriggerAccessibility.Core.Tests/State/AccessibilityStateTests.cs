@@ -114,6 +114,27 @@ public sealed class AccessibilityStateTests
     }
 
     [Fact]
+    public void ConfirmationOpened_ChangedChoicesWithSamePromptAndIndex_EmitsUpdatedChoice()
+    {
+        var state = new AccessibilityState();
+        state.Apply(new ScreenEntered(ScreenKind.NameEntry));
+        state.Apply(new ConfirmationOpened(
+            "Start with the name Crono?",
+            ["Yes", "No"],
+            0));
+
+        var announcements = state.Apply(new ConfirmationOpened(
+            "Start with the name Crono?",
+            ["Confirm", "Cancel"],
+            0));
+
+        Assert.Collection(
+            announcements,
+            announcement => Assert.Equal("Start with the name Crono?", announcement.Text),
+            announcement => Assert.Equal("Confirm, 1 of 2", announcement.Text));
+    }
+
+    [Fact]
     public void ScreenExited_OpeningMovie_IncrementsGenerationAndRejectsStaleTimedDescriptions()
     {
         var state = new AccessibilityState();
@@ -125,5 +146,21 @@ public sealed class AccessibilityStateTests
 
         Assert.Equal(movieGeneration + 1, state.Generation);
         Assert.Empty(announcements);
+    }
+
+    [Fact]
+    public void TimedDescription_UnchangedEventIsSuppressedButNewTextEmits()
+    {
+        var state = new AccessibilityState();
+        state.Apply(new ScreenEntered(ScreenKind.OpeningMovie));
+        var movieGeneration = state.Generation;
+
+        var firstAnnouncements = state.Apply(new TimedDescription("A pendulum swings.", movieGeneration));
+        var repeatedAnnouncements = state.Apply(new TimedDescription("A pendulum swings.", movieGeneration));
+        var changedAnnouncements = state.Apply(new TimedDescription("A clock face fills the screen.", movieGeneration));
+
+        Assert.Equal("A pendulum swings.", Assert.Single(firstAnnouncements).Text);
+        Assert.Empty(repeatedAnnouncements);
+        Assert.Equal("A clock face fills the screen.", Assert.Single(changedAnnouncements).Text);
     }
 }
