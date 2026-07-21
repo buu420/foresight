@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PrismDllSha256>6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178A</PrismDllSha256>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\native\prism\v0.17.3\win-x86\prism.dll" Link="prism.dll" CopyToOutputDirectory="PreserveNewest" />
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ChronoTriggerAccessibility.Prism.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>
