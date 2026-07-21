@@ -57,6 +57,10 @@ Known native anchors include:
 - `SqexLogoScene::create` RVA `0x2CC3C0`
 - `TextManager::getMsg` RVA `0x1B92D0`
 - `NameInputScene::update` RVA `0x2C2C50`
+- generic `nsMenu::Manager` focus setter RVA `0x1DD3E0` (`Manager + 0x2C4` is the current index)
+- `ModeSelectSteamScene` callback RVA `0x2AB9E0` (`scene + 0x29C` is the composite focus)
+- Control Descriptions Next callback RVA `0x2AE840`
+- name-action callback RVA `0x2C1760`
 - `TitleScene::init` RVA `0x2D0C50`
 - `TapToStartMode::update` RVA `0x2CF440`
 - `TitleMenuMode` setup RVA `0x2CF560`
@@ -65,6 +69,8 @@ Known native anchors include:
 - title action dispatcher RVA `0x2CFFF0`
 
 The implementation may add stronger focus-change boundaries identified during Ghidra analysis, but it must retain the executable and expected-byte checks.
+
+All detours use explicit Reloaded x86 calling-convention metadata. In particular, `std::function::_Do_call` hooks treat `ECX` as the closure and preserve whether each stack argument is passed by value or by pointer; an ABI guess is a release-blocking defect.
 
 ### Semantic state reducer
 
