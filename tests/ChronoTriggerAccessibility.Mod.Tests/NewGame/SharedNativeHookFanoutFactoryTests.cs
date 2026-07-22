@@ -47,6 +47,40 @@ public sealed class SharedNativeHookFanoutFactoryTests
     }
 
     [Fact]
+    public void MenuLabelHookForwardsEveryNativeArgumentAndRootReturnToEveryObserver()
+    {
+        var calls = new List<string>();
+        var first = new PayloadObserver("first", calls);
+        var second = new PayloadObserver("second", calls);
+        var inner = new RecordingFactory();
+        var factory = CreateFactory(inner, calls, first, second);
+        nint position = 0x1111;
+        nint text = 0x2222;
+        nint anchor = 0x3333;
+        const int fontSize = 44;
+        nint returned = 0x5555;
+        MenuTextLabelFactoryDelegate root = (actualPosition, actualText, actualAnchor, actualFontSize) =>
+        {
+            calls.Add("root-label");
+            Assert.Equal(position, actualPosition);
+            Assert.Equal(text, actualText);
+            Assert.Equal(anchor, actualAnchor);
+            Assert.Equal(fontSize, actualFontSize);
+            return returned;
+        };
+
+        _ = factory.CreateHook(HookId.MenuTextLabelFactory, root, 0x6400B0);
+        var actualReturned = inner.GetDetour<MenuTextLabelFactoryDelegate>(HookId.MenuTextLabelFactory)(
+            position, text, anchor, fontSize);
+
+        Assert.Equal(returned, actualReturned);
+        Assert.Equal(["root-label", "first-label", "second-label"], calls);
+        var expected = new MenuLabelPayload(position, text, anchor, fontSize, returned);
+        Assert.Equal(expected, Assert.Single(first.MenuLabelPayloads));
+        Assert.Equal(expected, Assert.Single(second.MenuLabelPayloads));
+    }
+
+    [Fact]
     public void CustomButtonHookForwardsStorageAndRootReturnToEveryObserver()
     {
         var calls = new List<string>();
@@ -173,6 +207,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
 
     [Theory]
     [InlineData(HookId.TextManagerGetMsg)]
+    [InlineData(HookId.MenuTextLabelFactory)]
     [InlineData(HookId.NsMenuFocusSetter)]
     [InlineData(HookId.NsMenuCustomButtonConstructor)]
     [InlineData(HookId.NsMenuControlBinder)]
@@ -191,6 +226,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
 
     [Theory]
     [InlineData(HookId.TextManagerGetMsg, "text")]
+    [InlineData(HookId.MenuTextLabelFactory, "label")]
     [InlineData(HookId.NsMenuFocusSetter, "focus")]
     [InlineData(HookId.NsMenuCustomButtonConstructor, "custom")]
     [InlineData(HookId.NsMenuControlBinder, "binder")]
@@ -307,6 +343,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         ModeSelectSteamInitDelegate wrong = _ => 1;
 
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.TextManagerGetMsg, wrong, 1));
+        Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.MenuTextLabelFactory, wrong, 1));
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuFocusSetter, wrong, 1));
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuCustomButtonConstructor, wrong, 1));
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuControlBinder, wrong, 1));
@@ -419,6 +456,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         return id switch
         {
             HookId.TextManagerGetMsg => InvokeThrowingText(factory, inner, expected),
+            HookId.MenuTextLabelFactory => InvokeThrowingMenuLabel(factory, inner, expected),
             HookId.NsMenuFocusSetter => InvokeThrowingFocus(factory, inner, expected),
             HookId.NsMenuCustomButtonConstructor => InvokeThrowingCustom(factory, inner, expected),
             HookId.NsMenuControlBinder => InvokeThrowingBinder(factory, inner, expected),
@@ -443,6 +481,15 @@ public sealed class SharedNativeHookFanoutFactoryTests
         _ = factory.CreateHook(HookId.NsMenuFocusSetter, root, 1);
         return Assert.Throws<InvalidOperationException>(() =>
             inner.GetDetour<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter)(1, 2));
+    }
+
+    private static InvalidOperationException InvokeThrowingMenuLabel(
+        SharedNativeHookFanoutFactory factory, RecordingFactory inner, InvalidOperationException expected)
+    {
+        MenuTextLabelFactoryDelegate root = (_, _, _, _) => throw expected;
+        _ = factory.CreateHook(HookId.MenuTextLabelFactory, root, 1);
+        return Assert.Throws<InvalidOperationException>(() =>
+            inner.GetDetour<MenuTextLabelFactoryDelegate>(HookId.MenuTextLabelFactory)(1, 2, 3, 4));
     }
 
     private static InvalidOperationException InvokeThrowingCustom(
@@ -485,6 +532,11 @@ public sealed class SharedNativeHookFanoutFactoryTests
                 _ = factory.CreateHook(id, text, 1);
                 Assert.Equal((nint)0x55, inner.GetDetour<TextManagerGetMsgDelegate>(id)(1, 2, 3, 4));
                 break;
+            case HookId.MenuTextLabelFactory:
+                MenuTextLabelFactoryDelegate label = (_, _, _, _) => { calls.Add("root"); return 0x58; };
+                _ = factory.CreateHook(id, label, 1);
+                Assert.Equal((nint)0x58, inner.GetDetour<MenuTextLabelFactoryDelegate>(id)(1, 2, 3, 4));
+                break;
             case HookId.NsMenuFocusSetter:
                 NsMenuFocusSetterDelegate focus = (_, _) => calls.Add("root");
                 _ = factory.CreateHook(id, focus, 1);
@@ -525,6 +577,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
     }
 
     private sealed record TextPayload(nint TextManager, nint Result, int FileId, int MessageId, nint Returned);
+    private sealed record MenuLabelPayload(nint Position, nint Text, nint Anchor, int FontSize, nint Returned);
     private sealed record FocusPayload(nint Manager, int ManagerKey);
     private sealed record CustomButtonPayload(nint Storage, nint Returned);
     private sealed record BinderPayload(nint Manager, nint FocusableState, int ManagerKey);
@@ -533,6 +586,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
     private sealed class PayloadObserver(string name, List<string> calls) : ISharedNativeHookObserver
     {
         public List<TextPayload> TextPayloads { get; } = [];
+        public List<MenuLabelPayload> MenuLabelPayloads { get; } = [];
         public List<FocusPayload> FocusPayloads { get; } = [];
         public List<CustomButtonPayload> CustomButtonPayloads { get; } = [];
         public List<BinderPayload> BinderPayloads { get; } = [];
@@ -542,6 +596,17 @@ public sealed class SharedNativeHookFanoutFactoryTests
         {
             calls.Add($"{name}-text");
             TextPayloads.Add(new(textManager, result, fileId, messageId, returned));
+        }
+
+        public void AfterMenuTextLabelFactory(
+            nint position,
+            nint text,
+            nint anchor,
+            int fontSize,
+            nint returned)
+        {
+            calls.Add($"{name}-label");
+            MenuLabelPayloads.Add(new(position, text, anchor, fontSize, returned));
         }
 
         public void AfterFocusSet(nint manager, int managerKey)
@@ -573,6 +638,8 @@ public sealed class SharedNativeHookFanoutFactoryTests
     {
         public void AfterTextManagerGetMsg(nint textManager, nint result, int fileId, int messageId, nint returned) =>
             calls.Add($"{name}-text");
+        public void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned) =>
+            calls.Add($"{name}-label");
         public void AfterFocusSet(nint manager, int managerKey) => calls.Add($"{name}-focus");
         public void AfterCustomButtonConstructed(nint storage, nint returned) => calls.Add($"{name}-custom");
         public void AfterControlBound(nint manager, nint focusableState, int managerKey) => calls.Add($"{name}-binder");
@@ -583,6 +650,8 @@ public sealed class SharedNativeHookFanoutFactoryTests
     {
         public void AfterTextManagerGetMsg(nint textManager, nint result, int fileId, int messageId, nint returned) =>
             Throw("text");
+        public void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned) =>
+            Throw("label");
         public void AfterFocusSet(nint manager, int managerKey) => Throw("focus");
         public void AfterCustomButtonConstructed(nint storage, nint returned) => Throw("custom");
         public void AfterControlBound(nint manager, nint focusableState, int managerKey) => Throw("binder");
@@ -613,6 +682,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         private readonly Dictionary<HookId, Delegate> originals = new()
         {
             [HookId.TextManagerGetMsg] = (TextManagerGetMsgDelegate)((_, result, _, _) => result),
+            [HookId.MenuTextLabelFactory] = (MenuTextLabelFactoryDelegate)((_, text, _, _) => text),
             [HookId.NsMenuFocusSetter] = (NsMenuFocusSetterDelegate)((_, _) => { }),
             [HookId.NsMenuCustomButtonConstructor] = (NsMenuCustomButtonConstructorDelegate)(storage => storage),
             [HookId.NsMenuControlBinder] = (NsMenuControlBinderDelegate)((_, _, _) => { }),
