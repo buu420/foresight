@@ -41,7 +41,37 @@ public enum HookId
     MenuNodeConfigSteamConstructor,
     MenuNodeConfigSteamBuilder,
     MenuNodeConfigSteamDestructor,
-    SettingsValueMutation,
+    MenuNodeConfigSteamPageBuilder,
+    SteamSettingsCategoryCallback,
+    SteamSettingsRowCallback,
+    SteamSettingsLicenseCallback,
+    SteamSettingsSetterInvoker,
+    SteamSettingsResolutionBuilder,
+    SteamSettingsResolutionCallback,
+    SteamSettingsConfirmationBuilderA,
+    SteamSettingsConfirmationBuilderB,
+    MenuNodeConfigConstructor,
+    MenuNodeConfigBuilder,
+    MenuNodeConfigDestructor,
+    TouchSettingsPageTransition,
+    TouchSettingsCallback,
+    TouchSettingsValueMutation,
+    TouchSettingsConfirmationBuilderA,
+    TouchSettingsConfirmationBuilderB,
+    TouchSettingsConfirmationCallbackA,
+    TouchSettingsConfirmationCallbackB,
+    SteamSettingsCategoryLabelCallSite,
+    SteamSettingsRowLabelCallSite,
+    SteamSettingsSelectedValueLabelCallSite,
+    SteamSettingsResolutionHeadingLabelCallSite,
+    SteamSettingsResolutionEntryLabelCallSite,
+    SteamSettingsConfirmationAChoiceLabelCallSite,
+    SteamSettingsConfirmationBChoiceLabelCallSite,
+    TouchSettingsFirstPermanentControlLabelCallSite,
+    TouchSettingsSecondPermanentControlLabelCallSite,
+    TouchSettingsHeadingLabelCallSite,
+    TouchSettingsConfirmationAChoiceLabelCallSite,
+    TouchSettingsConfirmationBChoiceLabelCallSite,
     MsgWindowOpen,
     MsgWindowUpdate,
     MsgWindowClose,
@@ -290,7 +320,37 @@ public delegate void MenuNodeConfigSteamBuilderDelegate(nint instance);
 public delegate void MenuNodeConfigSteamDestructorDelegate(nint instance);
 
 [Function(CallingConventions.MicrosoftThiscall)]
-public delegate byte SettingsValueMutationDelegate(nint config, int page, int row, int proposedIndex);
+public delegate void MenuNodeConfigSteamPageBuilderDelegate(nint root, uint pageIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsCallbackDelegate(nint context, int eventType, int key);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsSetterInvokerDelegate(nint setter, int newIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsNestedBuilderDelegate(nint root);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint MenuNodeConfigConstructorDelegate(nint root);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MenuNodeConfigBuilderDelegate(nint root);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MenuNodeConfigDestructorDelegate(nint root);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint TouchSettingsPageTransitionDelegate(nint closure, int delta);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void TouchSettingsCallbackDelegate(nint context, int eventType, int key);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte TouchSettingsValueMutationDelegate(nint root, int page, int row, int proposedIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void TouchSettingsNestedBuilderDelegate(nint root);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void MsgWindowOpenDelegate(nint msgWindow, uint rawStackWord);

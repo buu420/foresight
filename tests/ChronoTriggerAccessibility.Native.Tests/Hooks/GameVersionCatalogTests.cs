@@ -45,7 +45,25 @@ public sealed class GameVersionCatalogTests
         { HookId.MenuNodeConfigSteamConstructor, "MenuNodeConfigSteam constructor", 0x1ECB00, "558BEC6AFF681044760064A1000000005056A1D0A07F0033C5508D45F464A300", typeof(MenuNodeConfigSteamConstructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamBuilder, "MenuNodeConfigSteam builder", 0x1ED020, "558BEC6AFF684102770064A1000000005081EC640E0000A1D0A07F0033C58945", typeof(MenuNodeConfigSteamBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamDestructor, "MenuNodeConfigSteam destructor", 0x1EC970, "558BEC6AFF689EC6760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(MenuNodeConfigSteamDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
-        { HookId.SettingsValueMutation, "Settings value mutation", 0x1E3980, "558BEC538BD95669750C98000000", typeof(SettingsValueMutationDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigSteamPageBuilder, "MenuNodeConfigSteam page builder", 0x1F0310, "558BEC6AFF680E06770064A1000000005081EC80030000A1D0A07F0033C58945EC535657", typeof(MenuNodeConfigSteamPageBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsCategoryCallback, "Steam Settings category callback", 0x1F0000, "558BEC6AFF68B803770064A1000000005083EC30A1D0A07F0033C58945F05356", typeof(SteamSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsRowCallback, "Steam Settings row callback", 0x1F21F0, "558BEC6AFF688006770064A1000000005083EC44A1D0A07F0033C58945F05356", typeof(SteamSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsLicenseCallback, "Steam Settings license callback", 0x1F3960, "558BEC6AFF681A08770064A1000000005083EC44A1D0A07F0033C58945F05657", typeof(SteamSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsSetterInvoker, "Steam Settings setter invoker", 0x1C0D80, "558BEC8B492485C97506FF15BC5078008B018D550852FF50085DC20400", typeof(SteamSettingsSetterInvokerDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsResolutionBuilder, "Steam Settings resolution builder", 0x1FA010, "558BEC6AFF68E610770064A1000000005081EC48010000A1D0A07F0033C58945F0535657", typeof(SteamSettingsNestedBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsResolutionCallback, "Steam Settings resolution callback", 0x1FB100, "558BEC6AFF682011770064A1000000005083EC185657A1D0A07F0033C5508D45F464A300", typeof(SteamSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsConfirmationBuilderA, "Steam Settings confirmation A builder", 0x1F3CC0, "558BEC6AFF68FE08770064A1000000005081ECD4000000A1D0A07F0033C58945F0535657", typeof(SteamSettingsNestedBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SteamSettingsConfirmationBuilderB, "Steam Settings confirmation B builder", 0x1F45D0, "558BEC6AFF68FE08770064A1000000005081ECD4000000A1D0A07F0033C58945F0535657", typeof(SteamSettingsNestedBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigConstructor, "MenuNodeConfig constructor", 0x1DFAD0, "558BEC6AFF681044760064A1000000005056A1D0A07F0033C5508D45F464A3000000008B", typeof(MenuNodeConfigConstructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigBuilder, "MenuNodeConfig builder", 0x1E0180, "558BEC6AFF6807ED760064A1000000005081EC680C0000A1D0A07F0033C58945F0535657", typeof(MenuNodeConfigBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigDestructor, "MenuNodeConfig destructor", 0x1DF880, "558BEC6AFF68EEE6760064A10000000050515657A1D0A07F0033C5508D45F464A300000000", typeof(MenuNodeConfigDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsPageTransition, "Touch Settings page transition", 0x1E1D00, "558BEC83E4F8515356578BD9C705CCC3810018008000E8D518FCFF8B038B90C00200008B", typeof(TouchSettingsPageTransitionDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsCallback, "Touch Settings callback", 0x1E3530, "558BEC6AFF6848EF760064A1000000005083EC30A1D0A07F0033C58945F05356", typeof(TouchSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsValueMutation, "Touch Settings value mutation", 0x1E3980, "558BEC538BD95669750C98000000", typeof(TouchSettingsValueMutationDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsConfirmationBuilderA, "Touch Settings confirmation A builder", 0x1E4030, "558BEC6AFF687EF0760064A1000000005081ECD4000000A1D0A07F0033C58945F0535657", typeof(TouchSettingsNestedBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsConfirmationBuilderB, "Touch Settings confirmation B builder", 0x1E4AB0, "558BEC6AFF68D2F1760064A1000000005081EC08010000A1D0A07F0033C58945F0535657", typeof(TouchSettingsNestedBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsConfirmationCallbackA, "Touch Settings confirmation A callback", 0x1E4880, "558BEC6AFF68BFF0760064A1000000005083EC3CA1D0A07F0033C58945F05356", typeof(TouchSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchSettingsConfirmationCallbackB, "Touch Settings confirmation B callback", 0x1E5380, "558BEC6AFF680FF2760064A1000000005083EC38A1D0A07F0033C58945F05356", typeof(TouchSettingsCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MsgWindowOpen, "MsgWindow open/parser", 0x195B40, "558BEC6AFF68CF9C760064A1000000005083EC30A1D0A07F0033C58945EC5356", typeof(MsgWindowOpenDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MsgWindowUpdate, "MsgWindow update", 0x197530, "558BEC6AFF68A89F760064A1000000005083EC54A1D0A07F0033C58945F05356", typeof(MsgWindowUpdateDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MsgWindowClose, "MsgWindow close", 0x195C70, "558BEC6AFF68179D760064A1000000005083EC48A1D0A07F0033C58945EC5356", typeof(MsgWindowCloseDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -86,6 +104,22 @@ public sealed class GameVersionCatalogTests
         { HookId.StatusBarGlyphRendererCallSite, "StatusBar glyph-renderer call site", 0x22F3B8, 0x22F3BD, 0x22E080, "E8C3ECFFFF" },
     };
 
+    public static TheoryData<HookId, string, uint, uint, uint, string> ExpectedSettingsCallSites => new()
+    {
+        { HookId.SteamSettingsCategoryLabelCallSite, "Steam Settings category label call site", 0x1EFD44, 0x1EFD49, 0x2400B0, "E867030500" },
+        { HookId.SteamSettingsRowLabelCallSite, "Steam Settings row label call site", 0x1F091D, 0x1F0922, 0x2400B0, "E88EF70400" },
+        { HookId.SteamSettingsSelectedValueLabelCallSite, "Steam Settings selected-value label call site", 0x1F0D05, 0x1F0D0A, 0x2400B0, "E8A6F30400" },
+        { HookId.SteamSettingsResolutionHeadingLabelCallSite, "Steam Settings resolution heading label call site", 0x1FA41A, 0x1FA41F, 0x2400B0, "E8915C0400" },
+        { HookId.SteamSettingsResolutionEntryLabelCallSite, "Steam Settings resolution entry label call site", 0x1FA9C0, 0x1FA9C5, 0x2400B0, "E8EB560400" },
+        { HookId.SteamSettingsConfirmationAChoiceLabelCallSite, "Steam Settings confirmation A choice label call site", 0x1F42EC, 0x1F42F1, 0x2400B0, "E8BFBD0400" },
+        { HookId.SteamSettingsConfirmationBChoiceLabelCallSite, "Steam Settings confirmation B choice label call site", 0x1F4BF9, 0x1F4BFE, 0x2400B0, "E8B2B40400" },
+        { HookId.TouchSettingsFirstPermanentControlLabelCallSite, "Touch Settings first permanent-control label call site", 0x1E0499, 0x1E049E, 0x2400B0, "E812FC0500" },
+        { HookId.TouchSettingsSecondPermanentControlLabelCallSite, "Touch Settings second permanent-control label call site", 0x1E0786, 0x1E078B, 0x2400B0, "E825F90500" },
+        { HookId.TouchSettingsHeadingLabelCallSite, "Touch Settings heading label call site", 0x1E0810, 0x1E0815, 0x2400B0, "E89BF80500" },
+        { HookId.TouchSettingsConfirmationAChoiceLabelCallSite, "Touch Settings confirmation A choice label call site", 0x1E4656, 0x1E465B, 0x2400B0, "E855BA0500" },
+        { HookId.TouchSettingsConfirmationBChoiceLabelCallSite, "Touch Settings confirmation B choice label call site", 0x1E5179, 0x1E517E, 0x2400B0, "E832AF0500" },
+    };
+
     [Theory]
     [MemberData(nameof(ExpectedContracts))]
     public void HookContract_PreservesStableIdentityBytesAndAbi(
@@ -108,12 +142,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlySeventyTwoUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredTwoUniqueContracts()
     {
-        Assert.Equal(72, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(102, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -151,6 +185,32 @@ public sealed class GameVersionCatalogTests
     [Theory]
     [MemberData(nameof(ExpectedTopMenuCallSites))]
     public void TopMenuCallSite_IsAnExactFiveByteDirectCallToItsAuditedTarget(
+        HookId id,
+        string symbol,
+        uint probeRva,
+        uint returnRva,
+        uint targetRva,
+        string expectedHex)
+    {
+        var contract = GameVersionCatalog.Get(id);
+
+        Assert.Equal(symbol, contract.Symbol);
+        Assert.Equal(probeRva, contract.Rva);
+        Assert.Equal(expectedHex, Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.AssemblyCallSite, contract.Kind);
+        Assert.Null(contract.DelegateType);
+        Assert.Null(contract.CallingConvention);
+        Assert.Equal(5, contract.ExpectedBytes.Length);
+        Assert.Equal(0xE8, contract.ExpectedBytes[0]);
+        Assert.Equal(returnRva, contract.Rva + contract.ExpectedBytes.Length);
+
+        var displacement = BinaryPrimitives.ReadInt32LittleEndian(contract.ExpectedBytes.AsSpan()[1..]);
+        Assert.Equal(targetRva, checked((uint)(returnRva + displacement)));
+    }
+
+    [Theory]
+    [MemberData(nameof(ExpectedSettingsCallSites))]
+    public void SettingsCallSite_IsAnExactFiveByteDirectCallToMenuTextLabelFactory(
         HookId id,
         string symbol,
         uint probeRva,
@@ -255,7 +315,17 @@ public sealed class GameVersionCatalogTests
         AssertSignatureWithReturn<MenuNodeConfigSteamConstructorDelegate>(typeof(nint), typeof(nint), typeof(int));
         AssertSignature<MenuNodeConfigSteamBuilderDelegate>(typeof(nint));
         AssertSignature<MenuNodeConfigSteamDestructorDelegate>(typeof(nint));
-        AssertSignatureWithReturn<SettingsValueMutationDelegate>(typeof(byte), typeof(nint), typeof(int), typeof(int), typeof(int));
+        AssertSignature<MenuNodeConfigSteamPageBuilderDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<SteamSettingsCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignature<SteamSettingsSetterInvokerDelegate>(typeof(nint), typeof(int));
+        AssertSignature<SteamSettingsNestedBuilderDelegate>(typeof(nint));
+        AssertSignatureWithReturn<MenuNodeConfigConstructorDelegate>(typeof(nint), typeof(nint));
+        AssertSignature<MenuNodeConfigBuilderDelegate>(typeof(nint));
+        AssertSignature<MenuNodeConfigDestructorDelegate>(typeof(nint));
+        AssertSignatureWithReturn<TouchSettingsPageTransitionDelegate>(typeof(nint), typeof(nint), typeof(int));
+        AssertSignature<TouchSettingsCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignatureWithReturn<TouchSettingsValueMutationDelegate>(typeof(byte), typeof(nint), typeof(int), typeof(int), typeof(int));
+        AssertSignature<TouchSettingsNestedBuilderDelegate>(typeof(nint));
         AssertSignature<MsgWindowOpenDelegate>(typeof(nint), typeof(uint));
         AssertSignature<MsgWindowUpdateDelegate>(typeof(nint), typeof(uint));
         AssertSignature<MsgWindowCloseDelegate>(typeof(nint), typeof(uint));
@@ -270,6 +340,16 @@ public sealed class GameVersionCatalogTests
         AssertSignatureWithReturn<TouchTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
         AssertSignature<TopMenuActionDispatcherDelegate>(typeof(nint));
         AssertSignature<NativeCallSiteProbeDelegate>();
+    }
+
+    [Fact]
+    public void MisleadingUnqualifiedSettingsMutationNamesAreRemoved()
+    {
+        Assert.False(Enum.TryParse<HookId>("SettingsValueMutation", out _));
+        Assert.Null(typeof(HookContract).Assembly.GetType(
+            "ChronoTriggerAccessibility.Native.Hooks.SettingsValueMutationDelegate",
+            throwOnError: false,
+            ignoreCase: false));
     }
 
     [Fact]
