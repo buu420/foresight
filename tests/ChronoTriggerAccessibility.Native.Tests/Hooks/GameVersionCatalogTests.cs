@@ -181,7 +181,7 @@ public sealed class GameVersionCatalogTests
     [Fact]
     public void ExtrasSettingsDialogueAndMenuDelegatesPreserveAuditedNativeContracts()
     {
-        AssertSignatureWithReturn<GallerySceneSwitchNodeDelegate>(typeof(int), typeof(nint), typeof(int), typeof(uint));
+        AssertSignatureWithReturn<GallerySceneSwitchNodeDelegate>(typeof(nint), typeof(nint), typeof(int), typeof(uint));
         AssertSignature<ExtrasHubOnEnterDelegate>(typeof(nint));
         AssertSignature<EndingLogOnEnterDelegate>(typeof(nint));
         AssertSignature<EndingDetailOnEnterDelegate>(typeof(nint));

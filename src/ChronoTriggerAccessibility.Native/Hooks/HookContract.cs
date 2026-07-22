@@ -217,7 +217,7 @@ public delegate void NameDirectEntryActivationDelegate(nint capture);
 public delegate void NameDirectEntryCloseDelegate(nint capture);
 
 [Function(CallingConventions.MicrosoftThiscall)]
-public delegate int GallerySceneSwitchNodeDelegate(nint galleryScene, int action, uint rawStackWord1);
+public delegate nint GallerySceneSwitchNodeDelegate(nint galleryScene, int action, uint rawStackWord1);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ExtrasHubOnEnterDelegate(nint node);
