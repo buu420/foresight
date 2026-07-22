@@ -25,10 +25,12 @@ public sealed class CurrentProcessExecutableVerifier : IRuntimeExecutableVerifie
         var verified = result.VerifiedExecutable
             ?? throw new InvalidOperationException("Executable verification succeeded without a verified image.");
         var addresses = verified.ResolveInProcessAddresses((nuint)module.BaseAddress);
-        return new VerifiedGameBuild(new ReadOnlyDictionary<HookId, nuint>(
-            new Dictionary<HookId, nuint>(addresses)));
+        return new VerifiedGameBuild(
+            (nuint)module.BaseAddress,
+            new ReadOnlyDictionary<HookId, nuint>(new Dictionary<HookId, nuint>(addresses)));
     }
 
     private sealed record VerifiedGameBuild(
+        nuint ImageBaseAddress,
         IReadOnlyDictionary<HookId, nuint> HookAddresses) : IVerifiedGameBuild;
 }

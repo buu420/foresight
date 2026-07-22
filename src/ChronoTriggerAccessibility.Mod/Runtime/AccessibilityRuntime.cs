@@ -14,6 +14,7 @@ public sealed class AccessibilityRuntime
     private readonly IModLog log;
     private readonly IAccessibleFatalError fatalError;
     private readonly int processId;
+    private readonly ISemanticEventDispatcher? semanticDispatcher;
     private readonly object lifecycleGate = new();
     private readonly CancellationTokenSource shutdownCancellation = new();
     private IRuntimePrismSession? prismSession;
@@ -31,7 +32,8 @@ public sealed class AccessibilityRuntime
         IRuntimeHookInstaller hookInstaller,
         IModLog log,
         IAccessibleFatalError fatalError,
-        int processId)
+        int processId,
+        ISemanticEventDispatcher? semanticDispatcher = null)
     {
         this.executableVerifier = executableVerifier ?? throw new ArgumentNullException(nameof(executableVerifier));
         this.windowWaiter = windowWaiter ?? throw new ArgumentNullException(nameof(windowWaiter));
@@ -40,6 +42,7 @@ public sealed class AccessibilityRuntime
         this.log = log ?? throw new ArgumentNullException(nameof(log));
         this.fatalError = fatalError ?? throw new ArgumentNullException(nameof(fatalError));
         this.processId = processId > 0 ? processId : throw new ArgumentOutOfRangeException(nameof(processId));
+        this.semanticDispatcher = semanticDispatcher;
     }
 
     public AccessibilityRuntimeState State => (AccessibilityRuntimeState)Volatile.Read(ref state);
@@ -91,6 +94,7 @@ public sealed class AccessibilityRuntime
                 try
                 {
                     prismSession = prismFactory.Create();
+                    semanticDispatcher?.Attach(prismSession);
                     log.Info($"Prism backend active: {prismSession.BackendName}");
                     linkedCancellation.Token.ThrowIfCancellationRequested();
 
@@ -276,6 +280,7 @@ public sealed class AccessibilityRuntime
         {
             try
             {
+                semanticDispatcher?.Detach(prismSession);
                 prismSession.Dispose();
                 prismSession = null;
             }

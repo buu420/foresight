@@ -8,6 +8,8 @@ public sealed class AccessibilityState
     private static readonly IReadOnlyList<Announcement> NoAnnouncements = Array.Empty<Announcement>();
 
     private ScreenKind? _activeScreen;
+    private StartupSceneKind? _startupScene;
+    private bool _titleAnnouncedForCurrentScene;
     private AccessibilityEvent? _lastSemanticIdentity;
 
     public int Generation { get; private set; }
@@ -16,6 +18,7 @@ public sealed class AccessibilityState
     {
         return accessibilityEvent switch
         {
+            StartupSceneEntered startupSceneEntered => ApplyStartupSceneEntered(startupSceneEntered),
             ScreenEntered screenEntered => ApplyScreenEntered(screenEntered),
             ScreenExited screenExited => ApplyScreenExited(screenExited),
             FocusChanged focusChanged => ApplyFocusChanged(focusChanged),
@@ -23,6 +26,35 @@ public sealed class AccessibilityState
             NameChanged nameChanged => ApplyNameChanged(nameChanged),
             ConfirmationOpened confirmationOpened => ApplyConfirmationOpened(confirmationOpened),
             TimedDescription timedDescription => ApplyTimedDescription(timedDescription),
+            ControlActivated controlActivated => ApplyControlActivated(controlActivated),
+            _ => NoAnnouncements,
+        };
+    }
+
+    private IReadOnlyList<Announcement> ApplyStartupSceneEntered(StartupSceneEntered entered)
+    {
+        if (_startupScene == entered.Scene)
+        {
+            return NoAnnouncements;
+        }
+
+        if (_activeScreen == ScreenKind.OpeningMovie && entered.Scene != StartupSceneKind.OpeningMovie)
+        {
+            Generation++;
+        }
+
+        _startupScene = entered.Scene;
+        _activeScreen = entered.Scene == StartupSceneKind.OpeningMovie
+            ? ScreenKind.OpeningMovie
+            : null;
+        _titleAnnouncedForCurrentScene = entered.Scene == StartupSceneKind.Title;
+        _lastSemanticIdentity = null;
+
+        return entered.Scene switch
+        {
+            StartupSceneKind.SquareEnixLogo => [Interrupt("Square Enix.")],
+            StartupSceneKind.OpeningMovie => [Interrupt("Opening movie.")],
+            StartupSceneKind.Title => [Interrupt("Chrono Trigger.")],
             _ => NoAnnouncements,
         };
     }
@@ -38,7 +70,7 @@ public sealed class AccessibilityState
         _lastSemanticIdentity = null;
 
         return screenEntered.Screen == ScreenKind.TitlePrompt
-            ? [Interrupt("Chrono Trigger. Press confirm.")]
+            ? [Interrupt(_titleAnnouncedForCurrentScene ? "Press confirm." : "Chrono Trigger. Press confirm.")]
             : NoAnnouncements;
     }
 
@@ -124,6 +156,16 @@ public sealed class AccessibilityState
         }
 
         return [Queue(timedDescription.Text, timedDescription.Generation)];
+    }
+
+    private IReadOnlyList<Announcement> ApplyControlActivated(ControlActivated activated)
+    {
+        if (_activeScreen is null || string.IsNullOrWhiteSpace(activated.Label) || !Remember(activated))
+        {
+            return NoAnnouncements;
+        }
+
+        return [Interrupt($"{activated.Label} selected.")];
     }
 
     private bool Remember(AccessibilityEvent accessibilityEvent)

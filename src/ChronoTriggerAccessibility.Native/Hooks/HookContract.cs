@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Reloaded.Hooks.Definitions.X86;
 
 namespace ChronoTriggerAccessibility.Native.Hooks;
 
@@ -6,10 +7,12 @@ public enum HookId
 {
     TextManagerGetMsg,
     SceneManagerCreate,
+    SceneManagerNextScene,
     ModeSelectSteamInit,
     OpeManualSceneInit,
     NameInputSceneUpdate,
     TitleMenuModeEnter,
+    TitleRowFactory,
     TitleSceneUpdate,
     TitleMenuCallback,
     NsMenuFocusSetter,
@@ -67,26 +70,44 @@ public sealed class HookContract
     public X86CallingConvention CallingConvention { get; }
 }
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint TextManagerGetMsgDelegate(nint textManager, nint result, int fileId, int messageId);
 
+[Function(CallingConventions.Fastcall)]
 public delegate nint SceneManagerCreateDelegate(int sceneId, int argument);
 
+[Function(CallingConventions.Fastcall)]
+public delegate void SceneManagerNextSceneDelegate(uint action);
+
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate byte ModeSelectSteamInitDelegate(nint scene);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate byte OpeManualSceneInitDelegate(nint scene);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void NameInputSceneUpdateDelegate(nint scene, float deltaSeconds);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void TitleMenuModeEnterDelegate(nint mode);
 
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint TitleRowFactoryDelegate(nint labelRecord);
+
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void TitleSceneUpdateDelegate(nint scene, float deltaSeconds);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void TitleMenuCallbackDelegate(nint closure, nint eventTypePointer, nint rowIndexPointer);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void NsMenuFocusSetterDelegate(nint manager, int newIndex);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ModeSelectCallbackDelegate(nint closure, int eventType, int controlOrDirection);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ControlNextCallbackDelegate(nint closure, nint eventTypePointer);
 
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate void NameActionCallbackDelegate(nint closure, int eventType, int actionId);

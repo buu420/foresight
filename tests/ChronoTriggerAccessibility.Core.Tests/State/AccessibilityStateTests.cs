@@ -163,4 +163,31 @@ public sealed class AccessibilityStateTests
         Assert.Empty(repeatedAnnouncements);
         Assert.Equal("A clock face fills the screen.", Assert.Single(changedAnnouncements).Text);
     }
+
+    [Fact]
+    public void StartupScenesAnnouncePublisherOpeningAndTitleWithoutDuplicatingTheLivePrompt()
+    {
+        var state = new AccessibilityState();
+
+        Assert.Equal("Square Enix.", Assert.Single(
+            state.Apply(new StartupSceneEntered(StartupSceneKind.SquareEnixLogo))).Text);
+        Assert.Equal("Opening movie.", Assert.Single(
+            state.Apply(new StartupSceneEntered(StartupSceneKind.OpeningMovie))).Text);
+        Assert.Equal("Chrono Trigger.", Assert.Single(
+            state.Apply(new StartupSceneEntered(StartupSceneKind.Title))).Text);
+        Assert.Equal("Press confirm.", Assert.Single(
+            state.Apply(new ScreenEntered(ScreenKind.TitlePrompt))).Text);
+    }
+
+    [Fact]
+    public void ActivatingTitleItemUsesTheCapturedVisibleLabel()
+    {
+        var state = new AccessibilityState();
+        state.Apply(new ScreenEntered(ScreenKind.TitleMenu));
+
+        var announcement = Assert.Single(state.Apply(new ControlActivated("New Game +")));
+
+        Assert.Equal("New Game + selected.", announcement.Text);
+        Assert.True(announcement.Interrupt);
+    }
 }

@@ -20,6 +20,12 @@ public interface IPreparedHook
     void Disable();
 }
 
+public interface IHookActivationObserver
+{
+    void AfterHooksActivated();
+    void AfterHooksDisabled();
+}
+
 public sealed class HookRollbackException : InvalidOperationException
 {
     public HookRollbackException(IEnumerable<Exception> failures, bool hooksConfirmedInactive)
@@ -86,14 +92,19 @@ public sealed class ReloadedPreparedHook<TDelegate> : IPreparedHook
 public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
 {
     private readonly IReadOnlyList<IHookRegistration> registrations;
+    private readonly IReadOnlyList<IHookActivationObserver> activationObservers;
     private readonly List<IPreparedHook> preparedHooks = [];
     private readonly List<object> lifetimeRoots = [];
     private bool prepared;
 
-    public ReloadedHookInstaller(IEnumerable<IHookRegistration> registrations)
+    public ReloadedHookInstaller(
+        IEnumerable<IHookRegistration> registrations,
+        IEnumerable<IHookActivationObserver>? activationObservers = null)
     {
         ArgumentNullException.ThrowIfNull(registrations);
         this.registrations = new ReadOnlyCollection<IHookRegistration>(registrations.ToArray());
+        this.activationObservers = new ReadOnlyCollection<IHookActivationObserver>(
+            (activationObservers ?? Array.Empty<IHookActivationObserver>()).ToArray());
     }
 
     public IReadOnlyList<IPreparedHook> PreparedHooks => preparedHooks.AsReadOnly();
@@ -159,6 +170,11 @@ public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
             {
                 hook.Activate();
             }
+
+            foreach (var observer in activationObservers)
+            {
+                observer.AfterHooksActivated();
+            }
         }
         catch (Exception originalFailure)
         {
@@ -189,6 +205,20 @@ public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
             {
                 failures.Add(new InvalidOperationException(
                     $"Disable failed for hook '{hook.Name}': {exception.Message}", exception));
+            }
+        }
+
+        for (var index = activationObservers.Count - 1; index >= 0; index--)
+        {
+            try
+            {
+                activationObservers[index].AfterHooksDisabled();
+            }
+            catch (Exception exception)
+            {
+                failures.Add(new InvalidOperationException(
+                    $"Post-disable cleanup failed for activation observer {index}: {exception.Message}",
+                    exception));
             }
         }
 

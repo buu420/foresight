@@ -1,11 +1,13 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Native.Hooks;
+using ChronoTriggerAccessibility.Core.Events;
 
 namespace ChronoTriggerAccessibility.Mod.Runtime;
 
 public interface IVerifiedGameBuild
 {
+    nuint ImageBaseAddress => 0;
     IReadOnlyDictionary<HookId, nuint> HookAddresses { get; }
 }
 
@@ -27,6 +29,17 @@ public interface IRuntimePrismFactory
 public interface IRuntimePrismSession : IDisposable
 {
     string BackendName { get; }
+    void Output(string text, bool interrupt) =>
+        throw new NotSupportedException("This Prism session does not expose announcement output.");
+}
+
+public interface ISemanticEventDispatcher
+{
+    int Generation { get; }
+    void Attach(IRuntimePrismSession session);
+    void Detach(IRuntimePrismSession session);
+    void Publish(AccessibilityEvent accessibilityEvent);
+    void ReportCoverageFailure(string message);
 }
 
 public interface IRuntimeHookInstaller

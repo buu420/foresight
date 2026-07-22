@@ -13,12 +13,15 @@ public static class GameVersionCatalog
 
     public static IReadOnlyList<HookContract> Hooks { get; } = new ReadOnlyCollection<HookContract>(
     [
-        Create(HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B92D0,
-            "55 8B EC 51 8B 45 0C FF 75 10 C7 45 FC 00 00 00 00",
+        Create(HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B9110,
+            "55 8B EC 6A FF 68 A1 AD 76 00 64 A1 00 00 00 00",
             typeof(TextManagerGetMsgDelegate), X86CallingConvention.MicrosoftThiscall),
         Create(HookId.SceneManagerCreate, "SceneManager::create", 0x297860,
             "55 8B EC 6A FF 68 F8 73 76 00 64 A1 00 00 00 00",
             typeof(SceneManagerCreateDelegate), X86CallingConvention.MicrosoftFastcall),
+        Create(HookId.SceneManagerNextScene, "SceneManager::NextScene", 0x297B60,
+            "55 8B EC 6A FF 68 E8 94 77 00 64 A1 00 00 00 00",
+            typeof(SceneManagerNextSceneDelegate), X86CallingConvention.MicrosoftFastcall),
         Create(HookId.ModeSelectSteamInit, "ModeSelectSteam::init", 0x2A9C60,
             "55 8B EC 6A FF 68 B2 AE 77 00 64 A1 00 00 00 00",
             typeof(ModeSelectSteamInitDelegate), X86CallingConvention.MicrosoftThiscall),
@@ -31,6 +34,9 @@ public static class GameVersionCatalog
         Create(HookId.TitleMenuModeEnter, "TitleMenuMode::enter", 0x2CF560,
             "55 8B EC 6A FF 68 84 E4 77 00 64 A1 00 00 00 00",
             typeof(TitleMenuModeEnterDelegate), X86CallingConvention.MicrosoftThiscall),
+        Create(HookId.TitleRowFactory, "Title row factory", 0x2CD7A0,
+            "55 8B EC 6A FF 68 11 E2 77 00 64 A1 00 00 00 00",
+            typeof(TitleRowFactoryDelegate), X86CallingConvention.MicrosoftThiscall),
         Create(HookId.TitleSceneUpdate, "TitleScene::update", 0x2D1030,
             "55 8B EC F3 0F 10 45 08 56 8B F1 8B 8E 90 02 00",
             typeof(TitleSceneUpdateDelegate), X86CallingConvention.MicrosoftThiscall),
