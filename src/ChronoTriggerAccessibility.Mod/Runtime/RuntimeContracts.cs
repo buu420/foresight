@@ -43,4 +43,5 @@ public enum AccessibilityRuntimeState
     Initializing,
     Active,
     Faulted,
+    Stopped,
 }

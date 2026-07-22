@@ -20,6 +20,38 @@ public interface IPreparedHook
     void Disable();
 }
 
+public sealed class HookRollbackException : InvalidOperationException
+{
+    public HookRollbackException(IEnumerable<Exception> failures, bool hooksConfirmedInactive)
+        : this(failures.ToArray(), hooksConfirmedInactive)
+    {
+    }
+
+    private HookRollbackException(Exception[] failures, bool hooksConfirmedInactive)
+        : base(
+            "Hook rollback integrity failure: " + string.Join(" | ", failures.Select(failure => failure.Message)),
+            new AggregateException(failures))
+    {
+        Failures = new ReadOnlyCollection<Exception>(failures);
+        HooksConfirmedInactive = hooksConfirmedInactive;
+    }
+
+    public IReadOnlyList<Exception> Failures { get; }
+    public bool HooksConfirmedInactive { get; }
+}
+
+public sealed class HookTransactionException(
+    string phase,
+    Exception originalFailure,
+    Exception rollbackFailure)
+    : InvalidOperationException(
+        $"{phase} failed: {originalFailure.Message} Rollback integrity failure: {rollbackFailure.Message}",
+        new AggregateException(originalFailure, rollbackFailure))
+{
+    public Exception OriginalFailure { get; } = originalFailure;
+    public Exception RollbackFailure { get; } = rollbackFailure;
+}
+
 public sealed class ReloadedPreparedHook<TDelegate> : IPreparedHook
     where TDelegate : Delegate
 {
@@ -83,23 +115,33 @@ public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
             {
                 var hook = registration.Prepare(build, boundary)
                     ?? throw new InvalidOperationException($"Hook registration '{registration.Name}' returned null.");
-                if (hook.IsActive)
-                {
-                    hook.Disable();
-                    throw new InvalidOperationException(
-                        $"Hook registration '{registration.Name}' activated during preparation.");
-                }
 
+                // Root and track the hook before inspecting it. If any property or cleanup operation
+                // throws, rollback must still retain and revisit this exact native detour.
                 preparedHooks.Add(hook);
                 lifetimeRoots.Add(hook);
                 lifetimeRoots.AddRange(hook.LifetimeRoots);
+
+                if (hook.IsActive)
+                {
+                    throw new InvalidOperationException(
+                        $"Hook registration '{registration.Name}' was unexpectedly active during preparation.");
+                }
             }
 
             prepared = true;
         }
-        catch
+        catch (Exception originalFailure)
         {
-            DisableAll();
+            try
+            {
+                DisableAll();
+            }
+            catch (Exception rollbackFailure)
+            {
+                throw new HookTransactionException("Hook preparation", originalFailure, rollbackFailure);
+            }
+
             throw;
         }
     }
@@ -118,25 +160,61 @@ public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
                 hook.Activate();
             }
         }
-        catch
+        catch (Exception originalFailure)
         {
-            DisableAll();
+            try
+            {
+                DisableAll();
+            }
+            catch (Exception rollbackFailure)
+            {
+                throw new HookTransactionException("Hook activation", originalFailure, rollbackFailure);
+            }
+
             throw;
         }
     }
 
     public void DisableAll()
     {
+        var failures = new List<Exception>();
         for (var index = preparedHooks.Count - 1; index >= 0; index--)
+        {
+            var hook = preparedHooks[index];
+            try
+            {
+                hook.Disable();
+            }
+            catch (Exception exception)
+            {
+                failures.Add(new InvalidOperationException(
+                    $"Disable failed for hook '{hook.Name}': {exception.Message}", exception));
+            }
+        }
+
+        var hooksConfirmedInactive = true;
+        foreach (var hook in preparedHooks)
         {
             try
             {
-                preparedHooks[index].Disable();
+                if (hook.IsActive)
+                {
+                    hooksConfirmedInactive = false;
+                    failures.Add(new InvalidOperationException(
+                        $"Hook '{hook.Name}' remained active after rollback."));
+                }
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                // Continue rollback: every remaining hook must receive a disable attempt.
+                hooksConfirmedInactive = false;
+                failures.Add(new InvalidOperationException(
+                    $"Could not verify inactive state for hook '{hook.Name}': {exception.Message}", exception));
             }
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new HookRollbackException(failures, hooksConfirmedInactive);
         }
     }
 }

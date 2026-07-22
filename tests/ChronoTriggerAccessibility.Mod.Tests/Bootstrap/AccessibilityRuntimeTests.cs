@@ -68,6 +68,31 @@ public sealed class AccessibilityRuntimeTests
         Assert.Equal(AccessibilityRuntimeState.Active, scenario.Runtime.State);
     }
 
+    [Fact]
+    public void InitializationFailureReportPreservesOriginalAndRollbackIntegrityFailures()
+    {
+        var log = new RecordingLog();
+        var fatal = new RecordingFatalError();
+        var runtime = new AccessibilityRuntime(
+            new SuccessfulVerifier(),
+            new ImmediateWindowWaiter(),
+            new ImmediatePrismFactory(),
+            new OriginalAndRollbackFailingInstaller(),
+            log,
+            fatal,
+            processId: 1234);
+
+        var exception = Record.Exception(runtime.Initialize);
+
+        Assert.Null(exception);
+        Assert.Single(log.Errors);
+        Assert.Single(fatal.Messages);
+        Assert.Contains("original prepare failure", log.Errors[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rollback integrity failure", log.Errors[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("original prepare failure", fatal.Messages[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rollback integrity failure", fatal.Messages[0], StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class RuntimeScenario
     {
         private readonly FailureStage failureStage;
@@ -188,6 +213,30 @@ public sealed class AccessibilityRuntimeTests
     {
         public string BackendName => "Test backend";
         public void Dispose() { }
+    }
+
+    private sealed class SuccessfulVerifier : IRuntimeExecutableVerifier
+    {
+        public IVerifiedGameBuild VerifyCurrentProcess() => new FakeVerifiedGameBuild();
+    }
+
+    private sealed class ImmediateWindowWaiter : IGameWindowWaiter
+    {
+        public nint WaitForSoleVisibleWindow(int processId, CancellationToken cancellationToken) => (nint)42;
+    }
+
+    private sealed class ImmediatePrismFactory : IRuntimePrismFactory
+    {
+        public IRuntimePrismSession Create() => new FakePrismSession();
+    }
+
+    private sealed class OriginalAndRollbackFailingInstaller : IRuntimeHookInstaller
+    {
+        public IReadOnlyList<IPreparedHook> PreparedHooks => [];
+        public void PrepareAll(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+            throw new InvalidOperationException("original prepare failure");
+        public void ActivateAll() => throw new NotSupportedException();
+        public void DisableAll() => throw new InvalidOperationException("rollback integrity failure");
     }
 
     public sealed class FakePreparedHook(string name) : IPreparedHook

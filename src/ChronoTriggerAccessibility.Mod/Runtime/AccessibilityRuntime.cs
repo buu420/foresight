@@ -1,9 +1,12 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.Reloaded;
 
 namespace ChronoTriggerAccessibility.Mod.Runtime;
 
 public sealed class AccessibilityRuntime
 {
+    private const int ShutdownRequestedSignal = 1;
+    private const int ActivationCommittedSignal = 2;
     private readonly IRuntimeExecutableVerifier executableVerifier;
     private readonly IGameWindowWaiter windowWaiter;
     private readonly IRuntimePrismFactory prismFactory;
@@ -11,8 +14,15 @@ public sealed class AccessibilityRuntime
     private readonly IModLog log;
     private readonly IAccessibleFatalError fatalError;
     private readonly int processId;
+    private readonly object lifecycleGate = new();
+    private readonly CancellationTokenSource shutdownCancellation = new();
     private IRuntimePrismSession? prismSession;
+    private CleanupOutcome? cleanupOutcome;
+    private int state = (int)AccessibilityRuntimeState.Created;
     private int started;
+    private int lifecycleSignals;
+    private int cleanupCompleted;
+    private int fatalReported;
 
     public AccessibilityRuntime(
         IRuntimeExecutableVerifier executableVerifier,
@@ -32,12 +42,12 @@ public sealed class AccessibilityRuntime
         this.processId = processId > 0 ? processId : throw new ArgumentOutOfRangeException(nameof(processId));
     }
 
-    public AccessibilityRuntimeState State { get; private set; } = AccessibilityRuntimeState.Created;
+    public AccessibilityRuntimeState State => (AccessibilityRuntimeState)Volatile.Read(ref state);
 
     public Task StartInBackground(CancellationToken cancellationToken = default) =>
         Task.Factory.StartNew(
             () => Initialize(cancellationToken),
-            cancellationToken,
+            CancellationToken.None,
             TaskCreationOptions.DenyChildAttach,
             TaskScheduler.Default);
 
@@ -50,37 +60,254 @@ public sealed class AccessibilityRuntime
             throw new InvalidOperationException("Accessibility runtime initialization may only run once.");
         }
 
-        State = AccessibilityRuntimeState.Initializing;
+        if (IsShutdownRequested)
+        {
+            SetState(AccessibilityRuntimeState.Stopped);
+            return;
+        }
+
+        SetState(AccessibilityRuntimeState.Initializing);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            shutdownCancellation.Token);
+
         try
         {
+            linkedCancellation.Token.ThrowIfCancellationRequested();
             var build = executableVerifier.VerifyCurrentProcess();
-            _ = windowWaiter.WaitForSoleVisibleWindow(processId, cancellationToken);
-            prismSession = prismFactory.Create();
-            log.Info($"Prism backend active: {prismSession.BackendName}");
+            linkedCancellation.Token.ThrowIfCancellationRequested();
+            _ = windowWaiter.WaitForSoleVisibleWindow(processId, linkedCancellation.Token);
+            linkedCancellation.Token.ThrowIfCancellationRequested();
 
-            var boundary = new UnmanagedBoundaryGuard(log, fatalError);
-            hookInstaller.PrepareAll(build, boundary);
-            if (hookInstaller.PreparedHooks.Any(hook => hook.IsActive))
+            string? failureMessage = null;
+            lock (lifecycleGate)
             {
-                throw new InvalidOperationException("A prepared hook was active before the atomic activation phase.");
+                if (IsShutdownRequested)
+                {
+                    CompleteShutdownUnderLock();
+                    return;
+                }
+
+                try
+                {
+                    prismSession = prismFactory.Create();
+                    log.Info($"Prism backend active: {prismSession.BackendName}");
+                    linkedCancellation.Token.ThrowIfCancellationRequested();
+
+                    var boundary = new UnmanagedBoundaryGuard(log, fatalError);
+                    hookInstaller.PrepareAll(build, boundary);
+                    linkedCancellation.Token.ThrowIfCancellationRequested();
+                    if (hookInstaller.PreparedHooks.Any(hook => hook.IsActive))
+                    {
+                        throw new InvalidOperationException(
+                            "A prepared hook was active before the atomic activation phase.");
+                    }
+
+                    if (!TryCommitActivation())
+                    {
+                        throw new OperationCanceledException(shutdownCancellation.Token);
+                    }
+
+                    hookInstaller.ActivateAll();
+                    linkedCancellation.Token.ThrowIfCancellationRequested();
+                    SetState(AccessibilityRuntimeState.Active);
+                    log.Info("Accessibility runtime active.");
+                }
+                catch (Exception exception)
+                {
+                    if (IsShutdownCancellation(exception))
+                    {
+                        CompleteShutdownUnderLock();
+                    }
+                    else
+                    {
+                        failureMessage = CompleteInitializationFailureUnderLock(exception);
+                    }
+                }
             }
 
-            hookInstaller.ActivateAll();
-            State = AccessibilityRuntimeState.Active;
-            log.Info("Accessibility runtime active.");
+            if (failureMessage is not null)
+            {
+                ReportFatalOnce(failureMessage);
+            }
         }
         catch (Exception exception)
         {
-            hookInstaller.DisableAll();
-            prismSession?.Dispose();
-            prismSession = null;
-            State = AccessibilityRuntimeState.Faulted;
-            ReportFatal($"Chrono Trigger accessibility initialization failed: {exception}");
+            if (IsShutdownCancellation(exception))
+            {
+                Shutdown();
+                return;
+            }
+
+            string failureMessage;
+            lock (lifecycleGate)
+            {
+                failureMessage = CompleteInitializationFailureUnderLock(exception);
+            }
+
+            ReportFatalOnce(failureMessage);
         }
     }
 
-    private void ReportFatal(string message)
+    public void Shutdown()
     {
+        Interlocked.Or(ref lifecycleSignals, ShutdownRequestedSignal);
+        try
+        {
+            shutdownCancellation.Cancel();
+        }
+        catch (Exception exception)
+        {
+            ReportFatalOnce($"Accessibility shutdown cancellation failed: {exception}");
+        }
+
+        string? failureMessage = null;
+        lock (lifecycleGate)
+        {
+            var outcome = CleanupResourcesUnderLock();
+            if (outcome.Failures.Count == 0)
+            {
+                SetState(AccessibilityRuntimeState.Stopped);
+            }
+            else
+            {
+                SetState(AccessibilityRuntimeState.Faulted);
+                failureMessage = FormatCleanupFailure("Accessibility shutdown integrity failure", outcome);
+            }
+        }
+
+        if (failureMessage is not null)
+        {
+            ReportFatalOnce(failureMessage);
+        }
+    }
+
+    private bool IsShutdownRequested =>
+        (Volatile.Read(ref lifecycleSignals) & ShutdownRequestedSignal) != 0;
+
+    private bool TryCommitActivation()
+    {
+        while (true)
+        {
+            var signals = Volatile.Read(ref lifecycleSignals);
+            if ((signals & ShutdownRequestedSignal) != 0)
+            {
+                return false;
+            }
+
+            if (Interlocked.CompareExchange(
+                    ref lifecycleSignals,
+                    signals | ActivationCommittedSignal,
+                    signals) == signals)
+            {
+                return true;
+            }
+        }
+    }
+
+    private bool IsShutdownCancellation(Exception exception) =>
+        IsShutdownRequested && exception is OperationCanceledException;
+
+    private void CompleteShutdownUnderLock()
+    {
+        var outcome = CleanupResourcesUnderLock();
+        if (outcome.Failures.Count == 0)
+        {
+            SetState(AccessibilityRuntimeState.Stopped);
+            return;
+        }
+
+        SetState(AccessibilityRuntimeState.Faulted);
+        ReportFatalOnce(FormatCleanupFailure("Accessibility shutdown integrity failure", outcome));
+    }
+
+    private string CompleteInitializationFailureUnderLock(Exception originalFailure)
+    {
+        var outcome = CleanupResourcesUnderLock();
+        SetState(AccessibilityRuntimeState.Faulted);
+        var message = $"Chrono Trigger accessibility initialization failed: {originalFailure}";
+        return outcome.Failures.Count == 0
+            ? message
+            : $"{message}{Environment.NewLine}{FormatCleanupFailure("Rollback/integrity failure", outcome)}";
+    }
+
+    private CleanupOutcome CleanupResourcesUnderLock()
+    {
+        if (Volatile.Read(ref cleanupCompleted) != 0)
+        {
+            return cleanupOutcome ?? CleanupOutcome.Success;
+        }
+
+        var failures = new List<Exception>();
+        var hooksConfirmedInactive = true;
+        try
+        {
+            hookInstaller.DisableAll();
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+            if (exception is HookRollbackException { HooksConfirmedInactive: false })
+            {
+                hooksConfirmedInactive = false;
+            }
+        }
+
+        foreach (var hook in hookInstaller.PreparedHooks)
+        {
+            try
+            {
+                if (hook.IsActive)
+                {
+                    hooksConfirmedInactive = false;
+                    failures.Add(new InvalidOperationException(
+                        $"Residual active hook '{hook.Name}' prevents Prism shutdown."));
+                }
+            }
+            catch (Exception exception)
+            {
+                hooksConfirmedInactive = false;
+                failures.Add(new InvalidOperationException(
+                    $"Could not confirm hook '{hook.Name}' inactive; Prism remains loaded.", exception));
+            }
+        }
+
+        if (hooksConfirmedInactive && prismSession is not null)
+        {
+            try
+            {
+                prismSession.Dispose();
+                prismSession = null;
+            }
+            catch (Exception exception)
+            {
+                failures.Add(new InvalidOperationException("Prism disposal failed.", exception));
+            }
+        }
+
+        cleanupOutcome = new CleanupOutcome(failures.AsReadOnly(), hooksConfirmedInactive);
+        Volatile.Write(ref cleanupCompleted, 1);
+        return cleanupOutcome;
+    }
+
+    private static string FormatCleanupFailure(string heading, CleanupOutcome outcome)
+    {
+        var details = string.Join(" | ", outcome.Failures.Select(failure => failure.ToString()));
+        if (!outcome.HooksConfirmedInactive)
+        {
+            details += " | Prism was intentionally retained because every hook could not be confirmed inactive.";
+        }
+
+        return $"{heading}: {details}";
+    }
+
+    private void ReportFatalOnce(string message)
+    {
+        if (Interlocked.Exchange(ref fatalReported, 1) != 0)
+        {
+            return;
+        }
+
         try
         {
             log.Error(message);
@@ -96,7 +323,17 @@ public sealed class AccessibilityRuntime
         }
         catch (Exception)
         {
-            // Initialization is already faulted; never fault the background task on diagnostics.
+            // Runtime integrity is already faulted; diagnostics cannot escape to the game.
         }
+    }
+
+    private void SetState(AccessibilityRuntimeState value) =>
+        Volatile.Write(ref state, (int)value);
+
+    private sealed record CleanupOutcome(
+        IReadOnlyList<Exception> Failures,
+        bool HooksConfirmedInactive)
+    {
+        public static CleanupOutcome Success { get; } = new(Array.Empty<Exception>(), true);
     }
 }

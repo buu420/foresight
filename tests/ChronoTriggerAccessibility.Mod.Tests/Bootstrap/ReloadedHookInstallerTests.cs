@@ -61,6 +61,63 @@ public sealed class ReloadedHookInstallerTests
     }
 
     [Fact]
+    public void UnexpectedActivePrepareHookIsRootedBeforeThrowingDisableAndBothFailuresSurface()
+    {
+        var events = new List<string>();
+        var registration = new FakeRegistration("unsafe", events)
+        {
+            InitialActive = true,
+            FailDisable = true,
+        };
+        var installer = CreateInstaller(registration);
+
+        var exception = Assert.ThrowsAny<Exception>(() =>
+            installer.PrepareAll(new FakeVerifiedGameBuild(), CreateBoundary()));
+
+        Assert.Single(installer.PreparedHooks);
+        Assert.True(installer.LifetimeRootCount >= 2);
+        Assert.Contains("active", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("disable unsafe", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ActivationRollbackAttemptsEveryHookAndSurfacesEveryDisableFailure()
+    {
+        var events = new List<string>();
+        var first = new FakeRegistration("first", events) { FailDisable = true };
+        var second = new FakeRegistration("second", events)
+        {
+            FailActivate = true,
+            FailDisable = true,
+        };
+        var installer = CreateInstaller(first, second);
+        installer.PrepareAll(new FakeVerifiedGameBuild(), CreateBoundary());
+
+        var exception = Assert.ThrowsAny<Exception>(installer.ActivateAll);
+
+        Assert.Contains("disable:second", events);
+        Assert.Contains("disable:first", events);
+        Assert.Contains("disable second", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("disable first", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RollbackDetectsHookThatRemainsActiveAfterDisable()
+    {
+        var events = new List<string>();
+        var first = new FakeRegistration("first", events) { DisableLeavesActive = true };
+        var second = new FakeRegistration("second", events) { FailActivate = true };
+        var installer = CreateInstaller(first, second);
+        installer.PrepareAll(new FakeVerifiedGameBuild(), CreateBoundary());
+
+        var exception = Assert.ThrowsAny<Exception>(installer.ActivateAll);
+
+        Assert.True(installer.PreparedHooks[0].IsActive);
+        Assert.Contains("first", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("active", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReloadedPreparedHookRootsDetourAndControlsUnderlyingHook()
     {
         TestHookDelegate detour = _ => { };
@@ -87,6 +144,9 @@ public sealed class ReloadedHookInstallerTests
     {
         public bool FailPrepare { get; init; }
         public bool FailActivate { get; init; }
+        public bool FailDisable { get; init; }
+        public bool InitialActive { get; init; }
+        public bool DisableLeavesActive { get; init; }
         public string Name { get; } = name;
 
         public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary)
@@ -97,14 +157,20 @@ public sealed class ReloadedHookInstallerTests
                 throw new InvalidOperationException($"prepare {Name}");
             }
 
-            return new Prepared(Name, events, FailActivate);
+            return new Prepared(Name, events, FailActivate, FailDisable, InitialActive, DisableLeavesActive);
         }
 
-        private sealed class Prepared(string name, List<string> events, bool failActivate) : IPreparedHook
+        private sealed class Prepared(
+            string name,
+            List<string> events,
+            bool failActivate,
+            bool failDisable,
+            bool initialActive,
+            bool disableLeavesActive) : IPreparedHook
         {
             private readonly object delegateRoot = new();
             public string Name { get; } = name;
-            public bool IsActive { get; private set; }
+            public bool IsActive { get; private set; } = initialActive;
             public IReadOnlyCollection<object> LifetimeRoots => [delegateRoot];
 
             public void Activate()
@@ -121,7 +187,15 @@ public sealed class ReloadedHookInstallerTests
             public void Disable()
             {
                 events.Add($"disable:{Name}");
-                IsActive = false;
+                if (failDisable)
+                {
+                    throw new InvalidOperationException($"disable {Name}");
+                }
+
+                if (!disableLeavesActive)
+                {
+                    IsActive = false;
+                }
             }
         }
     }

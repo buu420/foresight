@@ -36,5 +36,7 @@ public sealed class Mod : ModBase
         log.Info("Accessibility initialization scheduled off the game startup thread.");
     }
 
+    public override void Disposing() => runtime?.Shutdown();
+
     public Mod() { }
 }
