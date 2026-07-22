@@ -306,6 +306,63 @@ public sealed class ExtrasHookSetTests
     }
 
     [Fact]
+    public void TeardownPublicationFailureCannotSkipOnExitOrDeletingDestructorOriginal()
+    {
+        var exitHarness = CreateHarness();
+        var exitControls = Controls(5);
+        ConfigureNode(exitHarness.Memory, ExtrasHookSet.ExtrasHubVtableRva);
+        ConfigureManagerAndControls(exitHarness.Memory, exitControls, focusedKey: 4);
+        exitHarness.Memory
+            .AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, Node)
+            .AddInt32(Node + 0x2E4, 1).AddInt32(Node + 0x2EC, 1)
+            .AddInt32(Node + 0x2F4, 1).AddInt32(Node + 0x2FC, 1)
+            .AddInt32(Node + 0x304, 1);
+        ConfigureHubBuild(exitHarness, exitControls, focusedKey: 4, helpMessage: null, help: null);
+        var exitOriginalCalls = 0;
+        exitHarness.Factory.SetOriginal<ExtrasNodeOnExitDelegate>(
+            HookId.ExtrasNodeOnExit,
+            _ => exitOriginalCalls++);
+        exitHarness.PrepareAndActivate();
+        exitHarness.Switch();
+        exitHarness.HubEnter();
+        exitHarness.Dispatcher.ThrowOnPublish = true;
+
+        exitHarness.Exit();
+
+        Assert.Equal(1, exitOriginalCalls);
+        Assert.Single(exitHarness.Dispatcher.Failures);
+
+        var deleteHarness = CreateHarness();
+        var deleteControls = Controls(5);
+        ConfigureNode(deleteHarness.Memory, ExtrasHookSet.ExtrasHubVtableRva);
+        ConfigureManagerAndControls(deleteHarness.Memory, deleteControls, focusedKey: 4);
+        deleteHarness.Memory
+            .AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, Node)
+            .AddInt32(Node + 0x2E4, 1).AddInt32(Node + 0x2EC, 1)
+            .AddInt32(Node + 0x2F4, 1).AddInt32(Node + 0x2FC, 1)
+            .AddInt32(Node + 0x304, 1);
+        ConfigureHubBuild(deleteHarness, deleteControls, focusedKey: 4, helpMessage: null, help: null);
+        var deleteOriginalCalls = 0;
+        deleteHarness.Factory.SetOriginal<ExtrasHubDeletingDestructorDelegate>(
+            HookId.ExtrasHubDeletingDestructor,
+            (_, _) =>
+            {
+                deleteOriginalCalls++;
+                return 0x1234;
+            });
+        deleteHarness.PrepareAndActivate();
+        deleteHarness.Switch();
+        deleteHarness.HubEnter();
+        deleteHarness.Dispatcher.ThrowOnPublish = true;
+
+        var returned = deleteHarness.HubDelete();
+
+        Assert.Equal(1, deleteOriginalCalls);
+        Assert.Equal((nint)0x1234, returned);
+        Assert.Single(deleteHarness.Dispatcher.Failures);
+    }
+
+    [Fact]
     public void WrongSwitchVtableFailsClosedWithoutChangingReturnOrCallingOriginalTwice()
     {
         var harness = CreateHarness();
@@ -654,9 +711,17 @@ public sealed class ExtrasHookSetTests
         public int Generation => 0;
         public List<AccessibilityEvent> Events { get; } = [];
         public List<string> Failures { get; } = [];
+        public bool ThrowOnPublish { get; set; }
         public void Attach(IRuntimePrismSession session) { }
         public void Detach(IRuntimePrismSession session) { }
-        public void Publish(AccessibilityEvent accessibilityEvent) => Events.Add(accessibilityEvent);
+        public void Publish(AccessibilityEvent accessibilityEvent)
+        {
+            if (ThrowOnPublish)
+            {
+                throw new InvalidOperationException("simulated teardown publication failure");
+            }
+            Events.Add(accessibilityEvent);
+        }
         public void ReportCoverageFailure(string message) => Failures.Add(message);
     }
 

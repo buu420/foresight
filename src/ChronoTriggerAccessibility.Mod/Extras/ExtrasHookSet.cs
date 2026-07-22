@@ -459,8 +459,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         PrepareHook<ExtrasNodeOnExitDelegate>(HookId.ExtrasNodeOnExit, build, original => node =>
             boundary.Run("Extras node onExit", () =>
             {
-                ClearMatchingAnyNode((nuint)node, "Extras node onExit");
+                var captureFailure = CaptureTeardownFailure(
+                    () => ClearMatchingAnyNode((nuint)node, "Extras node onExit"));
                 original()(node);
+                ReportTeardownFailure("Extras node onExit", captureFailure);
             }));
 
     private IPreparedHook PrepareHubDeletingDestructor(
@@ -471,8 +473,14 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 "Extras Hub deleting destructor",
                 () =>
                 {
-                    ClearMatchingNode((nuint)node, ExtrasHubVtableRva, "Extras Hub deleting destructor");
-                    return original()(node, deletingFlags);
+                    var captureFailure = CaptureTeardownFailure(
+                        () => ClearMatchingNode(
+                            (nuint)node,
+                            ExtrasHubVtableRva,
+                            "Extras Hub deleting destructor"));
+                    var returned = original()(node, deletingFlags);
+                    ReportTeardownFailure("Extras Hub deleting destructor", captureFailure);
+                    return returned;
                 },
                 node));
 
@@ -484,8 +492,14 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 "Ending Log deleting destructor",
                 () =>
                 {
-                    ClearMatchingNode((nuint)node, EndingLogVtableRva, "Ending Log deleting destructor");
-                    return original()(node, deletingFlags);
+                    var captureFailure = CaptureTeardownFailure(
+                        () => ClearMatchingNode(
+                            (nuint)node,
+                            EndingLogVtableRva,
+                            "Ending Log deleting destructor"));
+                    var returned = original()(node, deletingFlags);
+                    ReportTeardownFailure("Ending Log deleting destructor", captureFailure);
+                    return returned;
                 },
                 node));
 
@@ -1300,6 +1314,27 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         if (departed is not null)
         {
             QueueExit();
+        }
+    }
+
+    private static Exception? CaptureTeardownFailure(Action capture)
+    {
+        try
+        {
+            capture();
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
+    private void ReportTeardownFailure(string boundary, Exception? exception)
+    {
+        if (exception is not null)
+        {
+            FailCoverage($"{boundary} accessibility cleanup failed after the native original was preserved: {FormatException(exception)}");
         }
     }
 
