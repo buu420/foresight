@@ -82,7 +82,7 @@ public sealed class TopMenuHookSetTests
     }
 
     [Fact]
-    public void FocusAndDispatcherUseNativeKeysRatherThanVisualPositions()
+    public void FocusAndUnsupportedDispatcherUseNativeKeysRatherThanVisualPositions()
     {
         var harness = CreateHarness(TopMenuStyle.Classic);
         ConfigureSuccessfulBuilder(harness);
@@ -97,8 +97,218 @@ public sealed class TopMenuHookSetTests
         var focus = Assert.IsType<MenuFocusChanged>(harness.Dispatcher.Events[0]);
         Assert.Equal("Save", focus.Focus!.Label);
         Assert.Equal(7, focus.Focus.Position);
-        Assert.Equal("Save", Assert.IsType<MenuActivated>(harness.Dispatcher.Events[1]).Label);
+        var unsupported = Assert.IsType<MenuUnsupported>(harness.Dispatcher.Events[1]);
+        Assert.Equal("Save", unsupported.SelectedLabel);
+        Assert.Equal("This top-menu subpage is not accessible yet.", unsupported.BoundaryText);
+        Assert.Equal("Press Cancel to return to the accessible top menu.", unsupported.ReturnInstruction);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Theory]
+    [InlineData(0, "Save")]
+    [InlineData(1, "Equipment")]
+    [InlineData(2, "Load")]
+    [InlineData(3, "Items")]
+    [InlineData(5, "Tech")]
+    [InlineData(6, "Formation")]
+    public void EveryEnabledDeepPageActionPublishesItsExactVisibleLabelAndExplicitReturnBoundary(
+        int action,
+        string expectedLabel)
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+        harness.SetActionEnabled(action, enabled: true);
+
+        harness.DispatchAction(action);
+
+        var unsupported = Assert.IsType<MenuUnsupported>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(expectedLabel, unsupported.SelectedLabel);
+        Assert.Equal("This top-menu subpage is not accessible yet.", unsupported.BoundaryText);
+        Assert.Equal("Press Cancel to return to the accessible top menu.", unsupported.ReturnInstruction);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void SettingsActivationPublishesOnlyAfterItsClassicNativeOriginalSucceeds()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        var originalSawNoActionEvent = false;
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ => originalSawNoActionEvent = harness.Dispatcher.Events.Count == 0);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(4);
+
+        Assert.True(originalSawNoActionEvent);
+        Assert.Equal("Settings", Assert.IsType<MenuActivated>(Assert.Single(harness.Dispatcher.Events)).Label);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void TouchDispatcherUsesParentPlus294AndPublishesOnlyAfterItsNativeOriginalSucceeds()
+    {
+        var harness = CreateHarness(TopMenuStyle.Touch);
+        ConfigureSuccessfulBuilder(harness);
+        var originalSawNoActionEvent = false;
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.TouchTopMenuActionDispatcher,
+            _ => originalSawNoActionEvent = harness.Dispatcher.Events.Count == 0);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(4);
+
+        Assert.True(originalSawNoActionEvent);
+        Assert.Equal("Settings", Assert.IsType<MenuActivated>(Assert.Single(harness.Dispatcher.Events)).Label);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.TouchTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void ActionOriginalFailureNeverPublishesTheCapturedAction()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ =>
+            {
+                harness.DeleteClassic();
+                throw new InvalidOperationException("simulated action failure");
+            });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(4);
+
+        Assert.True(harness.Boundary.IsFaulted);
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Contains("native top-menu action dispatcher failed", harness.Dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuDeletingDestructor]);
+    }
+
+    [Fact]
+    public void DisableDuringActionOriginalInvalidatesTheTransactionWithoutPublishing()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ =>
+            {
+                harness.DeleteStatusBar();
+                harness.Installer.DisableAll();
+            });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(4);
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.StatusBarDestructor]);
+    }
+
+    [Fact]
+    public void ReentrantRootAndStatusTeardownPublishesUnsupportedThenOneDeferredExit()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        var originalsSawNoEvent = false;
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ =>
+            {
+                harness.DeleteStatusBar();
+                harness.DeleteClassic();
+                originalsSawNoEvent = harness.Dispatcher.Events.Count == 0;
+            });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(0);
+        harness.DeleteStatusBar();
+        harness.DeleteClassic();
+
+        Assert.True(originalsSawNoEvent);
+        Assert.Collection(
+            harness.Dispatcher.Events,
+            item => Assert.Equal("Save", Assert.IsType<MenuUnsupported>(item).SelectedLabel),
+            item => Assert.IsType<MenuExited>(item));
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Equal(2, harness.Factory.OriginalCalls[HookId.StatusBarDestructor]);
+        Assert.Equal(2, harness.Factory.OriginalCalls[HookId.ClassicTopMenuDeletingDestructor]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void ReturnActionDefersItsReentrantExitWithoutInventingAnActivation()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        var originalSawNoEvent = false;
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ =>
+            {
+                harness.DeleteClassic();
+                originalSawNoEvent = harness.Dispatcher.Events.Count == 0;
+            });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(7);
+
+        Assert.True(originalSawNoEvent);
+        Assert.IsType<MenuExited>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuDeletingDestructor]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void IndependentStatusBarDestructorImmediatelyInvalidatesThePublishedMenuAndExitsOnce()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        var originalSawCleared = false;
+        harness.Factory.SetOriginal<StatusBarDestructorDelegate>(
+            HookId.StatusBarDestructor,
+            _ =>
+            {
+                var eventCount = harness.Dispatcher.Events.Count;
+                harness.Set.AfterFocusSet((nint)Manager, 4);
+                originalSawCleared = harness.Dispatcher.Events.Count == eventCount;
+            });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+
+        harness.DeleteStatusBar();
+        harness.DeleteStatusBar();
+        harness.Set.AfterFocusSet((nint)Manager, 4);
+
+        Assert.True(originalSawCleared);
+        Assert.IsType<MenuExited>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(2, harness.Factory.OriginalCalls[HookId.StatusBarDestructor]);
         Assert.Empty(harness.Dispatcher.Failures);
     }
 
@@ -408,9 +618,25 @@ public sealed class TopMenuHookSetTests
             Memory
                 .AddInt32(context, action)
                 .AddPointer(context + 4, parent)
-                .AddPointer(parent + TopMenuHookSet.ClassicParentTopMenuOffset, Root);
-            Factory.GetDetour<TopMenuActionDispatcherDelegate>(HookId.ClassicTopMenuActionDispatcher)((nint)context);
+                .AddPointer(parent + (Style == TopMenuStyle.Classic
+                    ? TopMenuHookSet.ClassicParentTopMenuOffset
+                    : TopMenuHookSet.TouchParentTopMenuOffset), Root);
+            Factory.GetDetour<TopMenuActionDispatcherDelegate>(Style == TopMenuStyle.Classic
+                ? HookId.ClassicTopMenuActionDispatcher
+                : HookId.TouchTopMenuActionDispatcher)((nint)context);
         }
+
+        public void SetActionEnabled(int action, bool enabled)
+        {
+            var index = Array.IndexOf(Keys, action);
+            Assert.InRange(index, 0, Controls.Length - 1);
+            Memory.AddByte(
+                Controls[index] + TopMenuHookSet.WidgetEnabledOffset,
+                enabled ? (byte)1 : (byte)0);
+        }
+
+        public void DeleteStatusBar() => Factory.GetDetour<StatusBarDestructorDelegate>(
+            HookId.StatusBarDestructor)((nint)StatusBar);
 
         public nint DeleteClassic() => Factory.GetDetour<ClassicTopMenuDeletingDestructorDelegate>(
             HookId.ClassicTopMenuDeletingDestructor)((nint)Root, 1);

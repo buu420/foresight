@@ -129,6 +129,9 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     public const uint CustomButtonVtableRva = 0x3A4364;
     public const uint FocusableStateVtableRva = 0x3AC3F4;
 
+    private const string UnsupportedBoundary = "This top-menu subpage is not accessible yet.";
+    private const string UnsupportedReturnInstruction = "Press Cancel to return to the accessible top menu.";
+
     private static readonly HookId[] FunctionHookIds =
     [
         HookId.ClassicTopMenuBuilder,
@@ -184,6 +187,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private nuint imageBase;
     private BuildContext? buildContext;
     private ActiveContext? activeContext;
+    private ActionTransaction? actionTransaction;
     private int epoch;
     private int transitionActive;
     private int faulted;
@@ -259,6 +263,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             hooksActive = false;
             epoch = unchecked(epoch + 1);
             activeContext = null;
+            actionTransaction = null;
             if (buildContext is { } build)
             {
                 build.Cancelled = true;
@@ -684,6 +689,10 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             {
                 build.AddError("A nested StatusBar formatting scope was observed in the top-menu builder.");
             }
+            else if (build.CompletedStatusBar != 0)
+            {
+                build.AddError("More than one completed StatusBar formatting scope was observed in the top-menu builder.");
+            }
             else if (!build.Capture.TryBeginStatusBar((nuint)statusBar, out var capture, out var diagnostic))
             {
                 build.AddError(diagnostic);
@@ -700,6 +709,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         }
 
         Exception? originalFailure = null;
+        var completed = false;
         try
         {
             original()(statusBar, text, rawMode);
@@ -723,6 +733,10 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                     {
                         build.AddError(diagnostic);
                     }
+                    else if (originalFailure is null)
+                    {
+                        completed = true;
+                    }
                 }
                 catch (Exception exception)
                 {
@@ -740,6 +754,10 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 if (ReferenceEquals(build.Status, status))
                 {
                     build.Status = null;
+                }
+                if (completed)
+                {
+                    build.CompletedStatusBar = status.Pointer;
                 }
             }
         }
@@ -804,16 +822,36 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private void HandleStatusDestructor(Func<StatusBarDestructorDelegate> original, nint statusBar)
     {
         string? failure = null;
+        var publishExit = false;
         try
         {
             if (TryGetBuild(out var build) && build.Status?.Pointer == (nuint)statusBar)
             {
                 build.AddError("The owned StatusBar was destroyed during its top-menu capture scope.");
             }
+            lock (gate)
+            {
+                if (hooksActive && activeContext is { } active && active.StatusBar == (nuint)statusBar)
+                {
+                    activeContext = null;
+                    if (!TryReadExactVtable((nuint)statusBar, TopMenuCaptureScope.StatusBarVtableRva))
+                    {
+                        failure = "StatusBar destructor did not match the active exact StatusBar vtable.";
+                    }
+                    else if (!TryDeferExitLocked(active))
+                    {
+                        publishExit = true;
+                    }
+                }
+            }
+            if (publishExit)
+            {
+                dispatcher.Publish(new MenuExited());
+            }
         }
         catch (Exception exception)
         {
-            failure = $"StatusBar teardown capture failed: {FormatException(exception)}";
+            failure = $"StatusBar teardown publication failed: {FormatException(exception)}";
         }
         Exception? originalFailure = null;
         try
@@ -854,7 +892,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                     {
                         failure = "Top-menu deleting destructor did not match the active root style and exact vtable.";
                     }
-                    else
+                    else if (!TryDeferExitLocked(active))
                     {
                         publishExit = true;
                     }
@@ -895,67 +933,88 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private void HandleActionDispatcher(TopMenuStyle style, nuint context, Action callOriginal)
     {
         string? failure = null;
-        MenuActivated? activation = null;
+        ActionTransaction? transaction = null;
         var transitionOwner = Interlocked.CompareExchange(ref transitionActive, 1, 0) == 0;
         try
         {
-            if (!transitionOwner)
+            try
             {
-                failure = "A reentrant top-menu action transition was attempted.";
+                if (!transitionOwner)
+                {
+                    failure = "A reentrant top-menu action transition was attempted.";
+                }
+                else if (TryCaptureEpoch(out var capturedEpoch) &&
+                    !TryBeginActionTransaction(
+                        style,
+                        context,
+                        capturedEpoch,
+                        out transaction,
+                        out failure))
+                {
+                    transaction = null;
+                }
             }
-            else if (TryCaptureEpoch(out _) && !TryPrepareActivation(style, context, out activation, out failure))
+            catch (Exception exception)
             {
-                activation = null;
+                failure = $"Top-menu action capture failed: {FormatException(exception)}";
             }
-            if (activation is not null)
-            {
-                dispatcher.Publish(activation);
-            }
-        }
-        catch (Exception exception)
-        {
-            failure = $"Top-menu activation capture failed: {FormatException(exception)}";
-        }
 
-        Exception? originalFailure = null;
-        try
-        {
-            callOriginal();
-        }
-        catch (Exception exception)
-        {
-            originalFailure = exception;
+            Exception? originalFailure = null;
+            try
+            {
+                callOriginal();
+            }
+            catch (Exception exception)
+            {
+                originalFailure = exception;
+            }
+
+            if (originalFailure is null && string.IsNullOrWhiteSpace(failure) && transaction is not null)
+            {
+                try
+                {
+                    PublishActionTransaction(transaction);
+                }
+                catch (Exception exception)
+                {
+                    failure = $"Top-menu action publication failed: {FormatException(exception)}";
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(failure))
+            {
+                FailCoverage(failure);
+            }
+            if (originalFailure is not null)
+            {
+                FailCoverage($"Native top-menu action dispatcher failed: {FormatException(originalFailure)}");
+                ExceptionDispatchInfo.Capture(originalFailure).Throw();
+            }
         }
         finally
         {
+            CancelActionTransaction(transaction);
             if (transitionOwner)
             {
                 Interlocked.Exchange(ref transitionActive, 0);
             }
         }
-        if (!string.IsNullOrWhiteSpace(failure))
-        {
-            FailCoverage(failure);
-        }
-        if (originalFailure is not null)
-        {
-            FailCoverage($"Native top-menu action dispatcher failed: {FormatException(originalFailure)}");
-            ExceptionDispatchInfo.Capture(originalFailure).Throw();
-        }
     }
 
-    private bool TryPrepareActivation(
+    private bool TryBeginActionTransaction(
         TopMenuStyle style,
         nuint context,
-        out MenuActivated? activation,
+        int capturedEpoch,
+        out ActionTransaction? transaction,
         out string diagnostic)
     {
-        activation = null;
+        transaction = null;
         diagnostic = string.Empty;
         ActiveContext? active;
         lock (gate)
         {
-            active = activeContext;
+            active = hooksActive && epoch == capturedEpoch && Volatile.Read(ref faulted) == 0
+                ? activeContext
+                : null;
         }
         if (active is null)
         {
@@ -974,21 +1033,111 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 : diagnostic;
             return false;
         }
-        if (action == 7)
+        MenuAccessibilityEvent? pendingEvent = null;
+        if (action != 7)
         {
-            diagnostic = string.Empty;
-            return true;
+            if (!active.Controls.TryGetValue(action, out var control) ||
+                !TryReadExactVtable(control.Pointer, CustomButtonVtableRva) ||
+                !TryReadControlState(control.Pointer, out var enabled, out var visible) || !enabled || !visible)
+            {
+                diagnostic = $"Top-menu action {action} does not identify one currently enabled visible native-key control.";
+                return false;
+            }
+            pendingEvent = action == 4
+                ? new MenuActivated(control.Focus.Label)
+                : new MenuUnsupported(
+                    control.Focus.Label,
+                    UnsupportedBoundary,
+                    UnsupportedReturnInstruction);
         }
-        if (!active.Controls.TryGetValue(action, out var control) ||
-            !TryReadExactVtable(control.Pointer, CustomButtonVtableRva) ||
-            !TryReadControlState(control.Pointer, out var enabled, out var visible) || !enabled || !visible)
+        var candidate = new ActionTransaction(
+            capturedEpoch,
+            Environment.CurrentManagedThreadId,
+            style,
+            context,
+            active,
+            pendingEvent);
+        lock (gate)
         {
-            diagnostic = $"Top-menu action {action} does not identify one currently enabled visible native-key control.";
-            return false;
+            if (!hooksActive || epoch != capturedEpoch || Volatile.Read(ref faulted) != 0 ||
+                !ReferenceEquals(activeContext, active))
+            {
+                return true;
+            }
+            if (actionTransaction is not null)
+            {
+                diagnostic = "A second owned top-menu action transaction was already active.";
+                return false;
+            }
+            actionTransaction = candidate;
+            transaction = candidate;
         }
-        activation = new MenuActivated(control.Focus.Label);
         diagnostic = string.Empty;
         return true;
+    }
+
+    private void PublishActionTransaction(ActionTransaction transaction)
+    {
+        lock (gate)
+        {
+            if (!IsCurrentActionTransactionLocked(transaction))
+            {
+                return;
+            }
+            try
+            {
+                if (transaction.PendingEvent is not null)
+                {
+                    dispatcher.Publish(transaction.PendingEvent);
+                }
+                if (IsCurrentActionTransactionLocked(transaction) && transaction.ExitDeferred)
+                {
+                    dispatcher.Publish(new MenuExited());
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(actionTransaction, transaction))
+                {
+                    actionTransaction = null;
+                }
+            }
+        }
+    }
+
+    private bool IsCurrentActionTransactionLocked(ActionTransaction transaction) =>
+        hooksActive && epoch == transaction.Epoch && Volatile.Read(ref faulted) == 0 &&
+        transaction.OwnerThreadId == Environment.CurrentManagedThreadId &&
+        ReferenceEquals(actionTransaction, transaction) &&
+        (transaction.ExitDeferred
+            ? activeContext is null
+            : ReferenceEquals(activeContext, transaction.Owner));
+
+    private bool TryDeferExitLocked(ActiveContext active)
+    {
+        if (actionTransaction is not { } transaction ||
+            transaction.Epoch != epoch ||
+            !ReferenceEquals(transaction.Owner, active))
+        {
+            return false;
+        }
+        transaction.ExitDeferred = true;
+        return true;
+    }
+
+    private void CancelActionTransaction(ActionTransaction? transaction)
+    {
+        if (transaction is null)
+        {
+            return;
+        }
+        lock (gate)
+        {
+            if (ReferenceEquals(actionTransaction, transaction))
+            {
+                actionTransaction = null;
+            }
+        }
     }
 
     private string? FinalizeBuild(BuildContext build)
@@ -1050,10 +1199,15 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         {
             return "Top-menu snapshot keys do not match the exact observed manager bindings.";
         }
+        if (build.CompletedStatusBar == 0 ||
+            !TryReadExactVtable(build.CompletedStatusBar, TopMenuCaptureScope.StatusBarVtableRva))
+        {
+            return "Top-menu builder did not retain one completed exact StatusBar instance.";
+        }
         var controls = snapshot.Controls.ToDictionary(
             control => control.Key,
             control => new RuntimeControl(bindingsByKey[control.Key].Control, ToFocus(control)));
-        var active = new ActiveContext(build.Root, build.Style, managers[0], controls);
+        var active = new ActiveContext(build.Root, build.Style, build.CompletedStatusBar, managers[0], controls);
         var focused = controls[snapshot.FocusedKey].Focus;
 
         lock (gate)
@@ -1259,6 +1413,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 return;
             }
             activeContext = null;
+            actionTransaction = null;
             if (buildContext is { } build)
             {
                 build.Cancelled = true;
@@ -1376,6 +1531,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         public TopMenuStyle Style { get; } = style;
         public ITopMenuCapture Capture { get; } = capture;
         public StatusContext? Status { get; set; }
+        public nuint CompletedStatusBar { get; set; }
         public bool Cancelled { get; set; }
         public IReadOnlyList<nuint> Constructed { get { lock (gate) return constructed.ToArray(); } }
         public IReadOnlyList<Binding> Bindings { get { lock (gate) return bindings.ToArray(); } }
@@ -1432,8 +1588,26 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private sealed record ActiveContext(
         nuint Root,
         TopMenuStyle Style,
+        nuint StatusBar,
         nuint Manager,
         IReadOnlyDictionary<int, RuntimeControl> Controls);
+
+    private sealed class ActionTransaction(
+        int epoch,
+        int ownerThreadId,
+        TopMenuStyle style,
+        nuint context,
+        ActiveContext owner,
+        MenuAccessibilityEvent? pendingEvent)
+    {
+        public int Epoch { get; } = epoch;
+        public int OwnerThreadId { get; } = ownerThreadId;
+        public TopMenuStyle Style { get; } = style;
+        public nuint Context { get; } = context;
+        public ActiveContext Owner { get; } = owner;
+        public MenuAccessibilityEvent? PendingEvent { get; } = pendingEvent;
+        public bool ExitDeferred { get; set; }
+    }
 
     private sealed record RuntimeControl(nuint Pointer, MenuFocus Focus);
     private sealed record Binding(nuint Manager, nuint Control, int Key);
