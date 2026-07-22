@@ -25,6 +25,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
     private readonly MsvcStringReader stringReader;
     private readonly LocalizedTextCache localizedText = new();
     private readonly ITitleCapture titleCapture;
+    private readonly object lifecycleGate = new();
     private readonly object titleGate = new();
     private readonly object movieGate = new();
     private readonly IReadOnlyList<IHookRegistration> registrations;
@@ -37,6 +38,8 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
     private TitleInteraction titleInteraction;
     private CancellationTokenSource? movieCancellation;
     private int currentScene = -1;
+    private int activeEpoch = 1;
+    private bool hooksActive = true;
 
     public StartupTitleHookSet(
         IRuntimeNativeHookFactory hookFactory,
@@ -81,22 +84,37 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
 
     public void AfterHooksActivated()
     {
-        EnsureInitialized();
-        if (!TryReadInt32(imageBase + CurrentSceneGlobalRva, out var sceneId))
+        lock (lifecycleGate)
         {
-            dispatcher.ReportCoverageFailure(
-                $"Current startup scene at RVA 0x{CurrentSceneGlobalRva:X} is unreadable after hook activation.");
-            throw new InvalidOperationException("Required current-scene snapshot is unreadable after hook activation.");
-        }
+            EnsureInitialized();
+            if (!hooksActive)
+            {
+                throw new InvalidOperationException("Startup/title hooks were disabled before activation completed.");
+            }
+            if (!TryReadInt32(imageBase + CurrentSceneGlobalRva, out var sceneId))
+            {
+                dispatcher.ReportCoverageFailure(
+                    $"Current startup scene at RVA 0x{CurrentSceneGlobalRva:X} is unreadable after hook activation.");
+                throw new InvalidOperationException("Required current-scene snapshot is unreadable after hook activation.");
+            }
 
-        ObserveScene(sceneId);
+            ObserveScene(sceneId);
+        }
     }
 
     public void AfterHooksDisabled()
     {
-        Interlocked.Exchange(ref currentScene, -1);
-        CancelOpeningMovie(publishExit: false);
-        ClearTitleInteraction(publishExit: false);
+        lock (lifecycleGate)
+        {
+            if (!hooksActive)
+            {
+                return;
+            }
+
+            hooksActive = false;
+            activeEpoch = unchecked(activeEpoch + 1);
+            InvalidateCurrentScene();
+        }
     }
 
     private IPreparedHook PrepareTextManager(
@@ -109,30 +127,34 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "TextManager::getMsg",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     var returned = original()(textManager, result, fileId, messageId);
-                    boundary.Run("TextManager::getMsg capture", () =>
+                    if (instrument)
                     {
-                        var stringAddress = returned != 0 ? (nuint)returned : (nuint)result;
-                        if (!stringReader.TryRead(stringAddress, out var label, out var error))
+                        RunIfActive(epoch, () => boundary.Run("TextManager::getMsg capture", () =>
                         {
-                            if (titleCapture.IsBuilderActive)
+                            var stringAddress = returned != 0 ? (nuint)returned : (nuint)result;
+                            if (!stringReader.TryRead(stringAddress, out var label, out var error))
                             {
-                                titleCapture.ReportBuilderError(
-                                    $"Localized title text ({fileId:X},{messageId:X}) is unreadable: {error}");
+                                if (titleCapture.IsBuilderActive)
+                                {
+                                    titleCapture.ReportBuilderError(
+                                        $"Localized title text ({fileId:X},{messageId:X}) is unreadable: {error}");
+                                }
+                                return;
                             }
-                            return;
-                        }
 
-                        if (!string.IsNullOrWhiteSpace(label))
-                        {
-                            localizedText.Store(fileId, messageId, label);
-                            titleCapture.ObserveLocalizedResult(
-                                fileId,
-                                messageId,
-                                (nuint)result,
-                                label);
-                        }
-                    });
+                            if (!string.IsNullOrWhiteSpace(label))
+                            {
+                                localizedText.Store(fileId, messageId, label);
+                                titleCapture.ObserveLocalizedResult(
+                                    fileId,
+                                    messageId,
+                                    (nuint)result,
+                                    label);
+                            }
+                        }));
+                    }
 
                     return returned;
                 },
@@ -148,8 +170,13 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "SceneManager::create",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     var result = original()(sceneId, argument);
-                    boundary.Run("SceneManager::create capture", () => ObserveScene(sceneId));
+                    if (instrument)
+                    {
+                        RunIfActive(epoch, () =>
+                            boundary.Run("SceneManager::create capture", () => ObserveScene(sceneId)));
+                    }
                     return result;
                 },
                 0));
@@ -164,37 +191,22 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "SceneManager::NextScene",
                 () =>
                 {
-                    Exception? instrumentationFailure = null;
-                    try
-                    {
-                        BeforeSceneTransition();
-                    }
-                    catch (Exception exception)
-                    {
-                        instrumentationFailure = exception;
-                    }
-
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     original()(action);
-                    try
+                    if (instrument)
                     {
-                        if (!TryReadInt32(imageBase + CurrentSceneGlobalRva, out var sceneId))
+                        RunIfActive(epoch, () => boundary.Run("SceneManager::NextScene capture", () =>
                         {
-                            dispatcher.ReportCoverageFailure(
-                                $"Current scene is unreadable after NextScene action 0x{action:X8}.");
-                        }
-                        else
-                        {
-                            ObserveScene(sceneId);
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        instrumentationFailure = Combine(instrumentationFailure, exception);
-                    }
+                            if (!TryReadInt32(imageBase + CurrentSceneGlobalRva, out var sceneId))
+                            {
+                                InvalidateCurrentScene();
+                                dispatcher.ReportCoverageFailure(
+                                    $"Current scene is unreadable after NextScene action 0x{action:X8}.");
+                                return;
+                            }
 
-                    if (instrumentationFailure is not null)
-                    {
-                        throw instrumentationFailure;
+                            ObserveScene(sceneId);
+                        }));
                     }
                 }));
 
@@ -208,15 +220,20 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "TitleMenuMode::enter",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     IDisposable? captureScope = null;
                     Exception? captureStartFailure = null;
-                    try
+                    if (instrument)
                     {
-                        captureScope = titleCapture.BeginBuilder();
-                    }
-                    catch (Exception exception)
-                    {
-                        captureStartFailure = exception;
+                        try
+                        {
+                            instrument = RunIfActive(epoch, () =>
+                                captureScope = titleCapture.BeginBuilder());
+                        }
+                        catch (Exception exception)
+                        {
+                            captureStartFailure = exception;
+                        }
                     }
 
                     try
@@ -225,37 +242,45 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                     }
                     catch
                     {
-                        captureScope?.Dispose();
+                        DisposeCaptureScope(captureScope, epoch, boundary);
                         throw;
-                    }
-
-                    if (captureStartFailure is not null)
-                    {
-                        throw captureStartFailure;
                     }
 
                     try
                     {
-                        if (!titleCapture.TryCompleteBuilder(out var snapshot, out var captureError))
+                        if (!instrument)
                         {
-                            dispatcher.ReportCoverageFailure(
-                                $"Dynamic title menu capture is incomplete: {captureError}");
                             return;
                         }
 
-                        var inspector = GetTitleInspector();
-                        if (!inspector.TryInspectTitleMenu((nuint)mode, out var nativeState, out var stateError))
+                        RunIfActive(epoch, () => boundary.Run("TitleMenuMode::enter capture", () =>
                         {
-                            dispatcher.ReportCoverageFailure(
-                                $"Dynamic title menu state is invalid: {stateError}");
-                            return;
-                        }
+                            if (captureStartFailure is not null)
+                            {
+                                throw captureStartFailure;
+                            }
 
-                        EnterTitleMenu((nuint)mode, nativeState, snapshot);
+                            if (!titleCapture.TryCompleteBuilder(out var snapshot, out var captureError))
+                            {
+                                dispatcher.ReportCoverageFailure(
+                                    $"Dynamic title menu capture is incomplete: {captureError}");
+                                return;
+                            }
+
+                            var inspector = GetTitleInspector();
+                            if (!inspector.TryInspectTitleMenu((nuint)mode, out var nativeState, out var stateError))
+                            {
+                                dispatcher.ReportCoverageFailure(
+                                    $"Dynamic title menu state is invalid: {stateError}");
+                                return;
+                            }
+
+                            EnterTitleMenu((nuint)mode, nativeState, snapshot);
+                        }));
                     }
                     finally
                     {
-                        captureScope?.Dispose();
+                        DisposeCaptureScope(captureScope, epoch, boundary);
                     }
                 }));
 
@@ -269,48 +294,58 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "Title row factory",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     string? label = null;
                     string? readError = null;
                     var captureActive = false;
                     Exception? captureFailure = null;
-                    try
+                    if (instrument)
                     {
-                        captureActive = titleCapture.IsBuilderActive;
-                        if (captureActive &&
-                            !stringReader.TryRead((nuint)labelRecord, out label, out readError))
+                        try
                         {
-                            label = null;
+                            instrument = RunIfActive(epoch, () =>
+                            {
+                                captureActive = titleCapture.IsBuilderActive;
+                                if (captureActive &&
+                                    !stringReader.TryRead((nuint)labelRecord, out label, out readError))
+                                {
+                                    label = null;
+                                }
+                            });
                         }
-                    }
-                    catch (Exception exception)
-                    {
-                        captureFailure = exception;
+                        catch (Exception exception)
+                        {
+                            captureFailure = exception;
+                        }
                     }
 
                     var rowControl = original()(labelRecord);
-                    boundary.Run("Title row factory capture", () =>
+                    if (instrument)
                     {
-                        if (captureFailure is not null)
+                        RunIfActive(epoch, () => boundary.Run("Title row factory capture", () =>
                         {
-                            throw captureFailure;
-                        }
+                            if (captureFailure is not null)
+                            {
+                                throw captureFailure;
+                            }
 
-                        if (captureActive)
-                        {
-                            if (label is null)
+                            if (captureActive)
                             {
-                                titleCapture.ReportBuilderError(
-                                    $"Constructed title row label is unreadable: {readError}");
+                                if (label is null)
+                                {
+                                    titleCapture.ReportBuilderError(
+                                        $"Constructed title row label is unreadable: {readError}");
+                                }
+                                else
+                                {
+                                    titleCapture.ObserveConstructedRow(
+                                        (nuint)labelRecord,
+                                        (nuint)rowControl,
+                                        label);
+                                }
                             }
-                            else
-                            {
-                                titleCapture.ObserveConstructedRow(
-                                    (nuint)labelRecord,
-                                    (nuint)rowControl,
-                                    label);
-                            }
-                        }
-                    });
+                        }));
+                    }
 
                     return rowControl;
                 },
@@ -326,16 +361,23 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "TitleScene::update",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     original()(scene, deltaSeconds);
-                    var kind = GetTitleInspector().InspectMode((nuint)scene);
-                    if (kind == TitleModeKind.TapToStart)
+                    if (instrument)
                     {
-                        EnterTitlePrompt();
-                    }
-                    else if (kind == TitleModeKind.TitleMenu && !HasValidatedTitleMenu((nuint)scene))
-                    {
-                        dispatcher.ReportCoverageFailure(
-                            "Title menu mode became active without a validated dynamic row/focus capture.");
+                        RunIfActive(epoch, () => boundary.Run("TitleScene::update capture", () =>
+                        {
+                            var kind = GetTitleInspector().InspectMode((nuint)scene);
+                            if (kind == TitleModeKind.TapToStart)
+                            {
+                                EnterTitlePrompt();
+                            }
+                            else if (kind == TitleModeKind.TitleMenu && !HasValidatedTitleMenu((nuint)scene))
+                            {
+                                dispatcher.ReportCoverageFailure(
+                                    "Title menu mode became active without a validated dynamic row/focus capture.");
+                            }
+                        }));
                     }
                 }));
 
@@ -349,10 +391,17 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "nsMenu focus setter",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     original()(manager, rawKey);
-                    if (!titleCapture.IsBuilderActive)
+                    if (instrument)
                     {
-                        PublishCurrentFocus((nuint)manager);
+                        RunIfActive(epoch, () => boundary.Run("nsMenu focus capture", () =>
+                        {
+                            if (!titleCapture.IsBuilderActive)
+                            {
+                                PublishCurrentFocus((nuint)manager);
+                            }
+                        }));
                     }
                 }));
 
@@ -366,36 +415,37 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 "TitleMenu callback",
                 () =>
                 {
+                    var instrument = TryCaptureActiveEpoch(out var epoch);
                     TitleMenuItem? activation = null;
                     Exception? captureFailure = null;
-                    try
-                    {
-                        activation = CaptureActivationBeforeOriginal(
-                            (nuint)closure,
-                            (nuint)eventTypePointer,
-                            (nuint)actionPointer);
-                    }
-                    catch (Exception exception)
-                    {
-                        captureFailure = exception;
-                    }
-
-                    if (activation is not null)
+                    if (instrument)
                     {
                         try
                         {
-                            dispatcher.Publish(new ControlActivated(activation.Label));
+                            instrument = RunIfActive(epoch, () =>
+                            {
+                                activation = CaptureActivationBeforeOriginal(
+                                    (nuint)closure,
+                                    (nuint)eventTypePointer,
+                                    (nuint)actionPointer);
+                                if (activation is not null)
+                                {
+                                    dispatcher.Publish(new ControlActivated(activation.Label));
+                                }
+                            });
                         }
                         catch (Exception exception)
                         {
-                            captureFailure = Combine(captureFailure, exception);
+                            captureFailure = exception;
                         }
                     }
 
                     original()(closure, eventTypePointer, actionPointer);
-                    if (captureFailure is not null)
+                    if (captureFailure is not null && instrument)
                     {
-                        throw captureFailure;
+                        RunIfActive(epoch, () => boundary.Run(
+                            "TitleMenu callback capture",
+                            () => throw captureFailure));
                     }
                 }));
 
@@ -481,17 +531,19 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         }
     }
 
-    private void BeforeSceneTransition()
+    private void InvalidateCurrentScene()
     {
         var previous = Interlocked.Exchange(ref currentScene, -1);
         if (previous == OpeningMovieSceneId)
         {
             CancelOpeningMovie(publishExit: true);
         }
-        if (previous == TitleSceneId)
+        else
         {
-            ClearTitleInteraction();
+            CancelOpeningMovie(publishExit: false);
         }
+
+        ClearTitleInteraction(publishExit: true);
     }
 
     private void StartOpeningMovie()
@@ -499,6 +551,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         CancelOpeningMovie(publishExit: false);
         dispatcher.Publish(new StartupSceneEntered(StartupSceneKind.OpeningMovie));
         var generation = dispatcher.Generation;
+        var epoch = activeEpoch;
         var cancellation = new CancellationTokenSource();
         lock (movieGate)
         {
@@ -507,13 +560,11 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
 
         var run = movieTimeline.RunAsync(
             generation,
-            () => Volatile.Read(ref currentScene) == OpeningMovieSceneId &&
-                dispatcher.Generation == generation,
-            dispatcher.Publish,
+            () => IsMovieAuthoritative(epoch, generation),
+            description => PublishMovieDescription(epoch, generation, description),
             cancellation.Token);
         _ = run.ContinueWith(
-            completed => dispatcher.ReportCoverageFailure(
-                $"Opening movie narration failed: {completed.Exception}"),
+            completed => ReportMovieFailure(epoch, completed.Exception!),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
@@ -539,6 +590,37 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             dispatcher.Publish(new ScreenExited(ScreenKind.OpeningMovie));
         }
     }
+
+    private bool IsMovieAuthoritative(int epoch, int generation)
+    {
+        if (!Volatile.Read(ref hooksActive) ||
+            Volatile.Read(ref activeEpoch) != epoch ||
+            Volatile.Read(ref currentScene) != OpeningMovieSceneId)
+        {
+            return false;
+        }
+
+        // This is an advisory pre-check. PublishMovieDescription repeats every
+        // authority check atomically with publication under lifecycleGate.
+        return dispatcher.Generation == generation;
+    }
+
+    private void PublishMovieDescription(
+        int epoch,
+        int generation,
+        TimedDescription description) =>
+        RunIfActive(epoch, () =>
+        {
+            if (Volatile.Read(ref currentScene) == OpeningMovieSceneId &&
+                dispatcher.Generation == generation)
+            {
+                dispatcher.Publish(description);
+            }
+        });
+
+    private void ReportMovieFailure(int epoch, Exception exception) =>
+        RunIfActive(epoch, () => dispatcher.ReportCoverageFailure(
+            $"Opening movie narration failed: {exception}"));
 
     private void EnterTitleMenu(
         nuint mode,
@@ -729,6 +811,59 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         return item;
     }
 
+    private bool TryCaptureActiveEpoch(out int epoch)
+    {
+        lock (lifecycleGate)
+        {
+            epoch = activeEpoch;
+            return hooksActive;
+        }
+    }
+
+    private bool RunIfActive(int epoch, Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        lock (lifecycleGate)
+        {
+            if (!hooksActive || activeEpoch != epoch)
+            {
+                return false;
+            }
+
+            action();
+            return true;
+        }
+    }
+
+    private void DisposeCaptureScope(
+        IDisposable? captureScope,
+        int epoch,
+        UnmanagedBoundaryGuard boundary)
+    {
+        if (captureScope is null)
+        {
+            return;
+        }
+
+        lock (lifecycleGate)
+        {
+            if (hooksActive && activeEpoch == epoch)
+            {
+                boundary.Run("Title builder cleanup", captureScope.Dispose);
+                return;
+            }
+
+            try
+            {
+                captureScope.Dispose();
+            }
+            catch (Exception)
+            {
+                // Builder cleanup that finishes after shutdown cannot escape into the game.
+            }
+        }
+    }
+
     private bool TryReadPointer(nuint address, out nuint value)
     {
         Span<byte> bytes = stackalloc byte[4];
@@ -754,9 +889,6 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         value = BinaryPrimitives.ReadInt32LittleEndian(bytes);
         return true;
     }
-
-    private static Exception Combine(Exception? first, Exception second) =>
-        first is null ? second : new AggregateException(first, second);
 
     private static IHookRegistration CreateRegistration(
         HookId id,

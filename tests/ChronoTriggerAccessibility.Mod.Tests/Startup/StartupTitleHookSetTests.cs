@@ -313,6 +313,213 @@ public sealed class StartupTitleHookSetTests
     }
 
     [Fact]
+    public async Task NextSceneThatKeepsOpeningMoviePreservesGenerationAndTimelineContinuity()
+    {
+        var delay = new TwoStageMovieDelay();
+        var memory = new TestMemory().AddInt32(
+            ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva,
+            StartupTitleHookSet.OpeningMovieSceneId);
+        var dispatcher = new RecordingDispatcher { ReduceEvents = true };
+        var factory = new RecordingHookFactory();
+        var originalCalls = 0;
+        factory.SetOriginal<SceneManagerNextSceneDelegate>(HookId.SceneManagerNextScene, _ => originalCalls++);
+        var set = new StartupTitleHookSet(factory, memory, dispatcher, new OpeningMovieTimeline(delay));
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+
+        factory.GetDetour<SceneManagerCreateDelegate>(HookId.SceneManagerCreate)(
+            StartupTitleHookSet.OpeningMovieSceneId,
+            0);
+        await delay.FirstWaitEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        factory.GetDetour<SceneManagerNextSceneDelegate>(HookId.SceneManagerNextScene)(0x10203040);
+
+        Assert.Equal(1, originalCalls);
+        Assert.Single(
+            dispatcher.Events.OfType<StartupSceneEntered>(),
+            item => item.Scene == StartupSceneKind.OpeningMovie);
+        Assert.Single(dispatcher.Events.OfType<TimedDescription>());
+        Assert.Equal(0, delay.CancellationCount);
+
+        delay.ReleaseFirstWait.TrySetResult();
+        await delay.SecondWaitEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var descriptions = dispatcher.Events.OfType<TimedDescription>().ToArray();
+        Assert.Equal(2, descriptions.Length);
+        Assert.Equal(descriptions[0].Generation, descriptions[1].Generation);
+        Assert.Equal(OpeningMovieTimeline.Entries[1].Text, descriptions[1].Text);
+
+        installer.DisableAll();
+    }
+
+    [Fact]
+    public async Task UnreadablePostNextSceneSnapshotFailsCoverageAndInvalidatesMovie()
+    {
+        var delay = new CancellationObservingDelay();
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        var set = new StartupTitleHookSet(
+            factory,
+            new TestMemory(),
+            dispatcher,
+            new OpeningMovieTimeline(delay));
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+
+        factory.GetDetour<SceneManagerCreateDelegate>(HookId.SceneManagerCreate)(
+            StartupTitleHookSet.OpeningMovieSceneId,
+            0);
+        factory.GetDetour<SceneManagerNextSceneDelegate>(HookId.SceneManagerNextScene)(0x99887766);
+        await delay.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Single(dispatcher.Failures);
+        Assert.Contains("unreadable", dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(dispatcher.Events, item => item == new ScreenExited(ScreenKind.OpeningMovie));
+        Assert.Single(dispatcher.Events.OfType<TimedDescription>());
+    }
+
+    [Fact]
+    public void NextSceneThatKeepsTitlePreservesSparseMenuMapForSubsequentFocus()
+    {
+        const nuint scene = 0xA000;
+        const nuint mode = 0xB000;
+        const nuint manager = 0xC000;
+        const nuint rowBase = 0x12000;
+        var memory = new TestMemory()
+            .AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, StartupTitleHookSet.TitleSceneId)
+            .AddPointer(scene, ImageBase + TitleSceneInspector.TitleSceneVtableRva)
+            .AddPointer(scene + TitleSceneInspector.CurrentModeOffset, mode)
+            .AddPointer(mode, ImageBase + TitleSceneInspector.TitleMenuModeVtableRva)
+            .AddPointer(mode + TitleSceneInspector.OwnerOffset, scene)
+            .AddPointer(mode + TitleSceneInspector.ManagerOffset, manager)
+            .AddPointer(manager, ImageBase + TitleSceneInspector.ManagerVtableRva)
+            .AddInt32(manager + TitleSceneInspector.ManagerFocusOffset, 1)
+            .AddInlineString(rowBase, "Resume")
+            .AddInlineString(rowBase + TitleCapture.RowStride, "New Game")
+            .AddInlineString(rowBase + (4 * TitleCapture.RowStride), "Extras");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        var nextCalls = 0;
+        factory.SetOriginal<SceneManagerNextSceneDelegate>(HookId.SceneManagerNextScene, _ => nextCalls++);
+        factory.SetOriginal<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter, (_, rawKey) =>
+            memory.AddInt32(manager + TitleSceneInspector.ManagerFocusOffset, rawKey));
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (_, result, _, _) => result);
+        factory.SetOriginal<TitleRowFactoryDelegate>(HookId.TitleRowFactory,
+            record => record + 0x8000);
+        factory.SetOriginal<TitleMenuModeEnterDelegate>(HookId.TitleMenuModeEnter, _ =>
+        {
+            var getMsg = factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg);
+            getMsg(0x7000, (nint)rowBase, 0x41, 3);
+            getMsg(0x7000, (nint)(rowBase + TitleCapture.RowStride), 0x41, 0);
+            var rowFactory = factory.GetDetour<TitleRowFactoryDelegate>(HookId.TitleRowFactory);
+            rowFactory((nint)(rowBase + TitleCapture.RowStride));
+            rowFactory((nint)(rowBase + (4 * TitleCapture.RowStride)));
+        });
+        var set = new StartupTitleHookSet(factory, memory, dispatcher, new OpeningMovieTimeline());
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+
+        factory.GetDetour<SceneManagerCreateDelegate>(HookId.SceneManagerCreate)(
+            StartupTitleHookSet.TitleSceneId,
+            0);
+        factory.GetDetour<TitleMenuModeEnterDelegate>(HookId.TitleMenuModeEnter)((nint)mode);
+        factory.GetDetour<SceneManagerNextSceneDelegate>(HookId.SceneManagerNextScene)(0x55667788);
+        factory.GetDetour<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter)((nint)manager, 4);
+
+        Assert.Equal(1, nextCalls);
+        Assert.Contains(dispatcher.Events, item => item == new FocusChanged("Extras", 2, 2, false));
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Fact]
+    public async Task TitleUpdateReturningAfterDisableAndDetachCannotPublishOrReportFatal()
+    {
+        const nuint scene = 0xA000;
+        const nuint mode = 0xB000;
+        var memory = new TestMemory()
+            .AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, StartupTitleHookSet.TitleSceneId)
+            .AddPointer(scene, ImageBase + TitleSceneInspector.TitleSceneVtableRva)
+            .AddPointer(scene + TitleSceneInspector.CurrentModeOffset, mode)
+            .AddPointer(mode, ImageBase + TitleSceneInspector.TapToStartVtableRva);
+        var log = new RecordingLog();
+        var semanticFatal = new RecordingFatal();
+        var boundaryFatal = new RecordingFatal();
+        var session = new StrictPrismSession();
+        var dispatcher = new SemanticEventDispatcher(log, semanticFatal);
+        dispatcher.Attach(session);
+        var originalEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseOriginal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var originalCalls = 0;
+        var factory = new RecordingHookFactory();
+        factory.SetOriginal<TitleSceneUpdateDelegate>(HookId.TitleSceneUpdate, (_, _) =>
+        {
+            Interlocked.Increment(ref originalCalls);
+            originalEntered.TrySetResult();
+            releaseOriginal.Task.GetAwaiter().GetResult();
+        });
+        var set = new StartupTitleHookSet(factory, memory, dispatcher, new OpeningMovieTimeline());
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), new UnmanagedBoundaryGuard(log, boundaryFatal));
+        installer.ActivateAll();
+        session.Outputs.Clear();
+        log.Infos.Clear();
+
+        var update = Task.Run(() =>
+            factory.GetDetour<TitleSceneUpdateDelegate>(HookId.TitleSceneUpdate)((nint)scene, 0.016f));
+        await originalEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        installer.DisableAll();
+        dispatcher.Detach(session);
+        session.Dispose();
+        releaseOriginal.TrySetResult();
+        await update.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, originalCalls);
+        Assert.Empty(session.Outputs);
+        Assert.Equal(0, session.OutputAttemptsAfterDispose);
+        Assert.DoesNotContain(log.Infos, line => line.Contains("Semantic event", StringComparison.Ordinal));
+        Assert.Empty(semanticFatal.Messages);
+        Assert.Empty(boundaryFatal.Messages);
+    }
+
+    [Fact]
+    public async Task DelayedMovieItemRacingDisableCannotPublishAfterDispatcherDetach()
+    {
+        var delay = new GenerationRaceMovieDelay();
+        var dispatcher = new GenerationRaceDispatcher();
+        var session = new StrictPrismSession();
+        dispatcher.Attach(session);
+        var memory = new TestMemory();
+        var factory = new RecordingHookFactory();
+        var set = new StartupTitleHookSet(factory, memory, dispatcher, new OpeningMovieTimeline(delay));
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+
+        factory.GetDetour<SceneManagerCreateDelegate>(HookId.SceneManagerCreate)(
+            StartupTitleHookSet.OpeningMovieSceneId,
+            0);
+        Assert.Single(dispatcher.Events.OfType<TimedDescription>());
+        delay.ReleaseFirstWait.TrySetResult();
+        Assert.True(dispatcher.BlockedGeneration.Wait(TimeSpan.FromSeconds(2)));
+
+        installer.DisableAll();
+        dispatcher.Detach(session);
+        session.Dispose();
+        dispatcher.ReleaseGeneration.Set();
+
+        var raceFinished = await Task.WhenAny(
+            dispatcher.PostDetachPublish.Task,
+            dispatcher.CoverageFailure.Task,
+            delay.SecondWaitEntered.Task).WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Same(delay.SecondWaitEntered.Task, raceFinished);
+        Assert.Single(dispatcher.Events.OfType<TimedDescription>());
+        Assert.Equal(0, dispatcher.PostDetachPublishAttempts);
+        Assert.Empty(dispatcher.Failures);
+        Assert.Equal(0, session.OutputAttemptsAfterDispose);
+    }
+
+    [Fact]
     public void SceneHooksPassActionUnchangedSynchronizeGlobalAndCancelOpeningOnTitleSkip()
     {
         var memory = new TestMemory().AddInt32(
@@ -509,13 +716,16 @@ public sealed class StartupTitleHookSetTests
 
     private sealed class RecordingLog : IModLog
     {
-        public void Info(string message) { }
-        public void Error(string message) { }
+        public List<string> Infos { get; } = [];
+        public List<string> Errors { get; } = [];
+        public void Info(string message) => Infos.Add(message);
+        public void Error(string message) => Errors.Add(message);
     }
 
     private sealed class RecordingFatal : IAccessibleFatalError
     {
-        public void Show(string message) { }
+        public List<string> Messages { get; } = [];
+        public void Show(string message) => Messages.Add(message);
     }
 
     private sealed class ThrowingTitleCapture : ITitleCapture
@@ -550,5 +760,155 @@ public sealed class StartupTitleHookSetTests
                 throw;
             }
         }
+    }
+
+    private sealed class TwoStageMovieDelay : IOpeningMovieDelay
+    {
+        private int callCount;
+        private int cancellationCount;
+        public int CancellationCount => Volatile.Read(ref cancellationCount);
+        public TaskCompletionSource FirstWaitEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirstWait { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource SecondWaitEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref callCount);
+            if (call == 1)
+            {
+                FirstWaitEntered.TrySetResult();
+                try
+                {
+                    await ReleaseFirstWait.Task.WaitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    Interlocked.Increment(ref cancellationCount);
+                    throw;
+                }
+                return;
+            }
+
+            SecondWaitEntered.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Increment(ref cancellationCount);
+                throw;
+            }
+        }
+    }
+
+    private sealed class GenerationRaceMovieDelay : IOpeningMovieDelay
+    {
+        private int callCount;
+        public TaskCompletionSource ReleaseFirstWait { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource SecondWaitEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref callCount) == 1)
+            {
+                await ReleaseFirstWait.Task;
+                return;
+            }
+
+            SecondWaitEntered.TrySetResult();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    private sealed class GenerationRaceDispatcher : ISemanticEventDispatcher
+    {
+        private int generation;
+        private int generationReads;
+        private int attached;
+        private int postDetachPublishAttempts;
+        public int PostDetachPublishAttempts => Volatile.Read(ref postDetachPublishAttempts);
+        public ManualResetEventSlim BlockedGeneration { get; } = new(false);
+        public ManualResetEventSlim ReleaseGeneration { get; } = new(false);
+        public TaskCompletionSource PostDetachPublish { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource CoverageFailure { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<AccessibilityEvent> Events { get; } = [];
+        public List<string> Failures { get; } = [];
+
+        public int Generation
+        {
+            get
+            {
+                var captured = Volatile.Read(ref generation);
+                if (Interlocked.Increment(ref generationReads) == 4)
+                {
+                    BlockedGeneration.Set();
+                    if (!ReleaseGeneration.Wait(TimeSpan.FromSeconds(5)))
+                    {
+                        throw new TimeoutException("Generation race was not released.");
+                    }
+                }
+                return captured;
+            }
+        }
+
+        public void Attach(IRuntimePrismSession session) => Volatile.Write(ref attached, 1);
+        public void Detach(IRuntimePrismSession session) => Volatile.Write(ref attached, 0);
+
+        public void Publish(AccessibilityEvent accessibilityEvent)
+        {
+            if (Volatile.Read(ref attached) == 0)
+            {
+                Interlocked.Increment(ref postDetachPublishAttempts);
+                PostDetachPublish.TrySetResult();
+                throw new InvalidOperationException("semantic publish attempted after detach");
+            }
+
+            lock (Events)
+            {
+                Events.Add(accessibilityEvent);
+            }
+            if (accessibilityEvent is ScreenExited(ScreenKind.OpeningMovie))
+            {
+                Interlocked.Increment(ref generation);
+            }
+        }
+
+        public void ReportCoverageFailure(string message)
+        {
+            lock (Failures)
+            {
+                Failures.Add(message);
+            }
+            CoverageFailure.TrySetResult();
+        }
+    }
+
+    private sealed class StrictPrismSession : IRuntimePrismSession
+    {
+        private int disposed;
+        private int attemptsAfterDispose;
+        public string BackendName => "Strict test backend";
+        public int OutputAttemptsAfterDispose => Volatile.Read(ref attemptsAfterDispose);
+        public List<(string Text, bool Interrupt)> Outputs { get; } = [];
+
+        public void Output(string text, bool interrupt)
+        {
+            if (Volatile.Read(ref disposed) != 0)
+            {
+                Interlocked.Increment(ref attemptsAfterDispose);
+                throw new ObjectDisposedException(nameof(StrictPrismSession));
+            }
+            Outputs.Add((text, interrupt));
+        }
+
+        public void Dispose() => Volatile.Write(ref disposed, 1);
     }
 }
