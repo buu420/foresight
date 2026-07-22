@@ -143,7 +143,7 @@ The new class-specific hooks are:
 - Extras hub/submenu construction or on-enter boundaries needed to bracket dynamic capture;
 - `MenuNodeConfigSteam` constructor, builder, and destructor for context, complete dynamic construction, and lifetime, plus common value mutation RVA `0x1E3980` for post-refresh changes;
 - `MsgWindow` open, update, and close boundaries for visible line/page/choice transitions and exact choice activation classification;
-- both controller/keyboard and touch/mouse top-menu builders for field-menu construction, the menu Label factory RVA `0x2400B0` for scoped UTF-8 row/status strings, and `StatusBar` scope/UTF-16 render RVAs `0x22F160`/`0x22E080` for the conditional visible text.
+- both controller/keyboard and touch/mouse top-menu builders for field-menu construction, the menu Label factory RVA `0x2400B0` for scoped UTF-8 row/status strings, `StatusBar` scope/UTF-16 render RVAs `0x22F160`/`0x22E080` for the conditional visible text, and audited top-root/StatusBar destructors for immediate lifetime invalidation.
 
 Every hook receives a `GameVersionCatalog` entry with exact calling convention, RVA, and at least a stable prologue byte contract. All contracts are verified against the installed PE before any hook activates. Preparation remains atomic and fail-closed.
 
