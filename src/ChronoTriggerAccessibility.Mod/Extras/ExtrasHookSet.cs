@@ -46,6 +46,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         HookId.ExtrasHubCallback,
         HookId.EndingLogCallback,
         HookId.EndingDetailCallback,
+        HookId.ExtrasLogTransition,
+        HookId.ExtrasDetailTransition,
     ];
 
     private static readonly LocalizedKey[] HubLabelKeys =
@@ -63,6 +65,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     private static BuildScope? threadBuildScope;
     [ThreadStatic]
     private static CallbackScope? threadCallbackScope;
+    [ThreadStatic]
+    private static TransitionScope? threadTransitionScope;
     [ThreadStatic]
     private static PendingNode? threadPendingNode;
 
@@ -102,6 +106,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             CreateRegistration(HookId.ExtrasHubCallback, PrepareHubCallback),
             CreateRegistration(HookId.EndingLogCallback, PrepareLogCallback),
             CreateRegistration(HookId.EndingDetailCallback, PrepareDetailCallback),
+            CreateRegistration(HookId.ExtrasLogTransition, PrepareLogTransition),
+            CreateRegistration(HookId.ExtrasDetailTransition, PrepareDetailTransition),
         ]);
     }
 
@@ -324,13 +330,27 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         {
             try
             {
-                ClearPendingNode();
-                ClearActiveForTransition();
                 if (threadSwitchScope is not null)
                 {
                     throw new InvalidOperationException("A nested Gallery switch observation was attempted.");
                 }
-                scope = new SwitchScope(this, epoch, (nuint)galleryScene, action);
+                if (GetOwnedTransitionScope() is { } transition)
+                {
+                    if (transition.Source != Surface.EndingLog || transition.Action != 4 ||
+                        transition.Scene != (nuint)galleryScene || action != 0 || rawStackWord != 3 ||
+                        transition.NestedSwitchStarted)
+                    {
+                        throw new InvalidOperationException(
+                            "The enclosing Ending Log Back transition did not invoke exactly one Gallery switch action 0/raw word 3 for its scene.");
+                    }
+                    transition.NestedSwitchStarted = true;
+                }
+                else
+                {
+                    ClearPendingNode();
+                    ClearActiveForTransition();
+                }
+                scope = new SwitchScope(this, epoch, (nuint)galleryScene, action, rawStackWord);
                 threadSwitchScope = scope;
             }
             catch (Exception exception)
@@ -391,13 +411,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         {
             try
             {
-                pending = GetOwnedPendingNode();
-                if (pending is null || pending.Epoch != epoch || pending.Surface != surface ||
-                    pending.Node != (nuint)node || !TryReadExactVtable((nuint)node, ExpectedVtable(surface)))
-                {
-                    throw new InvalidOperationException(
-                        $"{surface} onEnter does not match the exact pending switch action, epoch, node pointer, and vtable.");
-                }
+                pending = ResolvePendingForOnEnter(surface, (nuint)node, epoch);
                 if (threadBuildScope is not null)
                 {
                     throw new InvalidOperationException("A nested Extras builder observation was attempted.");
@@ -453,6 +467,73 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             }
             FinalizeBuild(scope);
         });
+    }
+
+    private PendingNode ResolvePendingForOnEnter(Surface surface, nuint node, int epoch)
+    {
+        var pending = GetOwnedPendingNode();
+        var transition = GetOwnedTransitionScope();
+        if (pending is null && transition is not null)
+        {
+            if (transition.Epoch != epoch || transition.Target != surface || transition.Pending is not null ||
+                transition.Completed is not null || transition.NestedSwitchStarted ||
+                !TryReadPointer(transition.Scene + GalleryCurrentNodeOffset, out var attached) || attached != 0 ||
+                !TryReadExactVtable(node, ExpectedVtable(surface)))
+            {
+                throw new InvalidOperationException(
+                    $"{surface} direct onEnter does not match the exact transition target, empty scene slot, and audited vtable.");
+            }
+            if (!TryResolveDirectTransitionTitle(transition, out var title, out var error))
+            {
+                throw new InvalidOperationException(error);
+            }
+            pending = new PendingNode(
+                this,
+                epoch,
+                transition.Scene,
+                transition.Action,
+                surface,
+                node,
+                title);
+            transition.Pending = pending;
+            threadPendingNode = pending;
+        }
+        if (pending is null || pending.Epoch != epoch || pending.Surface != surface ||
+            pending.Node != node || !TryReadExactVtable(node, ExpectedVtable(surface)))
+        {
+            throw new InvalidOperationException(
+                $"{surface} onEnter does not match the exact pending action, epoch, node pointer, and vtable.");
+        }
+        if (transition is not null &&
+            (!ReferenceEquals(transition.Pending, pending) ||
+             !TryReadPointer(transition.Scene + GalleryCurrentNodeOffset, out var transitionAttached) ||
+             transitionAttached != 0))
+        {
+            throw new InvalidOperationException(
+                $"{surface} transition onEnter did not occur while the exact Gallery scene slot was empty.");
+        }
+        return pending;
+    }
+
+    private bool TryResolveDirectTransitionTitle(
+        TransitionScope scope,
+        out string title,
+        out string error)
+    {
+        title = string.Empty;
+        if (scope.ExpectedTitle is null)
+        {
+            error = "The direct Extras transition has no exact audited title key.";
+            return false;
+        }
+        if (scope.Source == Surface.EndingLog && scope.Action == 3 &&
+            (!TryReadInt32(imageBase + SelectedEndingGlobalRva, out var selected) ||
+             selected != scope.SelectedEnding))
+        {
+            error = "Ending Detail title no longer belongs to the exact selected Ending Log row.";
+            return false;
+        }
+        return TryRequireOnly(scope.Text, [scope.ExpectedTitle.Value], out _, out title, out error);
     }
 
     private IPreparedHook PrepareOnExit(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
@@ -520,6 +601,199 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             (closure, eventType, action) => boundary.Run(
                 "Ending Detail callback",
                 () => HandleCallback(Surface.EndingDetail, closure, eventType, action, () => original()(closure, eventType, action))));
+
+    private IPreparedHook PrepareLogTransition(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasLogTransitionDelegate>(HookId.ExtrasLogTransition, build, original => payload =>
+            boundary.Run(
+                "Extras Ending Log transition",
+                () => HandleTransition(Surface.EndingLog, payload, () => original()(payload))));
+
+    private IPreparedHook PrepareDetailTransition(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasDetailTransitionDelegate>(HookId.ExtrasDetailTransition, build, original => payload =>
+            boundary.Run(
+                "Extras Ending Detail transition",
+                () => HandleTransition(Surface.EndingDetail, payload, () => original()(payload))));
+
+    private void HandleTransition(Surface source, nint payload, Action invokeOriginal)
+    {
+        var instrument = TryCaptureActiveEpoch(out var epoch);
+        TransitionScope? scope = null;
+        string? setupError = null;
+        var preserveUnsupportedReview = false;
+        if (instrument)
+        {
+            try
+            {
+                if (!TryReadInt32((nuint)payload, out var action))
+                {
+                    throw new InvalidOperationException(
+                        $"{source} transition payload 0x{(nuint)payload:X} has no readable action.");
+                }
+                preserveUnsupportedReview = source == Surface.EndingDetail && action == 3;
+                if (!preserveUnsupportedReview)
+                {
+                    scope = BeginTransition(source, (nuint)payload, action, epoch);
+                    threadTransitionScope = scope;
+                    ClearPendingNode();
+                    ClearActiveForTransition();
+                }
+            }
+            catch (Exception exception)
+            {
+                setupError = FormatException(exception);
+            }
+        }
+
+        try
+        {
+            invokeOriginal();
+        }
+        finally
+        {
+            if (ReferenceEquals(threadTransitionScope, scope))
+            {
+                threadTransitionScope = null;
+            }
+            if (scope is not null && ReferenceEquals(threadPendingNode, scope.Pending))
+            {
+                threadPendingNode = null;
+            }
+        }
+
+        if (!instrument || preserveUnsupportedReview)
+        {
+            return;
+        }
+        RunInstrumentationSafely(epoch, $"{source} transition post-capture failed", () =>
+        {
+            if (scope is null)
+            {
+                FailCoverage($"{source} transition validation failed: {setupError}");
+                return;
+            }
+            FinalizeTransition(scope);
+        });
+    }
+
+    private TransitionScope BeginTransition(Surface source, nuint payload, int action, int epoch)
+    {
+        if (threadTransitionScope is not null || threadSwitchScope is not null || threadBuildScope is not null)
+        {
+            throw new InvalidOperationException("A nested or overlapping Extras transition observation was attempted.");
+        }
+        if (!TryReadPointer(payload + 4, out var scene) || scene == 0)
+        {
+            throw new InvalidOperationException($"{source} transition payload has no readable Gallery scene identity.");
+        }
+        var target = (source, action) switch
+        {
+            (Surface.EndingLog, 3) => Surface.EndingDetail,
+            (Surface.EndingLog, 4) => Surface.Hub,
+            (Surface.EndingDetail, 4) => Surface.EndingLog,
+            _ => throw new InvalidOperationException(
+                $"{source} transition action {action} is not an audited menu transition."),
+        };
+        var callback = GetOwnedCallbackScope();
+        var context = GetActiveContext();
+        if (callback is null || callback.Epoch != epoch || callback.Context.Surface != source ||
+            context is null || !ReferenceEquals(callback.Context, context) || context.Scene != scene)
+        {
+            throw new InvalidOperationException(
+                $"{source} transition does not belong to the exact active callback and Gallery scene.");
+        }
+        if (!TryValidateActiveContext(context, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+        if (!TryValidateTransitionCallbackRelationship(callback, action, out var selectedEnding, out error))
+        {
+            throw new InvalidOperationException(error);
+        }
+
+        LocalizedKey? expectedTitle = null;
+        if (source == Surface.EndingLog && action == 3)
+        {
+            if (!TryReadInt32(
+                    imageBase + EndingRecordTableRva + (nuint)(selectedEnding * EndingRecordStride),
+                    out var messageId))
+            {
+                throw new InvalidOperationException(
+                    "Ending Log transition cannot read the exact selected ending title message ID.");
+            }
+            expectedTitle = new LocalizedKey(0x0F, messageId);
+        }
+        else if (source == Surface.EndingDetail && action == 4)
+        {
+            expectedTitle = new LocalizedKey(0x1A, 0x0F);
+        }
+        return new TransitionScope(
+            this,
+            epoch,
+            source,
+            target,
+            action,
+            scene,
+            selectedEnding,
+            expectedTitle);
+    }
+
+    private bool TryValidateTransitionCallbackRelationship(
+        CallbackScope callback,
+        int transitionAction,
+        out int selectedEnding,
+        out string error)
+    {
+        selectedEnding = -1;
+        if (callback.Context.Surface == Surface.EndingLog && transitionAction == 3)
+        {
+            if (callback.EventType != 0 || callback.Action < 0 || callback.Action > MaximumSelectedEnding ||
+                callback.EntryFocusKey != callback.Action ||
+                !callback.Context.Controls.TryGetValue(callback.Action, out var row) || row.Focus.Disabled ||
+                !TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) ||
+                selectedEnding != callback.Action)
+            {
+                error = "Ending Log detail transition is not related to one focused, unlocked selected row.";
+                return false;
+            }
+            error = string.Empty;
+            return true;
+        }
+        if (callback.Context.Surface == Surface.EndingLog && transitionAction == 4)
+        {
+            if (!IsExactBackCallback(callback, expectedPosition: 20))
+            {
+                error = "Ending Log Hub transition is not related to its exact Back callback.";
+                return false;
+            }
+            error = string.Empty;
+            return true;
+        }
+        if (callback.Context.Surface == Surface.EndingDetail && transitionAction == 4)
+        {
+            if (!IsExactBackCallback(callback, expectedPosition: 2) ||
+                !TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) ||
+                selectedEnding < 0 || selectedEnding > MaximumSelectedEnding)
+            {
+                error = "Ending Detail Log transition is not related to its exact Back callback and selected ending.";
+                return false;
+            }
+            error = string.Empty;
+            return true;
+        }
+        error = $"{callback.Context.Surface} transition action {transitionAction} has no audited callback relationship.";
+        return false;
+    }
+
+    private static bool IsExactBackCallback(CallbackScope callback, int expectedPosition)
+    {
+        if (callback.EventType == 2)
+        {
+            return callback.Context.Controls.Values.Count(control => control.Focus.Position == expectedPosition) == 1;
+        }
+        return callback.EventType == 0 && callback.EntryFocusKey == callback.Action &&
+            callback.Context.Controls.TryGetValue(callback.Action, out var control) &&
+            control.Focus.Position == expectedPosition && !control.Focus.Disabled;
+    }
 
     private void HandleCallback(
         Surface surface,
@@ -609,8 +883,20 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage(error);
             return;
         }
-        threadPendingNode = new PendingNode(
+        var pending = new PendingNode(
             this, scope.Epoch, scope.Scene, scope.Action, surface, returnedNode, title);
+        if (GetOwnedTransitionScope() is { } transition)
+        {
+            if (transition.Source != Surface.EndingLog || transition.Action != 4 ||
+                transition.Target != Surface.Hub || transition.Scene != scope.Scene ||
+                scope.Action != 0 || scope.RawStackWord != 3 || transition.Pending is not null)
+            {
+                FailCoverage("Ending Log Back nested switch does not match its exact Hub transition relationship.");
+                return;
+            }
+            transition.Pending = pending;
+        }
+        threadPendingNode = pending;
     }
 
     private bool TryResolveSwitchTitle(
@@ -680,11 +966,15 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         manager = 0;
         focusedKey = -1;
         error = string.Empty;
+        var transition = GetOwnedTransitionScope();
+        var deferred = transition is not null && ReferenceEquals(transition.Pending, scope.Pending);
         if (!TryReadPointer(scope.Pending.Scene + GalleryCurrentNodeOffset, out var attached) ||
-            attached != scope.Pending.Node ||
+            attached != (deferred ? 0u : scope.Pending.Node) ||
             !TryReadExactVtable(scope.Pending.Node, ExpectedVtable(scope.Surface)))
         {
-            error = $"{scope.Surface} completed without exact scene attachment and node identity.";
+            error = deferred
+                ? $"{scope.Surface} transition builder did not complete while the exact scene slot remained empty."
+                : $"{scope.Surface} completed without exact scene attachment and node identity.";
             return false;
         }
         if (scope.ConstructedControls.Count == 0 ||
@@ -787,7 +1077,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         {
             context.HelpCache[helpKey.Value] = values[helpKey.Value];
         }
-        ActivateContext(context, ToPresented(context, snapshot.TryGetFocusedControl(out var focus) ? focus : null, []));
+        CompleteBuild(
+            scope,
+            context,
+            ToPresented(context, snapshot.TryGetFocusedControl(out var focus) ? focus : null, []));
     }
 
     private void FinalizeEndingLog(BuildScope scope, nuint manager, int focusedKey)
@@ -896,7 +1189,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             EndingLog = snapshot,
             BuilderTitle = values[new(0x1A, 0x40)],
         };
-        ActivateContext(context, ToPresented(context, focused.Focus, [context.BuilderTitle]));
+        CompleteBuild(scope, context, ToPresented(context, focused.Focus, [context.BuilderTitle]));
     }
 
     private void FinalizeEndingDetail(BuildScope scope, nuint manager, int focusedKey)
@@ -966,7 +1259,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage($"Ending Detail focused key {focusedKey} has no captured control.");
             return;
         }
-        ActivateContext(
+        CompleteBuild(
+            scope,
             context,
             ToPresented(
                 context,
@@ -1282,6 +1576,84 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         return true;
     }
 
+    private void CompleteBuild(BuildScope scope, ActiveContext context, MenuPresented presented)
+    {
+        if (GetOwnedTransitionScope() is not { } transition)
+        {
+            ActivateContext(context, presented);
+            return;
+        }
+        if (transition.Epoch != scope.Epoch || !ReferenceEquals(transition.Pending, scope.Pending) ||
+            transition.Target != scope.Surface || transition.Completed is not null ||
+            context.Surface != scope.Surface || context.Scene != transition.Scene ||
+            context.Node != scope.Pending.Node)
+        {
+            FailCoverage($"{scope.Surface} completed outside its one exact enclosing transition target.");
+            return;
+        }
+        transition.Completed = new CompletedBuild(scope, context, presented);
+    }
+
+    private void FinalizeTransition(TransitionScope scope)
+    {
+        if (scope.Errors.Count > 0)
+        {
+            FailCoverage(scope.Errors[0]);
+            return;
+        }
+        if (scope.Source == Surface.EndingLog && scope.Action == 4)
+        {
+            if (!scope.NestedSwitchStarted || scope.Text.Count != 0)
+            {
+                FailCoverage(
+                    "Ending Log Back did not complete through one exact nested Hub switch without outer title observations.");
+                return;
+            }
+        }
+        else
+        {
+            if (!TryResolveDirectTransitionTitle(scope, out var title, out var titleError) ||
+                scope.Pending is null || !string.Equals(scope.Pending.Title, title, StringComparison.Ordinal))
+            {
+                FailCoverage(string.IsNullOrWhiteSpace(titleError)
+                    ? $"{scope.Target} transition title no longer matches its exact pending target."
+                    : titleError);
+                return;
+            }
+        }
+        var pending = scope.Pending;
+        var completed = scope.Completed;
+        var expectedPendingAction = scope.Source == Surface.EndingLog && scope.Action == 4 ? 0 : scope.Action;
+        if (pending is null || completed is null || pending.Epoch != scope.Epoch ||
+            pending.Scene != scope.Scene || pending.Surface != scope.Target ||
+            pending.Action != expectedPendingAction ||
+            !ReferenceEquals(completed.Build.Pending, pending) || completed.Build.Epoch != scope.Epoch ||
+            completed.Context.Surface != scope.Target || completed.Context.Scene != scope.Scene ||
+            completed.Context.Node != pending.Node ||
+            !string.Equals(completed.Context.Title, pending.Title, StringComparison.Ordinal) ||
+            !string.Equals(completed.Presented.Title, pending.Title, StringComparison.Ordinal) ||
+            GetActiveContext() is not null)
+        {
+            FailCoverage($"{scope.Source} transition did not produce one complete exact {scope.Target} target.");
+            return;
+        }
+        if (!TryValidateActiveContext(completed.Context, out var error))
+        {
+            FailCoverage(error);
+            return;
+        }
+        if (scope.Source == Surface.EndingDetail && scope.Action == 4 &&
+            (!TryReadInt32(imageBase + SelectedEndingGlobalRva, out var selected) ||
+             selected != scope.SelectedEnding ||
+             !completed.Context.Controls.TryGetValue(selected, out var restored) ||
+             !Equals(completed.Presented.Focus, restored.Focus)))
+        {
+            FailCoverage("Ending Detail Back did not restore the exact selected Ending Log row and focus.");
+            return;
+        }
+        ActivateContext(completed.Context, completed.Presented);
+    }
+
     private void ActivateContext(ActiveContext context, MenuPresented presented)
     {
         lock (stateGate)
@@ -1430,6 +1802,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         if (ReferenceEquals(threadSwitchScope?.Owner, this)) threadSwitchScope = null;
         if (ReferenceEquals(threadBuildScope?.Owner, this)) threadBuildScope = null;
         if (ReferenceEquals(threadCallbackScope?.Owner, this)) threadCallbackScope = null;
+        if (ReferenceEquals(threadTransitionScope?.Owner, this)) threadTransitionScope = null;
         if (ReferenceEquals(threadPendingNode?.Owner, this)) threadPendingNode = null;
     }
 
@@ -1437,6 +1810,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     {
         if (GetOwnedBuildScope() is { } build) return build;
         if (ReferenceEquals(threadSwitchScope?.Owner, this)) return threadSwitchScope;
+        if (GetOwnedTransitionScope() is { } transition) return transition;
         if (GetOwnedCallbackScope() is { } callback) return callback;
         return null;
     }
@@ -1446,6 +1820,9 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
 
     private CallbackScope? GetOwnedCallbackScope() =>
         ReferenceEquals(threadCallbackScope?.Owner, this) ? threadCallbackScope : null;
+
+    private TransitionScope? GetOwnedTransitionScope() =>
+        ReferenceEquals(threadTransitionScope?.Owner, this) ? threadTransitionScope : null;
 
     private static bool TryMapAction(int action, out Surface surface)
     {
@@ -1703,11 +2080,35 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         ExtrasHookSet owner,
         int epoch,
         nuint scene,
-        int action) : TextScope(owner)
+        int action,
+        uint rawStackWord) : TextScope(owner)
     {
         public int Epoch { get; } = epoch;
         public nuint Scene { get; } = scene;
         public int Action { get; } = action;
+        public uint RawStackWord { get; } = rawStackWord;
+    }
+
+    private sealed class TransitionScope(
+        ExtrasHookSet owner,
+        int epoch,
+        Surface source,
+        Surface target,
+        int action,
+        nuint scene,
+        int selectedEnding,
+        LocalizedKey? expectedTitle) : TextScope(owner)
+    {
+        public int Epoch { get; } = epoch;
+        public Surface Source { get; } = source;
+        public Surface Target { get; } = target;
+        public int Action { get; } = action;
+        public nuint Scene { get; } = scene;
+        public int SelectedEnding { get; } = selectedEnding;
+        public LocalizedKey? ExpectedTitle { get; } = expectedTitle;
+        public bool NestedSwitchStarted { get; set; }
+        public PendingNode? Pending { get; set; }
+        public CompletedBuild? Completed { get; set; }
     }
 
     private sealed class BuildScope(
@@ -1766,6 +2167,11 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         Surface Surface,
         nuint Node,
         string Title);
+
+    private sealed record CompletedBuild(
+        BuildScope Build,
+        ActiveContext Context,
+        MenuPresented Presented);
 
     private sealed class ActiveContext(
         Surface surface,
