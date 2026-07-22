@@ -111,15 +111,18 @@ public sealed class MenuNarrator
 
     private IReadOnlyList<Announcement> AnnounceUnsupported(MenuUnsupported unsupported)
     {
-        if (!active || string.IsNullOrWhiteSpace(unsupported.Label))
+        if (!active || string.IsNullOrWhiteSpace(unsupported.SelectedLabel) ||
+            string.IsNullOrWhiteSpace(unsupported.BoundaryText) ||
+            string.IsNullOrWhiteSpace(unsupported.ReturnInstruction))
         {
-            return Fail("Unsupported menu boundary has no validated active menu or localized label.");
+            return Fail("Unsupported menu boundary has no validated active menu, localized label, boundary text, or return instruction.");
         }
 
         return
         [
-            Interrupt($"{unsupported.Label} selected."),
-            Queue("Detailed reading is not available on this page yet. Press Cancel to return."),
+            Interrupt(unsupported.SelectedLabel),
+            Queue(unsupported.BoundaryText),
+            Queue(unsupported.ReturnInstruction),
         ];
     }
 

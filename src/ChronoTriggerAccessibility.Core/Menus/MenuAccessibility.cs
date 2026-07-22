@@ -38,7 +38,10 @@ public sealed record MenuActivated(string Label) : MenuAccessibilityEvent;
 
 public sealed record MenuExited : MenuAccessibilityEvent;
 
-public sealed record MenuUnsupported(string Label) : MenuAccessibilityEvent;
+public sealed record MenuUnsupported(
+    string SelectedLabel,
+    string BoundaryText,
+    string ReturnInstruction) : MenuAccessibilityEvent;
 
 public sealed record MenuConfirmationPresented : MenuAccessibilityEvent
 {

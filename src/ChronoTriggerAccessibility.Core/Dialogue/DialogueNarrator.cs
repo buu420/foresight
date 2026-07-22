@@ -9,7 +9,7 @@ public sealed class DialogueNarrator
     private static readonly IReadOnlyList<Announcement> NoAnnouncements = Array.Empty<Announcement>();
     private bool faulted;
     private bool active;
-    private DialogueLineIdentity? lastLine;
+    private readonly HashSet<DialogueLineIdentity> lineIdentities = [];
     private IReadOnlyList<string>? choices;
     private string? lastChoiceText;
     private int selectedChoiceIndex = -1;
@@ -44,7 +44,7 @@ public sealed class DialogueNarrator
     private IReadOnlyList<Announcement> Open()
     {
         active = true;
-        lastLine = null;
+        lineIdentities.Clear();
         choices = null;
         lastChoiceText = null;
         selectedChoiceIndex = -1;
@@ -59,12 +59,11 @@ public sealed class DialogueNarrator
         }
 
         var identity = new DialogueLineIdentity(line.PageBase, line.LineIndex, line.Text);
-        if (lastLine == identity)
+        if (!lineIdentities.Add(identity))
         {
             return NoAnnouncements;
         }
 
-        lastLine = identity;
         return [Queue(line.Text)];
     }
 
@@ -132,7 +131,7 @@ public sealed class DialogueNarrator
     private IReadOnlyList<Announcement> Close()
     {
         active = false;
-        lastLine = null;
+        lineIdentities.Clear();
         choices = null;
         lastChoiceText = null;
         selectedChoiceIndex = -1;
@@ -148,6 +147,7 @@ public sealed class DialogueNarrator
 
         faulted = true;
         active = false;
+        lineIdentities.Clear();
         choices = null;
         var exact = string.IsNullOrWhiteSpace(diagnostic)
             ? "Dialogue accessibility coverage failed without a diagnostic."

@@ -23,6 +23,18 @@ public sealed class DialogueNarratorTests
     }
 
     [Fact]
+    public void ExactLineIdentityIsSuppressedAfterAnotherLineWasPresented()
+    {
+        var narrator = OpenDialogue();
+        narrator.Apply(new DialogueLinePresented(0, 0, "First line."));
+        narrator.Apply(new DialogueLinePresented(0, 1, "Second line."));
+
+        var repeated = narrator.Apply(new DialogueLinePresented(0, 0, "First line."));
+
+        Assert.Empty(repeated);
+    }
+
+    [Fact]
     public void ChoicePresentationInterruptsOnceQueuesVisibleChoicesThenFocusedChoice()
     {
         var narrator = OpenDialogue();

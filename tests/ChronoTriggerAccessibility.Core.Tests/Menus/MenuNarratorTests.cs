@@ -74,16 +74,40 @@ public sealed class MenuNarratorTests
     }
 
     [Fact]
-    public void UnsupportedBoundaryNamesTheVisibleSelectionAndReturnInstruction()
+    public void UnsupportedBoundaryNarratesOnlyTheSuppliedSelectionBoundaryAndReturnInstruction()
     {
         var narrator = ActiveMenu();
 
-        var announcements = narrator.Apply(new MenuUnsupported("Movies"));
+        var announcements = narrator.Apply(new MenuUnsupported(
+            "Movies",
+            "Detailed reading is unavailable on this screen.",
+            "Use the localized Back control to return."));
 
         Assert.Equal(
-            ["Movies selected.", "Detailed reading is not available on this page yet. Press Cancel to return."],
+            ["Movies", "Detailed reading is unavailable on this screen.", "Use the localized Back control to return."],
             announcements.Select(item => item.Text));
-        Assert.Equal([true, false], announcements.Select(item => item.Interrupt));
+        Assert.Equal([true, false, false], announcements.Select(item => item.Interrupt));
+    }
+
+    [Theory]
+    [InlineData("", "Detailed reading is unavailable.", "Use Back to return.")]
+    [InlineData("Movies", "", "Use Back to return.")]
+    [InlineData("Movies", "Detailed reading is unavailable.", "")]
+    public void UnsupportedBoundaryRejectsAnyBlankFieldBeforePartialOutput(
+        string selectedLabel,
+        string boundaryText,
+        string returnInstruction)
+    {
+        var narrator = ActiveMenu();
+
+        var announcements = narrator.Apply(new MenuUnsupported(
+            selectedLabel,
+            boundaryText,
+            returnInstruction));
+
+        var failure = Assert.Single(announcements);
+        Assert.StartsWith("Chrono Trigger accessibility stopped:", failure.Text, StringComparison.Ordinal);
+        Assert.True(failure.Interrupt);
     }
 
     [Fact]
