@@ -392,7 +392,7 @@ public static class TouchSettingsCapture
                 diagnostic = $"Touch Settings key {focusedKey} decodes to row {rowIndex}, outside {rows.Length} rows.";
                 return false;
             }
-            if (subcontrol >= controlGroups[rowIndex].Length ||
+            if (subcontrol >= controlGroups[rowIndex].Count ||
                 !SettingsCaptureMemory.FitsX86Address(managerObservation.FocusedControlAddress) ||
                 controlGroups[rowIndex][subcontrol] != managerObservation.FocusedControlAddress)
             {
