@@ -1,0 +1,15 @@
+{
+  "ModId": "chrono.trigger.accessibility",
+  "ModName": "Chrono Trigger Accessibility",
+  "ModAuthor": "Chrono Trigger Accessibility Project",
+  "ModVersion": "0.1.0",
+  "ModDescription": "Screen-reader access for Chrono Trigger startup and New Game screens.",
+  "ModDll": "ChronoTriggerAccessibility.Mod.dll",
+  "CanUnload": false,
+  "IsLibrary": false,
+  "IsUniversalMod": false,
+  "ModDependencies": [ "reloaded.sharedlib.hooks" ],
+  "OptionalDependencies": [],
+  "SupportedAppId": [ "chrono trigger.exe" ],
+  "ProjectUrl": ""
+}

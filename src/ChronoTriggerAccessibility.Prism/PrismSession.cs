@@ -34,7 +34,30 @@ public sealed class PrismSession : IDisposable
             context = IntPtr.Zero;
             throw new PrismException(PrismError.BackendNotAvailable, native.ErrorString(PrismError.BackendNotAvailable));
         }
+
+        try
+        {
+            var backendName = native.BackendName(backend);
+            if (string.IsNullOrWhiteSpace(backendName))
+            {
+                throw new PrismException(
+                    PrismError.BackendNotAvailable,
+                    "Prism created a backend but did not return its name.");
+            }
+
+            BackendName = backendName;
+        }
+        catch
+        {
+            native.Free(backend);
+            backend = IntPtr.Zero;
+            native.Shutdown(context);
+            context = IntPtr.Zero;
+            throw;
+        }
     }
+
+    public string BackendName { get; } = string.Empty;
 
     public void Output(PrismOutput output)
     {

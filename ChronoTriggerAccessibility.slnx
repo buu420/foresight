@@ -1,8 +1,10 @@
 <Solution>
   <Project Path="src/ChronoTriggerAccessibility.Core/ChronoTriggerAccessibility.Core.csproj" />
+  <Project Path="src/ChronoTriggerAccessibility.Mod/ChronoTriggerAccessibility.Mod.csproj" />
   <Project Path="src/ChronoTriggerAccessibility.Native/ChronoTriggerAccessibility.Native.csproj" />
   <Project Path="src/ChronoTriggerAccessibility.Prism/ChronoTriggerAccessibility.Prism.csproj" />
   <Project Path="tests/ChronoTriggerAccessibility.Core.Tests/ChronoTriggerAccessibility.Core.Tests.csproj" />
   <Project Path="tests/ChronoTriggerAccessibility.Native.Tests/ChronoTriggerAccessibility.Native.Tests.csproj" />
+  <Project Path="tests/ChronoTriggerAccessibility.Mod.Tests/ChronoTriggerAccessibility.Mod.Tests.csproj" />
   <Project Path="tests/ChronoTriggerAccessibility.Prism.Tests/ChronoTriggerAccessibility.Prism.Tests.csproj" />
 </Solution>

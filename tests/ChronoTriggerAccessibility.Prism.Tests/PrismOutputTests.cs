@@ -12,10 +12,31 @@ public sealed class PrismOutputTests
         using (var session = new PrismSession(native))
         {
             session.Output(new PrismOutput("Title screen", Interrupt: true));
-            Assert.Equal(["init", "create-best", "output:Title screen:1"], native.Calls);
+            Assert.Equal(["init", "create-best", "backend-name", "output:Title screen:1"], native.Calls);
         }
 
-        Assert.Equal(["init", "create-best", "output:Title screen:1", "free", "shutdown"], native.Calls);
+        Assert.Equal(["init", "create-best", "backend-name", "output:Title screen:1", "free", "shutdown"], native.Calls);
+    }
+
+    [Fact]
+    public void SessionExposesValidatedActiveBackendName()
+    {
+        var native = new RecordingPrismNative { BackendNameValue = "NVDA" };
+        using var session = new PrismSession(native);
+
+        Assert.Equal("NVDA", session.BackendName);
+        Assert.Equal(["init", "create-best", "backend-name"], native.Calls);
+    }
+
+    [Fact]
+    public void SessionRejectsMissingBackendName()
+    {
+        var native = new RecordingPrismNative { BackendNameValue = null };
+
+        var exception = Assert.Throws<PrismException>(() => new PrismSession(native));
+
+        Assert.Contains("name", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["init", "create-best", "backend-name", "free", "shutdown"], native.Calls);
     }
 
     [Fact]
@@ -50,6 +71,7 @@ public sealed class PrismOutputTests
 
         public List<string> Calls { get; } = [];
         public PrismError OutputResult { get; init; } = PrismError.Ok;
+        public string? BackendNameValue { get; init; } = "test backend";
         public TimeSpan OutputDelay { get; init; }
         public int MaximumConcurrentOutputs => maximumConcurrentOutputs;
         public int OutputCount => outputCount;
@@ -79,6 +101,12 @@ public sealed class PrismOutputTests
             Interlocked.Decrement(ref activeOutputs);
             Interlocked.Increment(ref outputCount);
             return OutputResult;
+        }
+
+        public string? BackendName(IntPtr backend)
+        {
+            Calls.Add("backend-name");
+            return BackendNameValue;
         }
 
         public void Free(IntPtr backend) => Calls.Add("free");

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Reloaded.Hooks.Definitions" />
+    <PackageReference Include="Reloaded.Mod.Interfaces" ExcludeAssets="runtime" />
+    <PackageReference Include="Reloaded.SharedLib.Hooks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ChronoTriggerAccessibility.Native\ChronoTriggerAccessibility.Native.csproj" />
+    <ProjectReference Include="..\ChronoTriggerAccessibility.Prism\ChronoTriggerAccessibility.Prism.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ModConfig.json" CopyToOutputDirectory="Always" />
+    <None Include="..\..\native\prism\v0.17.3\win-x86\prism.dll"
+          Link="prism.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
