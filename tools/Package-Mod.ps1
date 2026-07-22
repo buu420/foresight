@@ -112,6 +112,7 @@ $prismSourcePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\win-x86\prism
 $prismLicensePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\LICENSE'
 $prismNoticePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\NOTICE'
 $prismLicensesPath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\LICENSES'
+$asiLoaderLicensePath = Join-Path $RepositoryRoot 'native\ultimate-asi-loader\v6.9.0\LICENSE'
 $readmePath = Join-Path $RepositoryRoot 'README.md'
 $thirdPartyNoticePath = Join-Path $RepositoryRoot 'THIRD-PARTY-NOTICES.md'
 $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
@@ -131,6 +132,7 @@ foreach ($requiredPath in @(
     $prismSourcePath,
     $prismLicensePath,
     $prismNoticePath,
+    $asiLoaderLicensePath,
     $readmePath,
     $thirdPartyNoticePath,
     $gplLicensePath,
@@ -201,6 +203,7 @@ $licenseOutputDirectory = Join-Path $OutputDirectory 'LICENSES'
 Copy-Item -LiteralPath $gplLicensePath -Destination (Join-Path $licenseOutputDirectory 'GNU-GPL-3.0.txt')
 Copy-Item -LiteralPath $hooksDefinitionsLicensePath -Destination (Join-Path $licenseOutputDirectory 'Reloaded.Hooks.Definitions-LGPL-3.0.txt')
 Copy-Item -LiteralPath $sharedHooksLicensePath -Destination (Join-Path $licenseOutputDirectory 'Reloaded.SharedLib.Hooks-LGPL-3.0.txt')
+Copy-Item -LiteralPath $asiLoaderLicensePath -Destination (Join-Path $licenseOutputDirectory 'Ultimate-ASI-Loader-MIT.txt')
 
 $forbiddenFiles = Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Where-Object {
     $_.Extension -ieq '.exe' -or $_.FullName.IndexOf('x64', [StringComparison]::OrdinalIgnoreCase) -ge 0

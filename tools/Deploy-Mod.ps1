@@ -10,7 +10,9 @@ param(
 
     [string]$LauncherDestinationDirectory = 'G:\SteamLibrary\steamapps\common\Chrono Trigger',
 
-    [ValidateSet('None', 'AfterModSwap', 'AfterProfileCommit', 'AfterLauncherCommit', 'FinalVerification')]
+    [string]$ReloadedConfigPath = (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) 'Reloaded-Mod-Loader-II\ReloadedII.json'),
+
+    [ValidateSet('None', 'AfterModSwap', 'AfterProfileCommit', 'AfterLauncherCommit', 'AfterAsiLoaderCommit', 'AfterAutoLaunchCommit', 'FinalVerification')]
     [string]$FailureInjectionPoint = 'None'
 )
 
@@ -21,6 +23,8 @@ $ModId = 'chrono.trigger.accessibility'
 $AppId = 'chrono trigger.exe'
 $SupportedGameSha256 = '8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7'
 $SupportedPrismSha256 = '6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178A'
+$SupportedAsiLoaderSha256 = 'A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37'
+$SupportedReloadedBootstrapperSha256 = '1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB'
 $PeMachineI386 = 0x014c
 $RepositoryRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $PackageDirectory = [System.IO.Path]::GetFullPath($PackageDirectory)
@@ -28,7 +32,9 @@ $ReloadedRoot = [System.IO.Path]::GetFullPath($ReloadedRoot)
 $GameExecutable = [System.IO.Path]::GetFullPath($GameExecutable)
 $RuntimeRoot = [System.IO.Path]::GetFullPath($RuntimeRoot)
 $LauncherDestinationDirectory = [System.IO.Path]::GetFullPath($LauncherDestinationDirectory)
+$ReloadedConfigPath = [System.IO.Path]::GetFullPath($ReloadedConfigPath)
 $LauncherSource = Join-Path $RepositoryRoot 'Launch Chrono Trigger Accessible.ps1'
+$AsiLoaderSource = Join-Path $RepositoryRoot 'native\ultimate-asi-loader\v6.9.0\win-x86\UltimateAsiLoader.dll'
 $VerifyScript = Join-Path $PSScriptRoot 'Verify-Deployment.ps1'
 
 function Assert-FileExists {
@@ -254,11 +260,81 @@ function Assert-ProfileRegistration {
     if (@(@($Profile.SortedMods) | Where-Object { $_ -eq $ModId }).Count -ne 1) {
         throw "$ModId must appear exactly once in the staged SortedMods list."
     }
+    if ($null -eq $Profile.PSObject.Properties['AutoInject'] -or $Profile.AutoInject -ne $false) {
+        throw 'Staged Reloaded profile must keep AutoInject disabled when the ASI loader owns automatic startup.'
+    }
+}
+
+function Remove-EmptyDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [Parameter(Mandatory = $true)][string]$ParentPath
+    )
+
+    Assert-ChildPath $LiteralPath $ParentPath
+    if (-not (Test-Path -LiteralPath $LiteralPath)) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Container)) {
+        throw "Rollback expected a directory but found another item: $LiteralPath"
+    }
+    if (@(Get-ChildItem -LiteralPath $LiteralPath -Force).Count -ne 0) {
+        return
+    }
+
+    Remove-Item -LiteralPath $LiteralPath -Force
+    if (Test-Path -LiteralPath $LiteralPath) {
+        throw "Rollback could not remove the empty directory created by deployment: $LiteralPath"
+    }
+}
+
+function Assert-ReloadedBootstrapConfiguration {
+    Assert-FileExists $ReloadedConfigPath
+    try {
+        $bootstrapConfiguration = Get-Content -LiteralPath $ReloadedConfigPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "ReloadedII.json is not valid JSON: $ReloadedConfigPath. $($_.Exception.Message)"
+    }
+
+    $expectedPaths = [ordered]@{
+        LoaderPath32 = Join-Path $ReloadedRoot 'Loader\X86\Reloaded.Mod.Loader.dll'
+        LauncherPath = Join-Path $ReloadedRoot 'Reloaded-II.exe'
+        Bootstrapper32Path = Join-Path $ReloadedRoot 'Loader\X86\Bootstrapper\Reloaded.Mod.Loader.Bootstrapper.dll'
+        ApplicationConfigDirectory = Join-Path $ReloadedRoot 'Apps'
+        ModConfigDirectory = Join-Path $ReloadedRoot 'Mods'
+    }
+    foreach ($entry in $expectedPaths.GetEnumerator()) {
+        $property = $bootstrapConfiguration.PSObject.Properties[$entry.Key]
+        if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            throw "ReloadedII.json is missing required path property $($entry.Key): $ReloadedConfigPath"
+        }
+        $actualPath = [System.IO.Path]::GetFullPath([string]$property.Value).TrimEnd('\')
+        $expectedPath = [System.IO.Path]::GetFullPath([string]$entry.Value).TrimEnd('\')
+        if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "ReloadedII.json $($entry.Key) points to '$actualPath' instead of '$expectedPath': $ReloadedConfigPath"
+        }
+    }
+
+    Assert-FileExists $expectedPaths.LoaderPath32
+    Assert-FileExists ([System.IO.Path]::ChangeExtension($expectedPaths.LoaderPath32, '.runtimeconfig.json'))
 }
 
 Assert-DirectoryExists $PackageDirectory
 Assert-DirectoryExists $ReloadedRoot
 Assert-FileExists (Join-Path $ReloadedRoot 'Reloaded-II.exe')
+$bootstrapperSource = Join-Path $ReloadedRoot 'Loader\X86\Bootstrapper\Reloaded.Mod.Loader.Bootstrapper.dll'
+Assert-FileExists $AsiLoaderSource
+Assert-FileExists $bootstrapperSource
+Assert-I386Pe $AsiLoaderSource
+if ((Get-Sha256 $AsiLoaderSource) -ne $SupportedAsiLoaderSha256) {
+    throw 'Repository does not contain the reviewed Ultimate ASI Loader x86 payload.'
+}
+Assert-I386Pe $bootstrapperSource
+if ((Get-Sha256 $bootstrapperSource) -ne $SupportedReloadedBootstrapperSha256) {
+    throw 'Reloaded-II does not contain the reviewed x86 bootstrapper.'
+}
+Assert-ReloadedBootstrapConfiguration
 Assert-FileExists $GameExecutable
 Assert-FileExists $LauncherSource
 Assert-FileExists $VerifyScript
@@ -276,6 +352,7 @@ $requiredPackageFiles = @(
     'LICENSES\GNU-GPL-3.0.txt',
     'LICENSES\Reloaded.Hooks.Definitions-LGPL-3.0.txt',
     'LICENSES\Reloaded.SharedLib.Hooks-LGPL-3.0.txt',
+    'LICENSES\Ultimate-ASI-Loader-MIT.txt',
     'LICENSES\concurrentqueue\LICENSE.md',
     'LICENSES\djinni\LICENSE',
     'LICENSES\dr_wav\LICENSE',
@@ -349,9 +426,14 @@ $appsRoot = Join-Path $ReloadedRoot 'Apps'
 $profileDirectory = Join-Path $appsRoot $AppId
 $profilePath = Join-Path $profileDirectory 'AppConfig.json'
 $launcherDestination = Join-Path $LauncherDestinationDirectory 'Launch Chrono Trigger Accessible.ps1'
+$gameDirectory = [System.IO.Path]::GetDirectoryName($GameExecutable)
+$asiLoaderDestination = Join-Path $gameDirectory 'winmm.dll'
+$bootstrapperDestination = Join-Path $gameDirectory 'Reloaded.Mod.Loader.Bootstrapper.asi'
 Assert-ChildPath $modDestination $modsRoot
 Assert-ChildPath $profilePath $appsRoot
 Assert-ChildPath $launcherDestination $LauncherDestinationDirectory
+Assert-ChildPath $asiLoaderDestination $gameDirectory
+Assert-ChildPath $bootstrapperDestination $gameDirectory
 if ([string]::Equals($launcherDestination, $GameExecutable, [StringComparison]::OrdinalIgnoreCase) -or [System.IO.Path]::GetExtension($launcherDestination) -ine '.ps1') {
     throw 'Accessible launcher destination could overwrite a game binary.'
 }
@@ -364,6 +446,18 @@ if ((Test-Path -LiteralPath $profilePath) -and -not (Test-Path -LiteralPath $pro
 }
 if ((Test-Path -LiteralPath $launcherDestination) -and -not (Test-Path -LiteralPath $launcherDestination -PathType Leaf)) {
     throw "Accessible launcher destination exists but is not a file: $launcherDestination"
+}
+if ((Test-Path -LiteralPath $asiLoaderDestination) -and -not (Test-Path -LiteralPath $asiLoaderDestination -PathType Leaf)) {
+    throw "ASI loader destination exists but is not a file: $asiLoaderDestination"
+}
+if ((Test-Path -LiteralPath $bootstrapperDestination) -and -not (Test-Path -LiteralPath $bootstrapperDestination -PathType Leaf)) {
+    throw "Reloaded bootstrapper destination exists but is not a file: $bootstrapperDestination"
+}
+if ((Test-Path -LiteralPath $asiLoaderDestination -PathType Leaf) -and (Get-Sha256 $asiLoaderDestination) -ne $SupportedAsiLoaderSha256) {
+    throw "Refusing to replace an unrelated pre-existing file: $asiLoaderDestination"
+}
+if ((Test-Path -LiteralPath $bootstrapperDestination -PathType Leaf) -and (Get-Sha256 $bootstrapperDestination) -ne $SupportedReloadedBootstrapperSha256) {
+    throw "Refusing to replace an unrelated pre-existing file: $bootstrapperDestination"
 }
 
 if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
@@ -390,21 +484,28 @@ else {
 Set-JsonProperty $profile 'AppId' $AppId
 Set-JsonProperty $profile 'AppLocation' $GameExecutable
 Set-JsonProperty $profile 'WorkingDirectory' ([System.IO.Path]::GetDirectoryName($GameExecutable))
+Set-JsonProperty $profile 'AutoInject' $false
 $existingEnabledMods = if ($null -eq $profile.PSObject.Properties['EnabledMods']) { @() } else { @($profile.EnabledMods) }
 $existingSortedMods = if ($null -eq $profile.PSObject.Properties['SortedMods']) { @() } else { @($profile.SortedMods) }
 Set-JsonProperty $profile 'EnabledMods' (Add-ModIdOnce $existingEnabledMods $ModId)
 Set-JsonProperty $profile 'SortedMods' (Add-ModIdOnce $existingSortedMods $ModId)
 $profileJson = $profile | ConvertTo-Json -Depth 100
 
-if (-not $PSCmdlet.ShouldProcess($ReloadedRoot, "Deploy $ModId and register Chrono Trigger")) {
+$launcherDestinationParent = [System.IO.Path]::GetDirectoryName($LauncherDestinationDirectory)
+if ([string]::IsNullOrWhiteSpace($launcherDestinationParent)) {
+    throw "Accessible launcher destination must have a parent directory: $LauncherDestinationDirectory"
+}
+Assert-DirectoryExists $launcherDestinationParent
+$affectedRoots = "$ReloadedRoot; $gameDirectory; $LauncherDestinationDirectory"
+if (-not $PSCmdlet.ShouldProcess($affectedRoots, "Deploy $ModId, register Chrono Trigger, and install its automatic startup loaders")) {
     Write-Output 'Deployment preflight passed; no files were changed because WhatIf/confirmation declined the operation.'
     return
 }
 
-[void][System.IO.Directory]::CreateDirectory($modsRoot)
-[void][System.IO.Directory]::CreateDirectory($appsRoot)
-[void][System.IO.Directory]::CreateDirectory($profileDirectory)
-[void][System.IO.Directory]::CreateDirectory($LauncherDestinationDirectory)
+$hadModsRoot = Test-Path -LiteralPath $modsRoot -PathType Container
+$hadAppsRoot = Test-Path -LiteralPath $appsRoot -PathType Container
+$hadProfileDirectory = Test-Path -LiteralPath $profileDirectory -PathType Container
+$hadLauncherDestinationDirectory = Test-Path -LiteralPath $LauncherDestinationDirectory -PathType Container
 
 $transactionId = [Guid]::NewGuid().ToString('N')
 $stagingDirectory = Join-Path $modsRoot ('.{0}.staging.{1}' -f $ModId, $transactionId)
@@ -413,25 +514,44 @@ $profileTemporaryPath = Join-Path $profileDirectory ('.AppConfig.transaction.{0}
 $profileBackup = Join-Path $profileDirectory ('.AppConfig.backup.{0}.json' -f $transactionId)
 $launcherTemporaryPath = Join-Path $LauncherDestinationDirectory ('.Launch Chrono Trigger Accessible.transaction.{0}.ps1' -f $transactionId)
 $launcherBackup = Join-Path $LauncherDestinationDirectory ('.Launch Chrono Trigger Accessible.backup.{0}.ps1' -f $transactionId)
+$asiLoaderTemporaryPath = Join-Path $gameDirectory ('.winmm.transaction.{0}.dll' -f $transactionId)
+$asiLoaderBackup = Join-Path $gameDirectory ('.winmm.backup.{0}.dll' -f $transactionId)
+$bootstrapperTemporaryPath = Join-Path $gameDirectory ('.Reloaded.Mod.Loader.Bootstrapper.transaction.{0}.asi' -f $transactionId)
+$bootstrapperBackup = Join-Path $gameDirectory ('.Reloaded.Mod.Loader.Bootstrapper.backup.{0}.asi' -f $transactionId)
 Assert-ChildPath $stagingDirectory $modsRoot
 Assert-ChildPath $modBackup $modsRoot
 Assert-ChildPath $profileTemporaryPath $profileDirectory
 Assert-ChildPath $profileBackup $profileDirectory
 Assert-ChildPath $launcherTemporaryPath $LauncherDestinationDirectory
 Assert-ChildPath $launcherBackup $LauncherDestinationDirectory
+Assert-ChildPath $asiLoaderTemporaryPath $gameDirectory
+Assert-ChildPath $asiLoaderBackup $gameDirectory
+Assert-ChildPath $bootstrapperTemporaryPath $gameDirectory
+Assert-ChildPath $bootstrapperBackup $gameDirectory
 
 $hadMod = Test-Path -LiteralPath $modDestination -PathType Container
 $hadProfile = Test-Path -LiteralPath $profilePath -PathType Leaf
 $hadLauncher = Test-Path -LiteralPath $launcherDestination -PathType Leaf
+$hadAsiLoader = Test-Path -LiteralPath $asiLoaderDestination -PathType Leaf
+$hadBootstrapper = Test-Path -LiteralPath $bootstrapperDestination -PathType Leaf
 $modOriginalMoved = $false
 $modNewInstalled = $false
 $profileOriginalMoved = $false
 $profileNewInstalled = $false
 $launcherOriginalMoved = $false
 $launcherNewInstalled = $false
+$asiLoaderOriginalMoved = $false
+$asiLoaderNewInstalled = $false
+$bootstrapperOriginalMoved = $false
+$bootstrapperNewInstalled = $false
 $transactionSucceeded = $false
 
 try {
+    [void][System.IO.Directory]::CreateDirectory($modsRoot)
+    [void][System.IO.Directory]::CreateDirectory($appsRoot)
+    [void][System.IO.Directory]::CreateDirectory($profileDirectory)
+    [void][System.IO.Directory]::CreateDirectory($LauncherDestinationDirectory)
+
     Copy-Item -LiteralPath $PackageDirectory -Destination $stagingDirectory -Recurse
     Assert-PackageManifest $stagingDirectory
 
@@ -442,6 +562,17 @@ try {
     Copy-Item -LiteralPath $LauncherSource -Destination $launcherTemporaryPath
     if ((Get-Sha256 $launcherTemporaryPath) -ne (Get-Sha256 $LauncherSource)) {
         throw 'Staged accessible launcher does not match the reviewed repository launcher.'
+    }
+
+    Copy-Item -LiteralPath $AsiLoaderSource -Destination $asiLoaderTemporaryPath
+    Assert-I386Pe $asiLoaderTemporaryPath
+    if ((Get-Sha256 $asiLoaderTemporaryPath) -ne $SupportedAsiLoaderSha256) {
+        throw 'Staged Ultimate ASI Loader does not match the reviewed Reloaded-II payload.'
+    }
+    Copy-Item -LiteralPath $bootstrapperSource -Destination $bootstrapperTemporaryPath
+    Assert-I386Pe $bootstrapperTemporaryPath
+    if ((Get-Sha256 $bootstrapperTemporaryPath) -ne $SupportedReloadedBootstrapperSha256) {
+        throw 'Staged Reloaded x86 bootstrapper does not match the reviewed source.'
     }
 
     if ($hadMod) {
@@ -467,15 +598,57 @@ try {
     Move-Item -LiteralPath $launcherTemporaryPath -Destination $launcherDestination
     $launcherNewInstalled = $true
     Invoke-FailureInjection 'AfterLauncherCommit'
+
+    if ($hadAsiLoader) {
+        if (-not (Test-Path -LiteralPath $asiLoaderDestination -PathType Leaf) -or (Get-Sha256 $asiLoaderDestination) -ne $SupportedAsiLoaderSha256) {
+            throw "The pre-existing automatic startup loader changed during deployment; refusing to replace it: $asiLoaderDestination"
+        }
+        Remove-ExactPath $asiLoaderTemporaryPath $gameDirectory
+    }
+    else {
+        if (Test-Path -LiteralPath $asiLoaderDestination) {
+            throw "An automatic startup loader appeared during deployment; refusing to replace it: $asiLoaderDestination"
+        }
+        [System.IO.File]::Move($asiLoaderTemporaryPath, $asiLoaderDestination)
+        $asiLoaderNewInstalled = $true
+    }
+    Invoke-FailureInjection 'AfterAsiLoaderCommit'
+
+    if ($hadBootstrapper) {
+        if (-not (Test-Path -LiteralPath $bootstrapperDestination -PathType Leaf) -or (Get-Sha256 $bootstrapperDestination) -ne $SupportedReloadedBootstrapperSha256) {
+            throw "The pre-existing Reloaded bootstrapper changed during deployment; refusing to replace it: $bootstrapperDestination"
+        }
+        Remove-ExactPath $bootstrapperTemporaryPath $gameDirectory
+    }
+    else {
+        if (Test-Path -LiteralPath $bootstrapperDestination) {
+            throw "A Reloaded bootstrapper appeared during deployment; refusing to replace it: $bootstrapperDestination"
+        }
+        [System.IO.File]::Move($bootstrapperTemporaryPath, $bootstrapperDestination)
+        $bootstrapperNewInstalled = $true
+    }
+    Invoke-FailureInjection 'AfterAutoLaunchCommit'
     Invoke-FailureInjection 'FinalVerification'
 
-    & $VerifyScript -ReloadedRoot $ReloadedRoot -GameExecutable $GameExecutable -RuntimeRoot $RuntimeRoot -LauncherPath $launcherDestination
+    & $VerifyScript -ReloadedRoot $ReloadedRoot -GameExecutable $GameExecutable -RuntimeRoot $RuntimeRoot -LauncherPath $launcherDestination -ReloadedConfigPath $ReloadedConfigPath
     $transactionSucceeded = $true
 }
 catch {
     $deploymentException = $_.Exception
     $rollbackExceptions = [System.Collections.Generic.List[System.Exception]]::new()
 
+    try {
+        Restore-TransactionArtifact 'Reloaded bootstrapper' $bootstrapperDestination $bootstrapperBackup $gameDirectory $hadBootstrapper $bootstrapperOriginalMoved $bootstrapperNewInstalled
+    }
+    catch {
+        $rollbackExceptions.Add($_.Exception)
+    }
+    try {
+        Restore-TransactionArtifact 'Ultimate ASI Loader' $asiLoaderDestination $asiLoaderBackup $gameDirectory $hadAsiLoader $asiLoaderOriginalMoved $asiLoaderNewInstalled
+    }
+    catch {
+        $rollbackExceptions.Add($_.Exception)
+    }
     try {
         Restore-TransactionArtifact 'accessible launcher' $launcherDestination $launcherBackup $LauncherDestinationDirectory $hadLauncher $launcherOriginalMoved $launcherNewInstalled
     }
@@ -495,6 +668,37 @@ catch {
         $rollbackExceptions.Add($_.Exception)
     }
 
+    foreach ($temporaryArtifact in @(
+        [PSCustomObject]@{ Path = $stagingDirectory; Parent = $modsRoot },
+        [PSCustomObject]@{ Path = $profileTemporaryPath; Parent = $profileDirectory },
+        [PSCustomObject]@{ Path = $launcherTemporaryPath; Parent = $LauncherDestinationDirectory },
+        [PSCustomObject]@{ Path = $asiLoaderTemporaryPath; Parent = $gameDirectory },
+        [PSCustomObject]@{ Path = $bootstrapperTemporaryPath; Parent = $gameDirectory }
+    )) {
+        try {
+            Remove-ExactPath $temporaryArtifact.Path $temporaryArtifact.Parent
+        }
+        catch {
+            $rollbackExceptions.Add($_.Exception)
+        }
+    }
+
+    foreach ($createdDirectory in @(
+        [PSCustomObject]@{ Path = $profileDirectory; Parent = $appsRoot; Existed = $hadProfileDirectory },
+        [PSCustomObject]@{ Path = $appsRoot; Parent = $ReloadedRoot; Existed = $hadAppsRoot },
+        [PSCustomObject]@{ Path = $LauncherDestinationDirectory; Parent = $launcherDestinationParent; Existed = $hadLauncherDestinationDirectory },
+        [PSCustomObject]@{ Path = $modsRoot; Parent = $ReloadedRoot; Existed = $hadModsRoot }
+    )) {
+        if (-not $createdDirectory.Existed) {
+            try {
+                Remove-EmptyDirectory $createdDirectory.Path $createdDirectory.Parent
+            }
+            catch {
+                $rollbackExceptions.Add($_.Exception)
+            }
+        }
+    }
+
     if ($rollbackExceptions.Count -gt 0) {
         $allExceptions = [System.Exception[]]::new($rollbackExceptions.Count + 1)
         $allExceptions[0] = $deploymentException
@@ -510,7 +714,9 @@ finally {
     foreach ($temporaryArtifact in @(
         [PSCustomObject]@{ Path = $stagingDirectory; Parent = $modsRoot },
         [PSCustomObject]@{ Path = $profileTemporaryPath; Parent = $profileDirectory },
-        [PSCustomObject]@{ Path = $launcherTemporaryPath; Parent = $LauncherDestinationDirectory }
+        [PSCustomObject]@{ Path = $launcherTemporaryPath; Parent = $LauncherDestinationDirectory },
+        [PSCustomObject]@{ Path = $asiLoaderTemporaryPath; Parent = $gameDirectory },
+        [PSCustomObject]@{ Path = $bootstrapperTemporaryPath; Parent = $gameDirectory }
     )) {
         try {
             Remove-ExactPath $temporaryArtifact.Path $temporaryArtifact.Parent
@@ -528,7 +734,9 @@ if (-not $transactionSucceeded) {
 foreach ($backupArtifact in @(
     [PSCustomObject]@{ Path = $modBackup; Parent = $modsRoot },
     [PSCustomObject]@{ Path = $profileBackup; Parent = $profileDirectory },
-    [PSCustomObject]@{ Path = $launcherBackup; Parent = $LauncherDestinationDirectory }
+    [PSCustomObject]@{ Path = $launcherBackup; Parent = $LauncherDestinationDirectory },
+    [PSCustomObject]@{ Path = $asiLoaderBackup; Parent = $gameDirectory },
+    [PSCustomObject]@{ Path = $bootstrapperBackup; Parent = $gameDirectory }
 )) {
     try {
         Remove-ExactPath $backupArtifact.Path $backupArtifact.Parent
@@ -541,3 +749,5 @@ foreach ($backupArtifact in @(
 Write-Output "Deployed mod: $modDestination"
 Write-Output "Updated Reloaded profile: $profilePath"
 Write-Output "Accessible launcher: $launcherDestination"
+Write-Output "Automatic startup ASI loader: $asiLoaderDestination"
+Write-Output "Automatic startup Reloaded bootstrapper: $bootstrapperDestination"

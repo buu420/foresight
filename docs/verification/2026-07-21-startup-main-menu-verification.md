@@ -1,6 +1,6 @@
 # Chrono Trigger startup and New Game accessibility verification
 
-Date: 2026-07-21 (America/Chicago)
+Dates: 2026-07-21 through 2026-07-22 (America/Chicago)
 
 ## Supported runtime
 
@@ -28,12 +28,12 @@ Release test command:
 dotnet test .\ChronoTriggerAccessibility.slnx -c Release --no-restore
 ```
 
-Result: 244 passed, 0 failed, 0 skipped.
+Final result after automatic Steam-startup integration: 252 passed, 0 failed, 0 skipped.
 
 - Core: 26/26.
 - Native: 96/96.
 - Prism: 8/8.
-- Mod/integration/packaging: 114/114.
+- Mod/integration/packaging: 122/122.
 
 The native `Test-PrismWin32.ps1` harness also passed against the reviewed x86 Prism DLL. Packaging completed with zero warnings and zero errors and produced a 27-file, SHA-256-manifested payload.
 
@@ -44,8 +44,10 @@ The transactional deployer installed and independently verified:
 - mod: `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Mods\chrono.trigger.accessibility`;
 - Reloaded profile: `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Apps\chrono trigger.exe\AppConfig.json`;
 - launcher: `G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1`.
+- normal-launch ASI proxy: `G:\SteamLibrary\steamapps\common\Chrono Trigger\winmm.dll`, SHA-256 `A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37`;
+- Reloaded x86 ASI bootstrapper: `G:\SteamLibrary\steamapps\common\Chrono Trigger\Reloaded.Mod.Loader.Bootstrapper.asi`, SHA-256 `1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB`.
 
-`Verify-Deployment.ps1` and the launcher's `-VerifyOnly` mode both passed. They verify the game and Prism hashes, PE architecture, complete package manifest, Reloaded profile and shared-hook dependency, x86 .NET host/frameworks, and exact launcher copy.
+`Verify-Deployment.ps1` and the launcher's `-VerifyOnly` mode both passed. Deployment verification checks the game, Prism, ASI-loader, and bootstrapper hashes and PE architecture; complete package manifest; Reloaded profile and shared-hook dependency; exact global `ReloadedII.json` loader paths; `AutoInject: false`; the user-level `DOTNET_ROOT_X86`; both x86 .NET frameworks; and the exact recovery-launcher copy.
 
 Reloaded-II's complete 24-field mod manifest is packaged up front, including its runtime-computed `HasExports: false` and `CanUnload: false` values. A post-launch verification also passed: source, package, and deployed `ModConfig.json` remained byte-identical at SHA-256 `03E59C99C823A6B2F86A66FADF1A2B3FAB9D99DA40E67F4A0EFA89E88766A499`.
 
@@ -68,4 +70,31 @@ Observed:
 - three generation-scoped visual descriptions were dispatched in order;
 - no managed exception, coverage failure, fatal accessibility error, or loader error occurred before clean process exit.
 
-The Windows capture helper could identify the unique Chrono Trigger window but could not capture it (`SetIsBorderRequired` returned `0x80004002`), so no blind key input was sent. Final keyboard and screen-reader interaction through the title menu, Control Descriptions, Mode Select, and name screens is reserved for the user's acceptance test.
+The Windows capture helper could identify the unique Chrono Trigger window but could not capture it (`SetIsBorderRequired` returned `0x80004002`), so no blind key input was sent during this earlier launcher-based smoke test.
+
+## Native Steam launch verification
+
+On 2026-07-22, Steam was fully exited and restarted once so its child processes would inherit the persistent user `DOTNET_ROOT_X86`. Chrono Trigger was then started with Steam AppID 613830 through `steam.exe -applaunch 613830`. The recovery PowerShell launcher and Reloaded-II command line were not used, and Steam launch options remained empty.
+
+The running game process loaded all of the intended normal-startup components:
+
+- the game-directory Ultimate ASI Loader 6.9.0 as `WINMM.dll`;
+- `Reloaded.Mod.Loader.Bootstrapper.asi` from the game directory;
+- `hostfxr.dll` and `coreclr.dll` 9.0.18 from the private x86 runtime;
+- Reloaded-II 1.30.2's x86 loader;
+- `ChronoTriggerAccessibility.Prism.dll` and the reviewed x86 `prism.dll` from the deployed mod.
+
+Reloaded log:
+
+`C:\Users\User\AppData\Roaming\Reloaded-Mod-Loader-II\Logs\2026-07-22 07.08.47 ~ Chrono Trigger.txt`
+
+The log confirms `Loaded via: ...\Reloaded.Mod.Loader.Bootstrapper.asi`, the exact Chrono Trigger process path, Prism backend `NVDA`, all 21 hook contracts prepared and atomically activated, and `Accessibility runtime active.` Live semantic output then covered:
+
+- `Square Enix.`;
+- `Opening movie.` plus all three timed visual descriptions;
+- `Chrono Trigger.` at title entry;
+- `Press confirm.` at the title prompt;
+- title-menu entry with initial focus `New Game, 1 of 4`;
+- live focus for `Extras, 2 of 4`, `Settings, 3 of 4`, and `Quit, 4 of 4`.
+
+For the single title confirmation, the Windows-app controller targeted the uniquely identified Chrono Trigger window, captured its accessibility-only state, and sent one `Return` key without using the unsupported screenshot path. Steam recorded a clean process exit with code 0 after the menu test. No managed exception, fatal accessibility failure, coverage failure, loader error, or game graphics failure was observed. The `SetIsBorderRequired` message belongs to the external Windows capture helper on Windows 10 build 19045; it was not emitted by Chrono Trigger or Reloaded and did not prevent the game from rendering.

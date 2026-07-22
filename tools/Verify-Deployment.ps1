@@ -6,7 +6,9 @@ param(
 
     [string]$RuntimeRoot = 'C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86',
 
-    [string]$LauncherPath = 'G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1'
+    [string]$LauncherPath = 'G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1',
+
+    [string]$ReloadedConfigPath = (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) 'Reloaded-Mod-Loader-II\ReloadedII.json')
 )
 
 Set-StrictMode -Version Latest
@@ -16,11 +18,14 @@ $ModId = 'chrono.trigger.accessibility'
 $AppId = 'chrono trigger.exe'
 $SupportedGameSha256 = '8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7'
 $SupportedPrismSha256 = '6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178A'
+$SupportedAsiLoaderSha256 = 'A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37'
+$SupportedReloadedBootstrapperSha256 = '1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB'
 $PeMachineI386 = 0x014c
 $ReloadedRoot = [System.IO.Path]::GetFullPath($ReloadedRoot)
 $GameExecutable = [System.IO.Path]::GetFullPath($GameExecutable)
 $RuntimeRoot = [System.IO.Path]::GetFullPath($RuntimeRoot)
 $LauncherPath = [System.IO.Path]::GetFullPath($LauncherPath)
+$ReloadedConfigPath = [System.IO.Path]::GetFullPath($ReloadedConfigPath)
 
 function Assert-FileExists {
     param([Parameter(Mandatory = $true)][string]$LiteralPath)
@@ -83,6 +88,38 @@ function Assert-I386Pe {
     }
 }
 
+function Assert-ReloadedBootstrapConfiguration {
+    Assert-FileExists $ReloadedConfigPath
+    try {
+        $bootstrapConfiguration = Get-Content -LiteralPath $ReloadedConfigPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "ReloadedII.json is not valid JSON: $ReloadedConfigPath. $($_.Exception.Message)"
+    }
+
+    $expectedPaths = [ordered]@{
+        LoaderPath32 = Join-Path $ReloadedRoot 'Loader\X86\Reloaded.Mod.Loader.dll'
+        LauncherPath = Join-Path $ReloadedRoot 'Reloaded-II.exe'
+        Bootstrapper32Path = Join-Path $ReloadedRoot 'Loader\X86\Bootstrapper\Reloaded.Mod.Loader.Bootstrapper.dll'
+        ApplicationConfigDirectory = Join-Path $ReloadedRoot 'Apps'
+        ModConfigDirectory = Join-Path $ReloadedRoot 'Mods'
+    }
+    foreach ($entry in $expectedPaths.GetEnumerator()) {
+        $property = $bootstrapConfiguration.PSObject.Properties[$entry.Key]
+        if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+            throw "ReloadedII.json is missing required path property $($entry.Key): $ReloadedConfigPath"
+        }
+        $actualPath = [System.IO.Path]::GetFullPath([string]$property.Value).TrimEnd('\')
+        $expectedPath = [System.IO.Path]::GetFullPath([string]$entry.Value).TrimEnd('\')
+        if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "ReloadedII.json $($entry.Key) points to '$actualPath' instead of '$expectedPath': $ReloadedConfigPath"
+        }
+    }
+
+    Assert-FileExists $expectedPaths.LoaderPath32
+    Assert-FileExists ([System.IO.Path]::ChangeExtension($expectedPaths.LoaderPath32, '.runtimeconfig.json'))
+}
+
 function Assert-PackageHashes {
     param([Parameter(Mandatory = $true)][string]$ModDirectory)
 
@@ -137,11 +174,28 @@ function Assert-PackageHashes {
 
 Assert-DirectoryExists $ReloadedRoot
 Assert-FileExists (Join-Path $ReloadedRoot 'Reloaded-II.exe')
+Assert-ReloadedBootstrapConfiguration
 Assert-FileExists $GameExecutable
 Assert-I386Pe $GameExecutable
 $actualGameHash = Get-Sha256 $GameExecutable
 if ($actualGameHash -ne $SupportedGameSha256) {
     throw "Unsupported Chrono Trigger.exe. Expected SHA-256 $SupportedGameSha256 but found $actualGameHash."
+}
+
+$gameDirectory = [System.IO.Path]::GetDirectoryName($GameExecutable)
+$asiLoaderPath = Join-Path $gameDirectory 'winmm.dll'
+$bootstrapperPath = Join-Path $gameDirectory 'Reloaded.Mod.Loader.Bootstrapper.asi'
+Assert-FileExists $asiLoaderPath
+Assert-I386Pe $asiLoaderPath
+$actualAsiLoaderHash = Get-Sha256 $asiLoaderPath
+if ($actualAsiLoaderHash -ne $SupportedAsiLoaderSha256) {
+    throw "Reviewed Ultimate ASI Loader hash mismatch. Expected $SupportedAsiLoaderSha256 but found $actualAsiLoaderHash."
+}
+Assert-FileExists $bootstrapperPath
+Assert-I386Pe $bootstrapperPath
+$actualBootstrapperHash = Get-Sha256 $bootstrapperPath
+if ($actualBootstrapperHash -ne $SupportedReloadedBootstrapperSha256) {
+    throw "Reviewed Reloaded x86 bootstrapper hash mismatch. Expected $SupportedReloadedBootstrapperSha256 but found $actualBootstrapperHash."
 }
 
 $modDirectory = Join-Path $ReloadedRoot "Mods\$ModId"
@@ -157,6 +211,7 @@ $requiredModFiles = @(
     'LICENSES\GNU-GPL-3.0.txt',
     'LICENSES\Reloaded.Hooks.Definitions-LGPL-3.0.txt',
     'LICENSES\Reloaded.SharedLib.Hooks-LGPL-3.0.txt',
+    'LICENSES\Ultimate-ASI-Loader-MIT.txt',
     'LICENSES\concurrentqueue\LICENSE.md',
     'LICENSES\djinni\LICENSE',
     'LICENSES\dr_wav\LICENSE',
@@ -227,6 +282,9 @@ $expectedWorkingDirectory = [System.IO.Path]::GetDirectoryName($GameExecutable)
 if ($profile.AppId -ne $AppId -or $profile.AppLocation -ne $GameExecutable -or $profile.WorkingDirectory -ne $expectedWorkingDirectory) {
     throw 'Reloaded AppConfig.json does not contain the exact Chrono Trigger app ID, executable, and working directory.'
 }
+if ($null -eq $profile.PSObject.Properties['AutoInject'] -or $profile.AutoInject -ne $false) {
+    throw 'Reloaded AppConfig.json must keep AutoInject disabled when the ASI loader owns automatic startup.'
+}
 $enabledModMatches = @(@($profile.EnabledMods) | Where-Object { $_ -eq $ModId })
 if ($enabledModMatches.Count -ne 1) {
     throw "$ModId must appear exactly once in EnabledMods."
@@ -259,6 +317,10 @@ Assert-DirectoryExists $netCoreFramework
 Assert-FileExists (Join-Path $netCoreFramework 'coreclr.dll')
 Assert-DirectoryExists $windowsDesktopFramework
 Assert-FileExists (Join-Path $windowsDesktopFramework 'PresentationFramework.dll')
+$userDotNetRootX86 = [Environment]::GetEnvironmentVariable('DOTNET_ROOT_X86', [EnvironmentVariableTarget]::User)
+if (-not [string]::Equals($userDotNetRootX86, $RuntimeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "The user DOTNET_ROOT_X86 value must be '$RuntimeRoot' for direct Steam startup, but it is '$userDotNetRootX86'."
+}
 
 Assert-FileExists $LauncherPath
 $repositoryLauncher = Join-Path (Split-Path -Parent $PSScriptRoot) 'Launch Chrono Trigger Accessible.ps1'
@@ -271,6 +333,9 @@ if (Test-Path -LiteralPath $repositoryLauncher -PathType Leaf) {
 Write-Output 'Chrono Trigger accessibility deployment verified.'
 Write-Output "Game SHA-256: $SupportedGameSha256"
 Write-Output "Prism SHA-256: $SupportedPrismSha256"
+Write-Output "Ultimate ASI Loader SHA-256: $SupportedAsiLoaderSha256"
+Write-Output "Reloaded bootstrapper SHA-256: $SupportedReloadedBootstrapperSha256"
 Write-Output "Reloaded profile: $profilePath"
 Write-Output "Mod directory: $modDirectory"
 Write-Output "x86 .NET runtime: $RuntimeRoot"
+Write-Output "Automatic Steam startup: $asiLoaderPath -> $bootstrapperPath"

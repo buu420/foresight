@@ -24,6 +24,17 @@ The mod is loaded by an existing Reloaded-II installation; Reloaded-II itself is
 
 The package's `LICENSES` directory includes the GPL 3.0 text and the exact LGPL 3.0 license files shipped by the pinned Reloaded NuGet packages. Corresponding sources remain available from the upstream repositories and NuGet packages. No Reloaded binary has been modified by this project.
 
+## Ultimate ASI Loader
+
+The deployment repository includes the 32-bit Ultimate ASI Loader 6.9.0 binary embedded by Reloaded-II 1.30.2. It is deployed as `winmm.dll` so a normal Chrono Trigger Steam launch loads Reloaded without a separate launcher.
+
+- Upstream: <https://github.com/ThirteenAG/Ultimate-ASI-Loader>
+- License: MIT
+- Copyright: 2023 ThirteenAG
+- Reviewed binary SHA-256: `A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37`
+- Repository license copy: `native/ultimate-asi-loader/v6.9.0/LICENSE`
+- Deployed package license copy: `LICENSES/Ultimate-ASI-Loader-MIT.txt`
+
 ## Microsoft .NET
 
-The 32-bit Microsoft .NET 9.0.18 runtime and Windows Desktop runtime are external prerequisites and are not included in the mod package. Their licensing remains governed by Microsoft. The accessible launcher points Reloaded's x86 process to the existing per-user runtime without changing machine-wide runtime configuration.
+The 32-bit Microsoft .NET 9.0.18 runtime and Windows Desktop runtime are external prerequisites and are not included in the mod package. Their licensing remains governed by Microsoft. The user-level `DOTNET_ROOT_X86` value points normally launched x86 processes to this existing per-user runtime without changing machine-wide runtime configuration; the recovery launcher also scopes the same value to its own process.

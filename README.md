@@ -39,11 +39,20 @@ From this repository in PowerShell:
 & '.\tools\Verify-Deployment.ps1'
 ```
 
-Packaging creates `artifacts\package\chrono.trigger.accessibility` and writes `SHA256SUMS.txt` over every packaged payload file. Deployment stages and verifies every replacement before committing it. If the mod swap, profile update, launcher update, or final verification fails, it restores the preceding mod directory, profile, and launcher byte-for-byte (or removes newly created targets from a first install). It never overwrites a game executable or other original game binary.
+Packaging creates `artifacts\package\chrono.trigger.accessibility` and writes `SHA256SUMS.txt` over every packaged payload file. Deployment stages and verifies every replacement before committing it. If the mod swap, profile update, launcher update, automatic-startup update, or final verification fails, it restores the preceding mod directory, profile, launcher, `winmm.dll`, and Reloaded bootstrapper byte-for-byte (or removes newly created targets from a first install). It never overwrites the game executable or another original game binary.
 
 ## Launch
 
-Start the game with:
+After deployment, a normal Steam launch from Chrono Trigger's existing library entry starts Reloaded and the accessibility mod. No script, separate Steam shortcut, Steam launch option, or already-running Reloaded window is required.
+
+The deployer installs Reloaded-II's supported Ultimate ASI Loader integration beside the game:
+
+- `winmm.dll` is the reviewed 32-bit Ultimate ASI Loader supplied by this repository. Chrono Trigger imports `WINMM.dll`, so Windows loads this proxy during normal startup.
+- `Reloaded.Mod.Loader.Bootstrapper.asi` is the reviewed x86 bootstrapper from the installed Reloaded-II 1.30.2 instance.
+
+`DOTNET_ROOT_X86` must be set in the user environment to `C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86`. If that value was added while Steam was already running, fully exit and restart Steam once so subsequently launched games inherit it.
+
+The PowerShell launcher remains available only as a recovery and diagnostic path:
 
 ```powershell
 & 'G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1'
@@ -71,10 +80,14 @@ Reloaded writes timestamped game logs to `%APPDATA%\Reloaded-Mod-Loader-II\Logs`
 
 Close Chrono Trigger and Reloaded-II first. Then:
 
+Only perform steps 3 and 4 if those files were absent before this accessibility mod was deployed **and** no other ASI or Reloaded mod uses them. If you are unsure, leave both loader files in place; disabling and removing the accessibility mod is sufficient.
+
 1. Remove `chrono.trigger.accessibility` from `EnabledMods` and `SortedMods` in `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Apps\chrono trigger.exe\AppConfig.json`, or disable it in Reloaded-II.
 2. Delete only `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Mods\chrono.trigger.accessibility`.
-3. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1` if the shortcut is no longer wanted.
+3. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\winmm.dll` only if its SHA-256 is `A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37`.
+4. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\Reloaded.Mod.Loader.Bootstrapper.asi` only if its SHA-256 is `1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB`.
+5. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1` if the recovery launcher is no longer wanted.
 
-The deployer does not alter original game files. Keep the shared-hooks mod and the per-user x86 .NET runtime if another accessibility mod uses them.
+The deployer ensures that the two reviewed loader files are present but leaves matching pre-existing copies untouched; it does not alter original game files. Keep the shared-hooks mod and the per-user x86 .NET runtime if another accessibility mod uses them.
 
-Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. The package includes Prism's root `LICENSE` and `NOTICE`, the exact `LICENSES` subtree from pinned Prism source commit `9911156998b52fee91fb2cb4f71ac793d4e546c7`, and the Reloaded license texts under `LICENSES`.
+Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. The package includes Prism's root `LICENSE` and `NOTICE`, the exact `LICENSES` subtree from pinned Prism source commit `9911156998b52fee91fb2cb4f71ac793d4e546c7`, the Reloaded license texts, and the Ultimate ASI Loader MIT license under `LICENSES`.

@@ -8,7 +8,7 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Packaging;
 
 public sealed class PackageContractTests
 {
-    private const string GameExecutable = @"G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe";
+    private const string InstalledGameExecutable = @"G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe";
     private const string InstalledReloadedRoot = @"C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release";
     private const string RuntimeRoot = @"C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86";
 
@@ -45,6 +45,7 @@ public sealed class PackageContractTests
                 Path.Combine("LICENSES", "GNU-GPL-3.0.txt"),
                 Path.Combine("LICENSES", "Reloaded.Hooks.Definitions-LGPL-3.0.txt"),
                 Path.Combine("LICENSES", "Reloaded.SharedLib.Hooks-LGPL-3.0.txt"),
+                Path.Combine("LICENSES", "Ultimate-ASI-Loader-MIT.txt"),
                 Path.Combine("LICENSES", "concurrentqueue", "LICENSE.md"),
                 Path.Combine("LICENSES", "djinni", "LICENSE"),
                 Path.Combine("LICENSES", "dr_wav", "LICENSE"),
@@ -70,6 +71,9 @@ public sealed class PackageContractTests
 
             AssertCanonicalReloadedManifestIsPackagedByteForByte(repositoryRoot, packageRoot);
             AssertPrismLicenseTreeMatchesPinnedSource(repositoryRoot, packageRoot);
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(repositoryRoot, "native", "ultimate-asi-loader", "v6.9.0", "LICENSE")),
+                File.ReadAllBytes(Path.Combine(packageRoot, "LICENSES", "Ultimate-ASI-Loader-MIT.txt")));
             AssertDepsRuntimeFilesArePresent(packageRoot);
             AssertExactSha256Manifest(packageRoot, packagedFiles);
         }
@@ -96,18 +100,25 @@ public sealed class PackageContractTests
         var packageRoot = Path.Combine(temporaryRoot, "package", "chrono.trigger.accessibility");
         var reloadedRoot = Path.Combine(temporaryRoot, "Reloaded-II");
         var launcherDestination = Path.Combine(temporaryRoot, "game-launcher");
+        var gameDirectory = Path.Combine(temporaryRoot, "game");
+        var gameExecutable = Path.Combine(gameDirectory, "Chrono Trigger.exe");
+        var reloadedConfigPath = Path.Combine(temporaryRoot, "ReloadedConfig", "ReloadedII.json");
 
         try
         {
             Directory.CreateDirectory(reloadedRoot);
             File.Copy(Path.Combine(InstalledReloadedRoot, "Reloaded-II.exe"), Path.Combine(reloadedRoot, "Reloaded-II.exe"));
             SeedSharedHookDependency(reloadedRoot);
+            SeedAutoLaunchDependency(reloadedRoot);
+            SeedReloadedBootstrapConfiguration(reloadedRoot, reloadedConfigPath);
+            Directory.CreateDirectory(gameDirectory);
+            File.Copy(InstalledGameExecutable, gameExecutable);
             var staleModDirectory = Path.Combine(reloadedRoot, "Mods", "chrono.trigger.accessibility");
             Directory.CreateDirectory(staleModDirectory);
             File.WriteAllText(Path.Combine(staleModDirectory, "stale.dll"), "must be replaced");
             SeedExistingProfile(reloadedRoot);
 
-            var gameHashBefore = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(GameExecutable)));
+            var gameHashBefore = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(gameExecutable)));
             var packageResult = RunPowerShell(repositoryRoot, packageScript, "-OutputDirectory", packageRoot, "-Configuration", "Release");
             Assert.True(packageResult.ExitCode == 0, $"Packaging failed.{Environment.NewLine}{packageResult.Output}");
 
@@ -116,9 +127,10 @@ public sealed class PackageContractTests
                 deployScript,
                 "-PackageDirectory", packageRoot,
                 "-ReloadedRoot", reloadedRoot,
-                "-GameExecutable", GameExecutable,
+                "-GameExecutable", gameExecutable,
                 "-RuntimeRoot", RuntimeRoot,
-                "-LauncherDestinationDirectory", launcherDestination);
+                "-LauncherDestinationDirectory", launcherDestination,
+                "-ReloadedConfigPath", reloadedConfigPath);
             Assert.True(deployResult.ExitCode == 0, $"Deployment failed.{Environment.NewLine}{deployResult.Output}");
 
             var launcherPath = Path.Combine(launcherDestination, "Launch Chrono Trigger Accessible.ps1");
@@ -126,9 +138,10 @@ public sealed class PackageContractTests
                 repositoryRoot,
                 verifyScript,
                 "-ReloadedRoot", reloadedRoot,
-                "-GameExecutable", GameExecutable,
+                "-GameExecutable", gameExecutable,
                 "-RuntimeRoot", RuntimeRoot,
-                "-LauncherPath", launcherPath);
+                "-LauncherPath", launcherPath,
+                "-ReloadedConfigPath", reloadedConfigPath);
             Assert.True(verifyResult.ExitCode == 0, $"Deployment verification failed.{Environment.NewLine}{verifyResult.Output}");
 
             var profilePath = Path.Combine(reloadedRoot, "Apps", "chrono trigger.exe", "AppConfig.json");
@@ -138,32 +151,39 @@ public sealed class PackageContractTests
             Assert.Equal("keep this nested value", root.GetProperty("PluginData").GetProperty("ExistingPlugin").GetString());
             Assert.Equal("Existing profile name", root.GetProperty("AppName").GetString());
             Assert.Equal("--keep-this", root.GetProperty("AppArguments").GetString());
-            Assert.Equal(GameExecutable, root.GetProperty("AppLocation").GetString());
-            Assert.Equal(Path.GetDirectoryName(GameExecutable), root.GetProperty("WorkingDirectory").GetString());
+            Assert.False(root.GetProperty("AutoInject").GetBoolean());
+            Assert.Equal(gameExecutable, root.GetProperty("AppLocation").GetString());
+            Assert.Equal(Path.GetDirectoryName(gameExecutable), root.GetProperty("WorkingDirectory").GetString());
             Assert.Equal(new[] { "other.accessibility.mod", "chrono.trigger.accessibility" }, root.GetProperty("EnabledMods").EnumerateArray().Select(item => item.GetString()));
             Assert.Equal(new[] { "other.accessibility.mod", "chrono.trigger.accessibility" }, root.GetProperty("SortedMods").EnumerateArray().Select(item => item.GetString()));
 
             Assert.True(File.Exists(Path.Combine(reloadedRoot, "Mods", "chrono.trigger.accessibility", "SHA256SUMS.txt")));
             Assert.False(File.Exists(Path.Combine(reloadedRoot, "Mods", "chrono.trigger.accessibility", "stale.dll")));
             Assert.True(File.Exists(launcherPath));
+            Assert.Equal("A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37", Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(gameDirectory, "winmm.dll")))));
+            Assert.Equal("1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB", Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(gameDirectory, "Reloaded.Mod.Loader.Bootstrapper.asi")))));
             var launcherValidation = RunPowerShell(repositoryRoot, launcherPath, "-VerifyOnly");
             Assert.True(launcherValidation.ExitCode == 0, $"Launcher prerequisite validation failed.{Environment.NewLine}{launcherValidation.Output}");
             Assert.Empty(Directory.GetFiles(launcherDestination, "*.exe", SearchOption.AllDirectories));
-            Assert.Equal(gameHashBefore, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(GameExecutable))));
+            Assert.Equal(gameHashBefore, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(gameExecutable))));
 
             var newProfileReloadedRoot = Path.Combine(temporaryRoot, "Reloaded-II-new-profile");
             var newProfileLauncherDestination = Path.Combine(temporaryRoot, "new-profile-launcher");
+            var newProfileReloadedConfigPath = Path.Combine(temporaryRoot, "ReloadedConfig-new-profile", "ReloadedII.json");
             Directory.CreateDirectory(newProfileReloadedRoot);
             File.Copy(Path.Combine(InstalledReloadedRoot, "Reloaded-II.exe"), Path.Combine(newProfileReloadedRoot, "Reloaded-II.exe"));
             SeedSharedHookDependency(newProfileReloadedRoot);
+            SeedAutoLaunchDependency(newProfileReloadedRoot);
+            SeedReloadedBootstrapConfiguration(newProfileReloadedRoot, newProfileReloadedConfigPath);
             var newProfileDeploy = RunPowerShell(
                 repositoryRoot,
                 deployScript,
                 "-PackageDirectory", packageRoot,
                 "-ReloadedRoot", newProfileReloadedRoot,
-                "-GameExecutable", GameExecutable,
+                "-GameExecutable", gameExecutable,
                 "-RuntimeRoot", RuntimeRoot,
-                "-LauncherDestinationDirectory", newProfileLauncherDestination);
+                "-LauncherDestinationDirectory", newProfileLauncherDestination,
+                "-ReloadedConfigPath", newProfileReloadedConfigPath);
             Assert.True(newProfileDeploy.ExitCode == 0, $"New-profile deployment failed.{Environment.NewLine}{newProfileDeploy.Output}");
             using var newProfile = JsonDocument.Parse(File.ReadAllText(Path.Combine(newProfileReloadedRoot, "Apps", "chrono trigger.exe", "AppConfig.json")));
             Assert.Equal(JsonValueKind.Array, newProfile.RootElement.GetProperty("EnabledMods").ValueKind);
@@ -191,7 +211,9 @@ public sealed class PackageContractTests
         Assert.Contains("Reloaded-Mod-Loader-II\\Logs", readme, StringComparison.Ordinal);
         Assert.Contains("troubleshooting", readme, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("uninstall", readme, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Reloaded-II.exe' --launch 'G:\\SteamLibrary\\steamapps\\common\\Chrono Trigger\\Chrono Trigger.exe'", readme, StringComparison.Ordinal);
+        Assert.Contains("normal Steam", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("winmm.dll", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Reloaded.Mod.Loader.Bootstrapper.asi", readme, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AssertDepsRuntimeFilesArePresent(string packageRoot)
@@ -303,6 +325,36 @@ public sealed class PackageContractTests
         File.Copy(
             Path.Combine(installedDependency, "x86", "Reloaded.Hooks.ReloadedII.dll"),
             Path.Combine(fakeDependency, "x86", "Reloaded.Hooks.ReloadedII.dll"));
+    }
+
+    private static void SeedAutoLaunchDependency(string reloadedRoot)
+    {
+        var relativePath = Path.Combine("Loader", "X86", "Bootstrapper", "Reloaded.Mod.Loader.Bootstrapper.dll");
+        var destination = Path.Combine(reloadedRoot, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(Path.Combine(InstalledReloadedRoot, relativePath), destination);
+    }
+
+    private static void SeedReloadedBootstrapConfiguration(string reloadedRoot, string configPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        File.WriteAllText(
+            configPath,
+            JsonSerializer.Serialize(new
+            {
+                LoaderPath32 = Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"),
+                LauncherPath = Path.Combine(reloadedRoot, "Reloaded-II.exe"),
+                Bootstrapper32Path = Path.Combine(reloadedRoot, "Loader", "X86", "Bootstrapper", "Reloaded.Mod.Loader.Bootstrapper.dll"),
+                ApplicationConfigDirectory = Path.Combine(reloadedRoot, "Apps"),
+                ModConfigDirectory = Path.Combine(reloadedRoot, "Mods")
+            }));
+        Directory.CreateDirectory(Path.Combine(reloadedRoot, "Loader", "X86"));
+        File.Copy(
+            Path.Combine(InstalledReloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"),
+            Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"));
+        File.Copy(
+            Path.Combine(InstalledReloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.runtimeconfig.json"),
+            Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.runtimeconfig.json"));
     }
 
     private static void SeedExistingProfile(string reloadedRoot)
