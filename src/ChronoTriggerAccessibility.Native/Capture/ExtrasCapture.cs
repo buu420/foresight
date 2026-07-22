@@ -12,18 +12,58 @@ public sealed record ExtrasHubControlInput(
 
 public sealed class ExtrasHubSnapshot
 {
-    public ExtrasHubSnapshot(IEnumerable<MenuControlSnapshot> controls)
+    internal ExtrasHubSnapshot(IEnumerable<MenuControlSnapshot> controls, int focusedKey)
     {
         ArgumentNullException.ThrowIfNull(controls);
-        Controls = new ReadOnlyCollection<MenuControlSnapshot>(controls.ToArray());
+        Controls = new ReadOnlyCollection<MenuControlSnapshot>(controls.Select(CopyControl).ToArray());
+        FocusedKey = focusedKey;
     }
 
     public IReadOnlyList<MenuControlSnapshot> Controls { get; }
+    public int FocusedKey { get; }
+
+    public bool TryGetFocusedControl(out MenuControlSnapshot control)
+    {
+        control = Controls.SingleOrDefault(item => item.Key == FocusedKey)!;
+        return control is not null;
+    }
+
+    public bool TryMoveFocus(
+        int key,
+        string? observedHelp,
+        out ExtrasHubSnapshot snapshot,
+        out string diagnostic)
+    {
+        snapshot = null!;
+        var target = Controls.SingleOrDefault(item => item.Key == key);
+        if (target is null)
+        {
+            diagnostic = $"Extras Hub focus key {key} does not identify one captured visible control.";
+            return false;
+        }
+        if (key < 4 && string.IsNullOrWhiteSpace(observedHelp))
+        {
+            diagnostic = $"Extras Hub focus key {key} requires the help text resolved by native focus handling.";
+            return false;
+        }
+        if (observedHelp is not null && string.IsNullOrWhiteSpace(observedHelp))
+        {
+            diagnostic = "Extras Hub observed focus help cannot be blank.";
+            return false;
+        }
+
+        var updated = Controls.Select(control => control.Key == key
+            ? control with { Help = observedHelp is null ? null : new string(observedHelp.AsSpan()) }
+            : control).ToArray();
+        snapshot = new ExtrasHubSnapshot(updated, key);
+        diagnostic = string.Empty;
+        return true;
+    }
 
     public bool TryGetLockedActivationHelp(int key, out string help)
     {
         var control = Controls.SingleOrDefault(item => item.Key == key);
-        if (control is null || control.Enabled || string.IsNullOrWhiteSpace(control.Help))
+        if (key != FocusedKey || control is null || control.Enabled || string.IsNullOrWhiteSpace(control.Help))
         {
             help = string.Empty;
             return false;
@@ -32,6 +72,17 @@ public sealed class ExtrasHubSnapshot
         help = control.Help;
         return true;
     }
+
+    private static MenuControlSnapshot CopyControl(MenuControlSnapshot control) =>
+        new(
+            new string(control.Label.AsSpan()),
+            control.Value is null ? null : new string(control.Value.AsSpan()),
+            control.Help is null ? null : new string(control.Help.AsSpan()),
+            control.Key,
+            control.Position,
+            control.Count,
+            control.Enabled,
+            control.Visible);
 }
 
 public sealed record EndingLogRowInput(int Position, string VisibleLabel, bool Locked);
@@ -59,17 +110,20 @@ public sealed class EndingDetailInput
 {
     public EndingDetailInput(
         string? visibleTitle,
+        string? visibleHeader,
         string? visibleRequirementsLabel,
         string? visibleRequirementText,
         IEnumerable<EndingDetailControlInput>? controls)
     {
         VisibleTitle = visibleTitle is null ? string.Empty : new string(visibleTitle.AsSpan());
+        VisibleHeader = visibleHeader is null ? string.Empty : new string(visibleHeader.AsSpan());
         VisibleRequirementsLabel = visibleRequirementsLabel is null ? string.Empty : new string(visibleRequirementsLabel.AsSpan());
         VisibleRequirementText = visibleRequirementText is null ? string.Empty : new string(visibleRequirementText.AsSpan());
         Controls = new ReadOnlyCollection<EndingDetailControlInput>((controls ?? []).ToArray());
     }
 
     public string VisibleTitle { get; }
+    public string VisibleHeader { get; }
     public string VisibleRequirementsLabel { get; }
     public string VisibleRequirementText { get; }
     public IReadOnlyList<EndingDetailControlInput> Controls { get; }
@@ -79,18 +133,21 @@ public sealed class EndingDetailSnapshot
 {
     public EndingDetailSnapshot(
         string visibleTitle,
+        string visibleHeader,
         string visibleRequirementsLabel,
         string visibleRequirementText,
         IEnumerable<MenuControlSnapshot> controls)
     {
         ArgumentNullException.ThrowIfNull(controls);
         VisibleTitle = new string(visibleTitle.AsSpan());
+        VisibleHeader = new string(visibleHeader.AsSpan());
         VisibleRequirementsLabel = new string(visibleRequirementsLabel.AsSpan());
         VisibleRequirementText = new string(visibleRequirementText.AsSpan());
         Controls = new ReadOnlyCollection<MenuControlSnapshot>(controls.ToArray());
     }
 
     public string VisibleTitle { get; }
+    public string VisibleHeader { get; }
     public string VisibleRequirementsLabel { get; }
     public string VisibleRequirementText { get; }
     public IReadOnlyList<MenuControlSnapshot> Controls { get; }
@@ -105,6 +162,7 @@ public static class ExtrasCapture
     public static bool TryCaptureHub(
         nuint imageBase,
         nuint observedVtable,
+        int focusedKey,
         IReadOnlyList<ExtrasHubControlInput>? controls,
         out ExtrasHubSnapshot snapshot,
         out string diagnostic)
@@ -135,9 +193,9 @@ public static class ExtrasCapture
                 diagnostic = "Extras Hub controls must have unique ordered keys and positions 0..4 with visible localized labels.";
                 return false;
             }
-            if (position < 4 && string.IsNullOrWhiteSpace(control.Help))
+            if (control.Help is not null && string.IsNullOrWhiteSpace(control.Help))
             {
-                diagnostic = "Extras Hub positions 0..3 require localized help and a captured native availability state.";
+                diagnostic = "Extras Hub captured help cannot be blank.";
                 return false;
             }
             if (position == 4 && !control.NativeAvailable)
@@ -145,6 +203,13 @@ public static class ExtrasCapture
                 diagnostic = "Extras Hub Back must be captured as available and visible.";
                 return false;
             }
+        }
+
+        var focused = ordered.SingleOrDefault(control => control.Key == focusedKey);
+        if (focused is null || (focusedKey < 4 && string.IsNullOrWhiteSpace(focused.Help)))
+        {
+            diagnostic = "Extras Hub initial focus must identify one control and include the help text native construction resolved for keys 0..3.";
+            return false;
         }
 
         snapshot = new ExtrasHubSnapshot(ordered.Select((control, position) => new MenuControlSnapshot(
@@ -155,7 +220,7 @@ public static class ExtrasCapture
             position + 1,
             ordered.Length,
             control.NativeAvailable,
-            control.Visible)));
+            control.Visible)), focusedKey);
         diagnostic = string.Empty;
         return true;
     }
@@ -221,11 +286,12 @@ public static class ExtrasCapture
             return false;
         }
         if (input is null || string.IsNullOrWhiteSpace(input.VisibleTitle) ||
+            string.IsNullOrWhiteSpace(input.VisibleHeader) ||
             string.IsNullOrWhiteSpace(input.VisibleRequirementsLabel) ||
             string.IsNullOrWhiteSpace(input.VisibleRequirementText) ||
             input.Controls is null || input.Controls.Count != 2 || input.Controls.Any(control => control is null))
         {
-            diagnostic = "Ending Detail requires nonblank visible title, Requirements label, requirement text, and two controls.";
+            diagnostic = "Ending Detail requires nonblank visible title, fixed header, Requirements label, requirement text, and two controls.";
             return false;
         }
         if (input.Controls.Select(control => control.Key).Distinct().Count() != 2)
@@ -247,6 +313,7 @@ public static class ExtrasCapture
 
         snapshot = new EndingDetailSnapshot(
             input.VisibleTitle,
+            input.VisibleHeader,
             input.VisibleRequirementsLabel,
             input.VisibleRequirementText,
             controls.Select((control, position) => new MenuControlSnapshot(

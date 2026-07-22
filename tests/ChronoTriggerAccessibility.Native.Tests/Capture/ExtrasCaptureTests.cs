@@ -8,26 +8,76 @@ public sealed class ExtrasCaptureTests
     private const nuint ImageBase = 0x400000;
 
     [Fact]
-    public void CapturesHubOnlyWhenAllVisibleControlsAreValidated()
+    public void CapturesHubWithOnlyTheNativeInitiallyFocusedHelp()
     {
         var controls = new List<ExtrasHubControlInput>
         {
-            new(0, 0, "Illustrations", "View illustrations", true, true),
-            new(1, 1, "Music", "Listen to music", true, true),
-            new(2, 2, "Scenes", "View scenes", true, true),
+            new(0, 0, "Illustrations", null, true, true),
+            new(1, 1, "Music", null, true, true),
+            new(2, 2, "Scenes", null, true, true),
             new(3, 3, "Endings", "View endings", false, true),
             new(4, 4, "Return", null, true, true),
         };
 
-        Assert.True(ExtrasCapture.TryCaptureHub(ImageBase, ImageBase + ExtrasCapture.ExtrasHubVtableRva, controls, out var snapshot, out var error), error);
+        Assert.True(ExtrasCapture.TryCaptureHub(ImageBase, ImageBase + ExtrasCapture.ExtrasHubVtableRva, 3, controls, out var snapshot, out var error), error);
         controls.Clear();
+        Assert.Equal(3, snapshot.FocusedKey);
         Assert.Equal(5, snapshot.Controls.Count);
         Assert.Equal([1, 2, 3, 4, 5], snapshot.Controls.Select(control => control.Position));
+        Assert.Null(snapshot.Controls[0].Help);
         Assert.Equal("Endings", snapshot.Controls[3].Label);
         Assert.False(snapshot.Controls[3].Enabled);
+        Assert.True(snapshot.TryGetFocusedControl(out var focused));
+        Assert.Equal("Endings", focused.Label);
         Assert.True(snapshot.TryGetLockedActivationHelp(3, out var help));
         Assert.Equal("View endings", help);
         Assert.False(snapshot.TryGetLockedActivationHelp(0, out _));
+    }
+
+    [Fact]
+    public void HubFocusUpdateAddsOnlyTheNewlyResolvedNativeHelp()
+    {
+        Assert.True(ExtrasCapture.TryCaptureHub(
+            ImageBase,
+            ImageBase + ExtrasCapture.ExtrasHubVtableRva,
+            2,
+            ValidHubControls(),
+            out var initial,
+            out var initialError), initialError);
+
+        Assert.True(initial.TryMoveFocus(3, "Locked extras", out var moved, out var moveError), moveError);
+        Assert.Equal(3, moved.FocusedKey);
+        Assert.Equal("Locked extras", moved.Controls[3].Help);
+        Assert.True(moved.TryGetLockedActivationHelp(3, out var lockedHelp));
+        Assert.Equal("Locked extras", lockedHelp);
+        Assert.Null(moved.Controls[0].Help);
+        Assert.Equal(2, initial.FocusedKey);
+        Assert.Null(initial.Controls[3].Help);
+
+        Assert.True(moved.TryMoveFocus(4, null, out var back, out var backError), backError);
+        Assert.Equal(4, back.FocusedKey);
+        Assert.Null(back.Controls[4].Help);
+        Assert.False(back.TryGetLockedActivationHelp(3, out _));
+    }
+
+    [Theory]
+    [InlineData(-1, "Help")]
+    [InlineData(5, "Help")]
+    [InlineData(0, null)]
+    [InlineData(1, " ")]
+    public void HubRejectsUncorrelatedOrMissingLazyFocusHelp(int key, string? help)
+    {
+        Assert.True(ExtrasCapture.TryCaptureHub(
+            ImageBase,
+            ImageBase + ExtrasCapture.ExtrasHubVtableRva,
+            2,
+            ValidHubControls(),
+            out var initial,
+            out var initialError), initialError);
+
+        Assert.False(initial.TryMoveFocus(key, help, out var moved, out var error));
+        Assert.Null(moved);
+        Assert.False(string.IsNullOrWhiteSpace(error));
     }
 
     [Theory]
@@ -39,7 +89,7 @@ public sealed class ExtrasCaptureTests
     public void HubFailsWhenAnyRequiredControlIsMissing(int missingPosition)
     {
         var controls = ValidHubControls().Where(control => control.Position != missingPosition).ToArray();
-        Assert.False(ExtrasCapture.TryCaptureHub(ImageBase, ImageBase + ExtrasCapture.ExtrasHubVtableRva, controls, out var snapshot, out var error));
+        Assert.False(ExtrasCapture.TryCaptureHub(ImageBase, ImageBase + ExtrasCapture.ExtrasHubVtableRva, 2, controls, out var snapshot, out var error));
         Assert.Null(snapshot);
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
@@ -53,12 +103,17 @@ public sealed class ExtrasCaptureTests
         var wrongKey = ValidHubControls();
         wrongKey[2] = wrongKey[2] with { Key = 7 };
         AssertHubFailure(wrongKey);
-        var blankHelp = ValidHubControls();
-        blankHelp[0] = blankHelp[0] with { Help = " " };
-        AssertHubFailure(blankHelp);
+        var blankObservedHelp = ValidHubControls();
+        blankObservedHelp[2] = blankObservedHelp[2] with { Help = " " };
+        AssertHubFailure(blankObservedHelp);
+        var blankUnfocusedHelp = ValidHubControls();
+        blankUnfocusedHelp[0] = blankUnfocusedHelp[0] with { Help = " " };
+        AssertHubFailure(blankUnfocusedHelp);
         var unavailableBack = ValidHubControls();
         unavailableBack[4] = unavailableBack[4] with { NativeAvailable = false };
         AssertHubFailure(unavailableBack);
+        AssertHubFailure(ValidHubControls(), focusedKey: -1);
+        AssertHubFailure(ValidHubControls(), focusedKey: 5);
     }
 
     [Fact]
@@ -112,7 +167,7 @@ public sealed class ExtrasCaptureTests
             new(0, "Review", true, true),
             new(1, "Return", true, true),
         };
-        var input = new EndingDetailInput("Ending A", "Requirements", "Finish chapter", controls);
+        var input = new EndingDetailInput("Ending A", "Ending Details", "Requirements", "Finish chapter", controls);
         controls.Clear();
         Assert.True(ExtrasCapture.TryCaptureEndingDetail(
             ImageBase,
@@ -121,6 +176,7 @@ public sealed class ExtrasCaptureTests
             out var snapshot,
             out var error), error);
         Assert.Equal("Ending A", snapshot.VisibleTitle);
+        Assert.Equal("Ending Details", snapshot.VisibleHeader);
         Assert.Equal("Requirements", snapshot.VisibleRequirementsLabel);
         Assert.Equal("Finish chapter", snapshot.VisibleRequirementText);
         Assert.Equal([0, 1], snapshot.Controls.Select(control => control.Key));
@@ -133,6 +189,7 @@ public sealed class ExtrasCaptureTests
         foreach (var input in new[]
         {
             ValidDetail(visibleTitle: " "),
+            ValidDetail(visibleHeader: " "),
             ValidDetail(visibleRequirementsLabel: " "),
             ValidDetail(visibleRequirementText: " "),
             ValidDetail([new(0, "Review", true, true)]),
@@ -164,7 +221,7 @@ public sealed class ExtrasCaptureTests
     [Fact]
     public void EveryCaptureRejectsZeroImageBase()
     {
-        Assert.False(ExtrasCapture.TryCaptureHub(0, ExtrasCapture.ExtrasHubVtableRva, ValidHubControls(), out var hub, out var hubError));
+        Assert.False(ExtrasCapture.TryCaptureHub(0, ExtrasCapture.ExtrasHubVtableRva, 2, ValidHubControls(), out var hub, out var hubError));
         Assert.Null(hub);
         Assert.False(string.IsNullOrWhiteSpace(hubError));
         Assert.False(ExtrasCapture.TryCaptureEndingLog(0, ExtrasCapture.EndingLogVtableRva, ValidEndingRows(), ValidBack(), out var log, out var logError));
@@ -177,10 +234,10 @@ public sealed class ExtrasCaptureTests
 
     private static ExtrasHubControlInput[] ValidHubControls() =>
     [
-        new(0, 0, "Illustrations", "View illustrations", true, true),
-        new(1, 1, "Music", "Listen to music", true, true),
+        new(0, 0, "Illustrations", null, true, true),
+        new(1, 1, "Music", null, true, true),
         new(2, 2, "Scenes", "View scenes", true, true),
-        new(3, 3, "Endings", "View endings", false, true),
+        new(3, 3, "Endings", null, false, true),
         new(4, 4, "Return", null, true, true),
     ];
 
@@ -192,14 +249,18 @@ public sealed class ExtrasCaptureTests
     private static EndingDetailInput ValidDetail(
         IReadOnlyList<EndingDetailControlInput>? controls = null,
         string visibleTitle = "Ending A",
+        string visibleHeader = "Ending Details",
         string visibleRequirementsLabel = "Requirements",
         string visibleRequirementText = "Finish chapter") =>
-        new(visibleTitle, visibleRequirementsLabel, visibleRequirementText, controls ??
+        new(visibleTitle, visibleHeader, visibleRequirementsLabel, visibleRequirementText, controls ??
         [new(0, "Review", true, true), new(1, "Return", true, true)]);
 
-    private static void AssertHubFailure(IReadOnlyList<ExtrasHubControlInput> controls, nuint imageBase = ImageBase)
+    private static void AssertHubFailure(
+        IReadOnlyList<ExtrasHubControlInput> controls,
+        nuint imageBase = ImageBase,
+        int focusedKey = 2)
     {
-        Assert.False(ExtrasCapture.TryCaptureHub(imageBase, imageBase + ExtrasCapture.ExtrasHubVtableRva, controls, out var snapshot, out var error));
+        Assert.False(ExtrasCapture.TryCaptureHub(imageBase, imageBase + ExtrasCapture.ExtrasHubVtableRva, focusedKey, controls, out var snapshot, out var error));
         Assert.Null(snapshot);
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
