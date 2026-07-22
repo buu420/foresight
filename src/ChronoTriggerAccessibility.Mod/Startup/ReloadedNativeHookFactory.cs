@@ -119,6 +119,27 @@ public static class ChoiceConfirmProbeAssembly
     }
 }
 
+/// <summary>
+/// Builds a no-argument cdecl marker call that leaves the intercepted x86 call
+/// site's flags and caller-saved registers unchanged for relocated execution.
+/// </summary>
+public static class NativeCallSiteProbeAssembly
+{
+    public static IReadOnlyList<string> Build(RuntimeAsmHookAssemblyContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return new ReadOnlyCollection<string>(
+        [
+            "use32",
+            "pushfd",
+            new string(context.PushCdeclCallerSavedRegisters.AsSpan()),
+            new string(context.AbsoluteCallMnemonic.AsSpan()),
+            new string(context.PopCdeclCallerSavedRegisters.AsSpan()),
+            "popfd",
+        ]);
+    }
+}
+
 public sealed class ReloadedNativeHookFactory :
     IRuntimeNativeHookFactory,
     IRuntimeNativeFunctionWrapperFactory,
@@ -175,9 +196,10 @@ public sealed class ReloadedNativeHookFactory :
         {
             throw new ArgumentException("A function-entry contract cannot be installed as an assembly call-site hook.", nameof(id));
         }
-        if (id != HookId.MsgWindowChoiceConfirmCallSite)
+        if (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8)
         {
-            throw new NotSupportedException($"Assembly call-site '{contract.Symbol}' is not supported by this bridge.");
+            throw new NotSupportedException(
+                $"Assembly call-site '{contract.Symbol}' is not an audited exact five-byte direct CALL.");
         }
         if (!Enum.IsDefined(options.Behaviour))
         {
@@ -201,7 +223,7 @@ public sealed class ReloadedNativeHookFactory :
             options.MaxOpcodeSize != contract.ExpectedBytes.Length)
         {
             throw new ArgumentException(
-                "The dialogue confirm call site requires ExecuteFirst, HookLength=5, PreferRelativeJump=true, and MaxOpcodeSize=5.",
+                "An exact five-byte direct-call probe requires ExecuteFirst, HookLength=5, PreferRelativeJump=true, and MaxOpcodeSize=5.",
                 nameof(options));
         }
 

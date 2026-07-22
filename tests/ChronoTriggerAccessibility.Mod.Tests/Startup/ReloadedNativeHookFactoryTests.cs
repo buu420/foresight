@@ -161,6 +161,26 @@ public sealed class ReloadedNativeHookFactoryTests
         Assert.Equal(0, controller.AsmCreateCount);
     }
 
+    [Fact]
+    public void CreateAsmHook_AcceptsAnyAuditedFiveByteDirectCallSite()
+    {
+        var controller = new RecordingAsmHookController();
+        var factory = new ReloadedNativeHookFactory(controller);
+        NativeCallSiteProbeDelegate callback = () => { };
+
+        var prepared = factory.CreateAsmHook(
+            HookId.ClassicTopMenuTimeLabelCallSite,
+            "Classic top-menu time-label probe",
+            callback,
+            0x005D0AA5,
+            NativeCallSiteProbeAssembly.Build,
+            ValidOptions);
+
+        Assert.Equal(1, controller.AsmCreateCount);
+        Assert.Equal(ExpectedNoArgumentAssembly, controller.Code);
+        Assert.Contains(callback, prepared.LifetimeRoots);
+    }
+
     private static RuntimeAsmHookOptions ValidOptions => new(
         AsmHookBehaviour.ExecuteFirst,
         HookLength: 5,
@@ -175,6 +195,16 @@ public sealed class ReloadedNativeHookFactoryTests
         "push ecx",
         "call dword [0x12345678]",
         "add esp, 4",
+        "pop edx\npop ecx\npop eax",
+        "popfd",
+    ];
+
+    private static IReadOnlyList<string> ExpectedNoArgumentAssembly =>
+    [
+        "use32",
+        "pushfd",
+        "push eax\npush ecx\npush edx",
+        "call dword [0x12345678]",
         "pop edx\npop ecx\npop eax",
         "popfd",
     ];
@@ -271,6 +301,33 @@ public sealed class ChoiceConfirmProbeAssemblyTests
         Assert.True(ordered.IndexOf("push ecx") < ordered.IndexOf(context.AbsoluteCallMnemonic));
         Assert.Equal(ordered.IndexOf(context.AbsoluteCallMnemonic) + 1, ordered.IndexOf("add esp, 4"));
         Assert.Equal(ordered.IndexOf(context.PopCdeclCallerSavedRegisters) + 1, ordered.IndexOf("popfd"));
+        Assert.DoesNotContain("ret", code);
+    }
+}
+
+public sealed class NativeCallSiteProbeAssemblyTests
+{
+    [Fact]
+    public void Build_PreservesFlagsAndCallerSavedRegistersAroundNoArgumentCdeclCall()
+    {
+        var context = new RuntimeAsmHookAssemblyContext(
+            "call dword [managed_callback]",
+            "push eax\npush ecx\npush edx",
+            "pop edx\npop ecx\npop eax");
+
+        var code = NativeCallSiteProbeAssembly.Build(context);
+
+        Assert.Equal(
+        [
+            "use32",
+            "pushfd",
+            "push eax\npush ecx\npush edx",
+            "call dword [managed_callback]",
+            "pop edx\npop ecx\npop eax",
+            "popfd",
+        ], code);
+        Assert.DoesNotContain("push ecx", code);
+        Assert.DoesNotContain("add esp, 4", code);
         Assert.DoesNotContain("ret", code);
     }
 }

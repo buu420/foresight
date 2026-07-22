@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using ChronoTriggerAccessibility.Native.Hooks;
 using Reloaded.Hooks.Definitions.X86;
 using Xunit;
@@ -39,6 +40,8 @@ public sealed class GameVersionCatalogTests
         { HookId.ExtrasHubCallback, "Extras hub callback", 0x1DC610, "558BEC83E4F88B450883EC08568BF15783E8000F849E0000", typeof(ExtrasHubCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingLogCallback, "Ending Log callback", 0x1D4850, "558BEC8B4508568BF15783E8000F849200000083E8017435", typeof(EndingLogCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingDetailCallback, "Ending Detail callback", 0x1D35A0, "558BEC8B4508568BF183E800745983E801744083E8010F85", typeof(EndingDetailCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ExtrasLogTransition, "Extras Ending Log transition", 0x2A5E20, "558BEC6AFF6810AC770064A1000000005083EC5CA1D0A07F", typeof(ExtrasLogTransitionDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ExtrasDetailTransition, "Extras Ending Detail transition", 0x2A60C0, "558BEC6AFF68CEAC770064A1000000005081EC80010000A1D0A07F0033C58945F0", typeof(ExtrasDetailTransitionDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamConstructor, "MenuNodeConfigSteam constructor", 0x1ECB00, "558BEC6AFF681044760064A1000000005056A1D0A07F0033C5508D45F464A300", typeof(MenuNodeConfigSteamConstructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamBuilder, "MenuNodeConfigSteam builder", 0x1ED020, "558BEC6AFF684102770064A1000000005081EC640E0000A1D0A07F0033C58945", typeof(MenuNodeConfigSteamBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamDestructor, "MenuNodeConfigSteam destructor", 0x1EC970, "558BEC6AFF689EC6760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(MenuNodeConfigSteamDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -54,6 +57,33 @@ public sealed class GameVersionCatalogTests
         { HookId.StatusBarDestructor, "StatusBar destructor", 0x22E650, "558BEC6AFF68EEE6760064A10000000050515657A1D0A07F0033C5508D45F464", typeof(StatusBarDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.ClassicTopMenuDeletingDestructor, "Classic top-menu deleting destructor", 0x1D0470, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(ClassicTopMenuDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TouchTopMenuDeletingDestructor, "Touch top/Ending Detail deleting destructor", 0x1D2690, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(TouchTopMenuDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ClassicTopMenuActionDispatcher, "Classic top-menu action dispatcher", 0x2A8630, "558BEC83E4F851568BF18B0683F8070F87E1000000FF24852C876A008B4E04E84CFEFFFF8B4E04E8", typeof(TopMenuActionDispatcherDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchTopMenuActionDispatcher, "Touch/mouse top-menu action dispatcher", 0x2BD1F0, "558BEC83E4F851568BF18B0683F8070F87E1000000FF2485ECD26B008B4E04E80CFEFFFF8B4E04E8", typeof(TopMenuActionDispatcherDelegate), X86CallingConvention.MicrosoftThiscall },
+    };
+
+    public static TheoryData<HookId, string, uint, uint, uint, string> ExpectedTopMenuCallSites => new()
+    {
+        { HookId.ClassicTopMenuTimeLabelCallSite, "Classic top-menu time label call site", 0x1D0AA5, 0x1D0AAA, 0x2400B0, "E806F60600" },
+        { HookId.ClassicTopMenuCurrencyLabelCallSite, "Classic top-menu currency label call site", 0x1D0B4F, 0x1D0B54, 0x2400B0, "E85CF50600" },
+        { HookId.ClassicTopMenuCaptionLabelCallSite, "Classic top-menu caption label call site", 0x1D1799, 0x1D179E, 0x2400B0, "E812E90600" },
+        { HookId.ClassicTopMenuMemberNameLabelCallSite, "Classic top-menu member-name label call site", 0x23B1CB, 0x23B1D0, 0x2400B0, "E8E04E0000" },
+        { HookId.ClassicStatusRowLabelCallSite, "Classic status row-label call site", 0x23A2ED, 0x23A2F2, 0x2400B0, "E8BE5D0000" },
+        { HookId.ClassicStatusRowZeroValueCallSite, "Classic status row-zero value call site", 0x23A54D, 0x23A552, 0x2400B0, "E85E5B0000" },
+        { HookId.ClassicStatusUnavailableValueCallSite, "Classic status unavailable-value call site", 0x23A3BD, 0x23A3C2, 0x2400B0, "E8EE5C0000" },
+        { HookId.ClassicStatusCurrentValueCallSite, "Classic status current-value call site", 0x23A5EA, 0x23A5EF, 0x2400B0, "E8C15A0000" },
+        { HookId.ClassicStatusMaximumValueCallSite, "Classic status maximum-value call site", 0x23A692, 0x23A697, 0x2400B0, "E8195A0000" },
+        { HookId.ClassicStatusExtraLabelCallSite, "Classic status extra-label call site", 0x23A736, 0x23A73B, 0x2400B0, "E875590000" },
+        { HookId.TouchTopMenuTimeLabelCallSite, "Touch top-menu time label call site", 0x221A4A, 0x221A4F, 0x2400B0, "E861E60100" },
+        { HookId.TouchTopMenuCurrencyLabelCallSite, "Touch top-menu currency label call site", 0x221B17, 0x221B1C, 0x2400B0, "E894E50100" },
+        { HookId.TouchTopMenuCaptionLabelCallSite, "Touch top-menu caption label call site", 0x2221C1, 0x2221C6, 0x2400B0, "E8EADE0100" },
+        { HookId.TouchTopMenuMemberNameLabelCallSite, "Touch top-menu member-name label call site", 0x23A9E1, 0x23A9E6, 0x2400B0, "E8CA560000" },
+        { HookId.TouchTopMenuReserveNameLabelCallSite, "Touch top-menu reserve-name label call site", 0x23AE35, 0x23AE3A, 0x2400B0, "E876520000" },
+        { HookId.CompactStatusRowLabelCallSite, "Compact status row-label call site", 0x239736, 0x23973B, 0x2400B0, "E875690000" },
+        { HookId.CompactStatusRowZeroValueCallSite, "Compact status row-zero value call site", 0x23988C, 0x239891, 0x2400B0, "E81F680000" },
+        { HookId.CompactStatusCurrentValueCallSite, "Compact status current-value call site", 0x23990F, 0x239914, 0x2400B0, "E89C670000" },
+        { HookId.CompactStatusMaximumValueCallSite, "Compact status maximum-value call site", 0x2399A5, 0x2399AA, 0x2400B0, "E806670000" },
+        { HookId.CompactStatusExtraLabelCallSite, "Compact status extra-label call site", 0x239A6E, 0x239A73, 0x2400B0, "E83D660000" },
+        { HookId.StatusBarGlyphRendererCallSite, "StatusBar glyph-renderer call site", 0x22F3B8, 0x22F3BD, 0x22E080, "E8C3ECFFFF" },
     };
 
     [Theory]
@@ -78,12 +108,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyFortySevenUniqueContracts()
+    public void HookCatalog_HasExactlySeventyTwoUniqueContracts()
     {
-        Assert.Equal(47, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(72, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(72, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -116,6 +146,32 @@ public sealed class GameVersionCatalogTests
         Assert.Null(contract.DelegateType);
         Assert.Null(contract.CallingConvention);
         Assert.Equal(GameVersionCatalog.MsgWindowChoiceConfirmReturnRva, contract.Rva + contract.ExpectedBytes.Length);
+    }
+
+    [Theory]
+    [MemberData(nameof(ExpectedTopMenuCallSites))]
+    public void TopMenuCallSite_IsAnExactFiveByteDirectCallToItsAuditedTarget(
+        HookId id,
+        string symbol,
+        uint probeRva,
+        uint returnRva,
+        uint targetRva,
+        string expectedHex)
+    {
+        var contract = GameVersionCatalog.Get(id);
+
+        Assert.Equal(symbol, contract.Symbol);
+        Assert.Equal(probeRva, contract.Rva);
+        Assert.Equal(expectedHex, Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.AssemblyCallSite, contract.Kind);
+        Assert.Null(contract.DelegateType);
+        Assert.Null(contract.CallingConvention);
+        Assert.Equal(5, contract.ExpectedBytes.Length);
+        Assert.Equal(0xE8, contract.ExpectedBytes[0]);
+        Assert.Equal(returnRva, contract.Rva + contract.ExpectedBytes.Length);
+
+        var displacement = BinaryPrimitives.ReadInt32LittleEndian(contract.ExpectedBytes.AsSpan()[1..]);
+        Assert.Equal(targetRva, checked((uint)(returnRva + displacement)));
     }
 
     [Fact]
@@ -194,6 +250,8 @@ public sealed class GameVersionCatalogTests
         AssertSignature<ExtrasHubCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<EndingLogCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<EndingDetailCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignature<ExtrasLogTransitionDelegate>(typeof(nint));
+        AssertSignature<ExtrasDetailTransitionDelegate>(typeof(nint));
         AssertSignatureWithReturn<MenuNodeConfigSteamConstructorDelegate>(typeof(nint), typeof(nint), typeof(int));
         AssertSignature<MenuNodeConfigSteamBuilderDelegate>(typeof(nint));
         AssertSignature<MenuNodeConfigSteamDestructorDelegate>(typeof(nint));
@@ -210,6 +268,8 @@ public sealed class GameVersionCatalogTests
         AssertSignature<StatusBarDestructorDelegate>(typeof(nint));
         AssertSignatureWithReturn<ClassicTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
         AssertSignatureWithReturn<TouchTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
+        AssertSignature<TopMenuActionDispatcherDelegate>(typeof(nint));
+        AssertSignature<NativeCallSiteProbeDelegate>();
     }
 
     [Fact]
@@ -223,6 +283,18 @@ public sealed class GameVersionCatalogTests
     {
         var functionAttribute = Assert.Single(
             typeof(MsgWindowChoiceConfirmProbeDelegate).GetCustomAttributesData(),
+            attribute => attribute.AttributeType.FullName ==
+                "Reloaded.Hooks.Definitions.X86.FunctionAttribute");
+        Assert.Equal(
+            (int)CallingConventions.Cdecl,
+            Convert.ToInt32(functionAttribute.ConstructorArguments.Single().Value));
+    }
+
+    [Fact]
+    public void NativeCallSiteProbeCallbackUsesOfficialReloadedCdeclMetadata()
+    {
+        var functionAttribute = Assert.Single(
+            typeof(NativeCallSiteProbeDelegate).GetCustomAttributesData(),
             attribute => attribute.AttributeType.FullName ==
                 "Reloaded.Hooks.Definitions.X86.FunctionAttribute");
         Assert.Equal(

@@ -36,6 +36,8 @@ public enum HookId
     ExtrasHubCallback,
     EndingLogCallback,
     EndingDetailCallback,
+    ExtrasLogTransition,
+    ExtrasDetailTransition,
     MenuNodeConfigSteamConstructor,
     MenuNodeConfigSteamBuilder,
     MenuNodeConfigSteamDestructor,
@@ -52,6 +54,29 @@ public enum HookId
     StatusBarDestructor,
     ClassicTopMenuDeletingDestructor,
     TouchTopMenuDeletingDestructor,
+    ClassicTopMenuActionDispatcher,
+    TouchTopMenuActionDispatcher,
+    ClassicTopMenuTimeLabelCallSite,
+    ClassicTopMenuCurrencyLabelCallSite,
+    ClassicTopMenuCaptionLabelCallSite,
+    ClassicTopMenuMemberNameLabelCallSite,
+    ClassicStatusRowLabelCallSite,
+    ClassicStatusRowZeroValueCallSite,
+    ClassicStatusUnavailableValueCallSite,
+    ClassicStatusCurrentValueCallSite,
+    ClassicStatusMaximumValueCallSite,
+    ClassicStatusExtraLabelCallSite,
+    TouchTopMenuTimeLabelCallSite,
+    TouchTopMenuCurrencyLabelCallSite,
+    TouchTopMenuCaptionLabelCallSite,
+    TouchTopMenuMemberNameLabelCallSite,
+    TouchTopMenuReserveNameLabelCallSite,
+    CompactStatusRowLabelCallSite,
+    CompactStatusRowZeroValueCallSite,
+    CompactStatusCurrentValueCallSite,
+    CompactStatusMaximumValueCallSite,
+    CompactStatusExtraLabelCallSite,
+    StatusBarGlyphRendererCallSite,
 }
 
 public enum X86CallingConvention
@@ -250,6 +275,12 @@ public delegate void EndingLogCallbackDelegate(nint closure, int eventType, int 
 public delegate void EndingDetailCallbackDelegate(nint closure, int eventType, int action);
 
 [Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasLogTransitionDelegate(nint payload);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasDetailTransitionDelegate(nint payload);
+
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint MenuNodeConfigSteamConstructorDelegate(nint instance, int context);
 
 [Function(CallingConventions.MicrosoftThiscall)]
@@ -296,6 +327,12 @@ public delegate nint ClassicTopMenuDeletingDestructorDelegate(nint topMenu, uint
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint TouchTopMenuDeletingDestructorDelegate(nint topOrEndingDetail, uint deletingFlags);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void TopMenuActionDispatcherDelegate(nint context);
+
+[Function(CallingConventions.Cdecl)]
+public delegate void NativeCallSiteProbeDelegate();
 
 // Callable wrapper for the audited std::function<int()>::_Do_call target. Reloaded
 // supplies the x86 thiscall-to-managed wrapper; the target object is passed in ECX.
