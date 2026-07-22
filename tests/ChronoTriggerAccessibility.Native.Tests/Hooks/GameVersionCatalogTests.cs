@@ -33,6 +33,9 @@ public sealed class GameVersionCatalogTests
         { HookId.ExtrasHubOnEnter, "Extras Hub onEnter", 0x1DB570, "568BF1FF15AC5A7800FFB6CC0200008BCEE80A0000005EC3", typeof(ExtrasHubOnEnterDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingLogOnEnter, "Ending Log onEnter", 0x1D3980, "568BF1FF15AC5A7800FFB6C80200008BCEE80A0000005EC3", typeof(EndingLogOnEnterDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingDetailOnEnter, "Ending Detail onEnter", 0x1D2730, "568BF1FF15AC5A7800518BCEE82F0000005EC3", typeof(EndingDetailOnEnterDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ExtrasNodeOnExit, "Extras node onExit", 0x1D2750, "568BF1FF15A05A78008B8E900200005E8B01FFA048010000", typeof(ExtrasNodeOnExitDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ExtrasHubDeletingDestructor, "Extras Hub deleting destructor", 0x1DB460, "558BEC568BF1E825000000F6450801740E680803000056E86972180083C4088BC65E5DC20400", typeof(ExtrasHubDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.EndingLogDeletingDestructor, "Ending Log deleting destructor", 0x1D38E0, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3000000008BF1C70688637A008B8EC002000085C974068B016A01FF108DBE98020000C745FC000000008B4F2485C974158B113BCF0F95C00FB6C050FF5210C74724000000008BCEFF156C597800F6450801740E68E002000056E887ED180083C4088BC68B4DF464890D00000000595F5E8BE55DC20400", typeof(EndingLogDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.ExtrasHubCallback, "Extras hub callback", 0x1DC610, "558BEC83E4F88B450883EC08568BF15783E8000F849E0000", typeof(ExtrasHubCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingLogCallback, "Ending Log callback", 0x1D4850, "558BEC8B4508568BF15783E8000F849200000083E8017435", typeof(EndingLogCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingDetailCallback, "Ending Detail callback", 0x1D35A0, "558BEC8B4508568BF183E800745983E801744083E8010F85", typeof(EndingDetailCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -75,12 +78,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyFortyFourUniqueContracts()
+    public void HookCatalog_HasExactlyFortySevenUniqueContracts()
     {
-        Assert.Equal(44, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(44, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(44, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(44, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(47, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(47, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -185,6 +188,9 @@ public sealed class GameVersionCatalogTests
         AssertSignature<ExtrasHubOnEnterDelegate>(typeof(nint));
         AssertSignature<EndingLogOnEnterDelegate>(typeof(nint));
         AssertSignature<EndingDetailOnEnterDelegate>(typeof(nint));
+        AssertSignature<ExtrasNodeOnExitDelegate>(typeof(nint));
+        AssertSignatureWithReturn<ExtrasHubDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
+        AssertSignatureWithReturn<EndingLogDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
         AssertSignature<ExtrasHubCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<EndingLogCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<EndingDetailCallbackDelegate>(typeof(nint), typeof(int), typeof(int));

@@ -30,6 +30,9 @@ public enum HookId
     ExtrasHubOnEnter,
     EndingLogOnEnter,
     EndingDetailOnEnter,
+    ExtrasNodeOnExit,
+    ExtrasHubDeletingDestructor,
+    EndingLogDeletingDestructor,
     ExtrasHubCallback,
     EndingLogCallback,
     EndingDetailCallback,
@@ -227,6 +230,15 @@ public delegate void EndingLogOnEnterDelegate(nint node);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void EndingDetailOnEnterDelegate(nint node);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasNodeOnExitDelegate(nint node);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint ExtrasHubDeletingDestructorDelegate(nint node, uint deletingFlags);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint EndingLogDeletingDestructorDelegate(nint node, uint deletingFlags);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ExtrasHubCallbackDelegate(nint closure, int eventType, int action);

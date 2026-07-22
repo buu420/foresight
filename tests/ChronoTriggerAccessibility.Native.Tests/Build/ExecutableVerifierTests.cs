@@ -94,7 +94,10 @@ public sealed class ExecutableVerifierTests
     [InlineData(HookId.ExtrasHubOnEnter)]
     [InlineData(HookId.EndingLogOnEnter)]
     [InlineData(HookId.EndingDetailOnEnter)]
-    public void Verify_OneCorruptExtrasOnEnterByte_RejectsTheEntireHookTransaction(HookId hookId)
+    [InlineData(HookId.ExtrasNodeOnExit)]
+    [InlineData(HookId.ExtrasHubDeletingDestructor)]
+    [InlineData(HookId.EndingLogDeletingDestructor)]
+    public void Verify_OneCorruptExtrasBoundaryByte_RejectsTheEntireHookTransaction(HookId hookId)
     {
         var bytes = File.ReadAllBytes(InstalledExecutable);
         var corruptHook = GameVersionCatalog.Get(hookId);
