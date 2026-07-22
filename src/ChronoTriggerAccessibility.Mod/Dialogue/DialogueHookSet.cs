@@ -29,6 +29,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
     private readonly ThreadLocal<ConfirmMarker?> confirmMarker = new(() => null);
     private readonly IReadOnlyList<IHookRegistration> registrations;
     private nuint imageBase;
+    private nuint pendingWindow;
     private nuint activeWindow;
     private string[]? choiceLabels;
     private int choicePageBase = -1;
@@ -182,7 +183,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
                 {
                     var instrument = TryCaptureActiveEpoch(out var epoch);
                     var nativeWindow = unchecked((nuint)window);
-                    var activation = ConsumeConfirmCandidate(epoch, nativeWindow, instrument);
+                    var preparation = PrepareCloseObservation(epoch, nativeWindow, instrument);
                     try
                     {
                         original()(window, dummyStackWord);
@@ -198,7 +199,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
 
                     if (instrument)
                     {
-                        CompleteClose(epoch, nativeWindow, activation);
+                        CompleteClose(epoch, nativeWindow, preparation);
                     }
                 }));
     }
@@ -308,7 +309,13 @@ public sealed class DialogueHookSet : IHookActivationObserver
         {
             return;
         }
-        if (!DialogueCapture.TryCreateSnapshot(memory, imageBase, window, out var snapshot, out var error))
+        var status = DialogueCapture.CaptureStatus(
+            memory,
+            imageBase,
+            window,
+            out var snapshot,
+            out var error);
+        if (status == DialogueCaptureStatus.Invalid)
         {
             ReportCaptureFailure(epoch, $"Post-open dialogue snapshot is incomplete: {error}");
             return;
@@ -324,6 +331,12 @@ public sealed class DialogueHookSet : IHookActivationObserver
             try
             {
                 ClearInteractionLocked();
+                if (status == DialogueCaptureStatus.Inactive)
+                {
+                    pendingWindow = window;
+                    return;
+                }
+
                 activeWindow = window;
                 dispatcher.Publish(new DialogueOpened());
                 ObserveSnapshotLocked(snapshot);
@@ -338,29 +351,73 @@ public sealed class DialogueHookSet : IHookActivationObserver
 
     private void ObservePostUpdate(int epoch, nuint window)
     {
+        bool wasPending;
         lock (lifecycleGate)
         {
-            if (!IsEpochObservableLocked(epoch) || activeWindow == 0 || activeWindow != window)
+            if (!IsEpochObservableLocked(epoch))
+            {
+                return;
+            }
+
+            if (pendingWindow == window)
+            {
+                wasPending = true;
+            }
+            else if (activeWindow == window)
+            {
+                wasPending = false;
+            }
+            else
             {
                 return;
             }
         }
 
-        if (!DialogueCapture.TryCreateSnapshot(memory, imageBase, window, out var snapshot, out var error))
+        var status = DialogueCapture.CaptureStatus(
+            memory,
+            imageBase,
+            window,
+            out var snapshot,
+            out var error);
+        if (status == DialogueCaptureStatus.Inactive && wasPending)
         {
-            ReportCaptureFailure(epoch, $"Registered dialogue update snapshot is incomplete: {error}");
+            return;
+        }
+        if (status != DialogueCaptureStatus.Complete)
+        {
+            ReportRegisteredCaptureFailure(
+                epoch,
+                window,
+                wasPending,
+                $"Registered dialogue update snapshot is incomplete: {error}");
             return;
         }
 
         lock (lifecycleGate)
         {
-            if (!IsEpochObservableLocked(epoch) || activeWindow != window)
+            if (!IsEpochObservableLocked(epoch))
             {
                 return;
             }
 
             try
             {
+                if (wasPending)
+                {
+                    if (pendingWindow != window)
+                    {
+                        return;
+                    }
+
+                    pendingWindow = 0;
+                    activeWindow = window;
+                    dispatcher.Publish(new DialogueOpened());
+                }
+                else if (activeWindow != window)
+                {
+                    return;
+                }
+
                 ObserveSnapshotLocked(snapshot);
             }
             catch
@@ -438,43 +495,105 @@ public sealed class DialogueHookSet : IHookActivationObserver
         }
     }
 
-    private CloseActivation? ConsumeConfirmCandidate(int epoch, nuint window, bool instrument)
+    private ClosePreparation PrepareCloseObservation(int epoch, nuint window, bool instrument)
     {
         var marker = confirmMarker.Value;
         confirmMarker.Value = null;
-        if (!instrument || marker is null)
+        if (!instrument)
         {
-            return null;
+            return default;
         }
 
         lock (lifecycleGate)
         {
-            if (!IsEpochObservableLocked(epoch) || marker.Value.Epoch != epoch ||
-                marker.Value.Window != window || activeWindow != window ||
-                choiceLabels is null || selectedChoice < 0 || selectedChoice >= choiceLabels.Length)
+            if (!IsEpochObservableLocked(epoch))
             {
-                return null;
+                return default;
             }
 
-            return new CloseActivation(epoch, window, new string(choiceLabels[selectedChoice].AsSpan()));
+            var recognized = activeWindow == window || pendingWindow == window;
+            if (!recognized)
+            {
+                return default;
+            }
+
+            if (activeWindow != window || marker is null || marker.Value.Epoch != epoch ||
+                marker.Value.Window != window || choiceLabels is null || selectedChoice < 0 ||
+                selectedChoice >= choiceLabels.Length)
+            {
+                return new ClosePreparation(epoch, window, Recognized: true, null, null);
+            }
+
+            var status = DialogueCapture.CaptureStatus(
+                memory,
+                imageBase,
+                window,
+                out var snapshot,
+                out var error);
+            if (status != DialogueCaptureStatus.Complete)
+            {
+                return new ClosePreparation(
+                    epoch,
+                    window,
+                    Recognized: true,
+                    $"Pre-close dialogue choice snapshot is incomplete: {error}",
+                    null);
+            }
+
+            if (snapshot.PageBase != choicePageBase || snapshot.Choices is null ||
+                snapshot.Choices.FirstLineIndex != choiceFirstLine ||
+                snapshot.Choices.Labels.Count != choiceLabels.Length ||
+                !snapshot.Choices.Labels.SequenceEqual(choiceLabels, StringComparer.Ordinal) ||
+                snapshot.Choices.SelectedIndex < 0 ||
+                snapshot.Choices.SelectedIndex >= snapshot.Choices.Labels.Count)
+            {
+                return new ClosePreparation(
+                    epoch,
+                    window,
+                    Recognized: true,
+                    "Pre-close dialogue choice snapshot does not exactly match the presented choice list and valid selected range.",
+                    null);
+            }
+
+            var freshSelection = snapshot.Choices.SelectedIndex;
+            var activation = new CloseActivation(
+                new string(snapshot.Choices.Labels[freshSelection].AsSpan()),
+                freshSelection,
+                snapshot.Choices.Labels.Count,
+                FocusChanged: freshSelection != selectedChoice);
+            return new ClosePreparation(epoch, window, Recognized: true, null, activation);
         }
     }
 
-    private void CompleteClose(int epoch, nuint window, CloseActivation? activation)
+    private void CompleteClose(int epoch, nuint window, ClosePreparation preparation)
     {
+        if (preparation.Diagnostic is not null)
+        {
+            ReportCaptureFailure(epoch, preparation.Diagnostic);
+            return;
+        }
+
         lock (lifecycleGate)
         {
-            if (!IsEpochObservableLocked(epoch) || activeWindow == 0 || activeWindow != window)
+            if (!IsEpochObservableLocked(epoch) || !preparation.Recognized ||
+                preparation.Epoch != epoch || preparation.Window != window ||
+                (activeWindow != window && pendingWindow != window))
             {
                 return;
             }
 
             try
             {
-                if (activation is not null && activation.Value.Epoch == epoch &&
-                    activation.Value.Window == window)
+                if (preparation.Activation is { } activation)
                 {
-                    dispatcher.Publish(new DialogueChoiceActivated(activation.Value.Label));
+                    if (activation.FocusChanged)
+                    {
+                        dispatcher.Publish(new DialogueChoiceFocused(
+                            activation.Label,
+                            activation.SelectedIndex,
+                            activation.Count));
+                    }
+                    dispatcher.Publish(new DialogueChoiceActivated(activation.Label));
                 }
 
                 ClearInteractionLocked();
@@ -525,6 +644,28 @@ public sealed class DialogueHookSet : IHookActivationObserver
         }
     }
 
+    private void ReportRegisteredCaptureFailure(
+        int epoch,
+        nuint window,
+        bool pending,
+        string diagnostic)
+    {
+        lock (lifecycleGate)
+        {
+            if (!IsEpochObservableLocked(epoch) ||
+                (pending ? pendingWindow != window : activeWindow != window))
+            {
+                return;
+            }
+
+            FaultLocked();
+            var exact = string.IsNullOrWhiteSpace(diagnostic)
+                ? "Dialogue snapshot capture failed without a diagnostic."
+                : diagnostic;
+            dispatcher.ReportCoverageFailure(exact);
+        }
+    }
+
     private void FaultEpoch(int epoch)
     {
         lock (lifecycleGate)
@@ -544,6 +685,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
 
     private void ClearInteractionLocked()
     {
+        pendingWindow = 0;
         activeWindow = 0;
         observedLines.Clear();
         ClearChoicesLocked();
@@ -575,5 +717,15 @@ public sealed class DialogueHookSet : IHookActivationObserver
 
     private readonly record struct DialogueLineIdentity(int PageBase, int LineIndex, string Text);
     private readonly record struct ConfirmMarker(int Epoch, nuint Window);
-    private readonly record struct CloseActivation(int Epoch, nuint Window, string Label);
+    private readonly record struct ClosePreparation(
+        int Epoch,
+        nuint Window,
+        bool Recognized,
+        string? Diagnostic,
+        CloseActivation? Activation);
+    private readonly record struct CloseActivation(
+        string Label,
+        int SelectedIndex,
+        int Count,
+        bool FocusChanged);
 }

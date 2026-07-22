@@ -164,6 +164,81 @@ public sealed class DialogueHookSetTests
     }
 
     [Fact]
+    public void DelayedNativeOpeningWaitsThroughInactiveUpdatesThenOpensWithFirstCompleteSnapshot()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetInactive(Window);
+        harness.PrepareAndActivate();
+
+        harness.Open();
+        harness.Update();
+        harness.Update();
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+
+        harness.Memory.SetOrdinary(Window, ["Now visible"], cursor: 0, pageBase: 0);
+        harness.Update();
+
+        Assert.Collection(
+            harness.Dispatcher.Events,
+            item => Assert.IsType<DialogueOpened>(item),
+            item => Assert.Equal(new DialogueLinePresented(0, 0, "Now visible"), item));
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void PendingOpeningInvalidStateFailsBeforeAnyOpenOrPartialText()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetInactive(Window);
+        harness.PrepareAndActivate();
+        harness.Open();
+        Assert.Empty(harness.Dispatcher.Failures);
+
+        harness.Memory.SetInvalidActive(Window, 2);
+        harness.Update();
+
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Events);
+    }
+
+    [Fact]
+    public void PendingWindowCloseCallsOriginalAndResetsWithCloseButNeverFabricatesOpen()
+    {
+        var harness = CreateHarness();
+        var closeCalls = 0;
+        harness.Functions.SetOriginal<MsgWindowCloseDelegate>(HookId.MsgWindowClose, (_, _) => closeCalls++);
+        harness.Memory.SetInactive(Window);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        harness.Close();
+
+        Assert.Equal(1, closeCalls);
+        Assert.Collection(harness.Dispatcher.Events, item => Assert.IsType<DialogueClosed>(item));
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueOpened>());
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueLinePresented>());
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void DisableWhilePendingSuppressesLateActivationAndClearsPendingWindow()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetInactive(Window);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        harness.Installer.DisableAll();
+        harness.Memory.SetOrdinary(Window, ["Too late"], cursor: 0, pageBase: 0);
+        harness.Update();
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
     public void OrdinaryLinesIgnoreFutureVectorEntriesDeduplicateRevealAndResetAfterClose()
     {
         var harness = CreateHarness();
@@ -254,6 +329,56 @@ public sealed class DialogueHookSetTests
     }
 
     [Fact]
+    public void SameUpdateMovementThenConfirmUsesFreshPreCloseChoiceAndPublishesFocusFirst()
+    {
+        var harness = CreateHarness();
+        var closeCalls = 0;
+        harness.Functions.SetOriginal<MsgWindowUpdateDelegate>(HookId.MsgWindowUpdate, (_, _) =>
+        {
+            harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: 1);
+            harness.Assembly.Invoke(Window);
+            harness.Close();
+        });
+        harness.Functions.SetOriginal<MsgWindowCloseDelegate>(HookId.MsgWindowClose, (_, _) => closeCalls++);
+        harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: 0);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        harness.Update();
+
+        Assert.Equal(1, closeCalls);
+        Assert.Collection(
+            harness.Dispatcher.Events.TakeLast(3),
+            item => Assert.Equal(new DialogueChoiceFocused("No", 1, 2), item),
+            item => Assert.Equal(new DialogueChoiceActivated("No"), item),
+            item => Assert.IsType<DialogueClosed>(item));
+        Assert.DoesNotContain(
+            harness.Dispatcher.Events.OfType<DialogueChoiceActivated>(),
+            item => item.Label == "Yes");
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void MarkedCloseListMismatchCallsOriginalOnceThenFailsWithoutStaleActivationOrClose()
+    {
+        var harness = CreateHarness();
+        var closeCalls = 0;
+        harness.Functions.SetOriginal<MsgWindowCloseDelegate>(HookId.MsgWindowClose, (_, _) => closeCalls++);
+        harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: 0);
+        harness.PrepareAndActivate();
+        harness.Open();
+        harness.Assembly.Invoke(Window);
+        harness.Memory.SetChoices(Window, "Prompt", ["Fight", "Flee"], selectedIndex: 1);
+
+        harness.Close();
+
+        Assert.Equal(1, closeCalls);
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueClosed>());
+    }
+
+    [Fact]
     public void MissingWrongWindowNegativeAndCrossThreadProbeMarkersNeverActivate()
     {
         var harness = CreateHarness();
@@ -301,7 +426,7 @@ public sealed class DialogueHookSetTests
     public void InvalidOpenAndOutOfRangeChoiceCaptureFailCoverageBeforePartialEvents()
     {
         var invalidOpen = CreateHarness();
-        invalidOpen.Memory.SetInactive(Window);
+        invalidOpen.Memory.SetInvalidActive(Window, 2);
         invalidOpen.PrepareAndActivate();
 
         var openException = Record.Exception(() => invalidOpen.Open());
@@ -402,7 +527,7 @@ public sealed class DialogueHookSetTests
         Assert.Single(publishFailure.Fatal.Messages);
 
         var reportFailure = CreateHarness();
-        reportFailure.Memory.SetInactive(Window);
+        reportFailure.Memory.SetInvalidActive(Window, 2);
         reportFailure.Dispatcher.ThrowOnCoverageFailure = true;
         reportFailure.PrepareAndActivate();
 
@@ -449,6 +574,46 @@ public sealed class DialogueHookSetTests
             harness.Dispatcher.Events,
             @event => Assert.IsType<DialogueOpened>(@event),
             @event => Assert.IsType<DialogueChoicesPresented>(@event));
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public async Task DisableDuringBlockedCloseSuppressesPreparedActivationAndLateClose()
+    {
+        var harness = CreateHarness();
+        using var enteredOriginal = new ManualResetEventSlim(false);
+        using var releaseOriginal = new ManualResetEventSlim(false);
+        var closeCalls = 0;
+        harness.Functions.SetOriginal<MsgWindowCloseDelegate>(HookId.MsgWindowClose, (_, _) =>
+        {
+            closeCalls++;
+            enteredOriginal.Set();
+            if (!releaseOriginal.Wait(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException("blocked close original was not released");
+            }
+        });
+        harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: 1);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        var closeTask = Task.Run(() =>
+        {
+            harness.Assembly.Invoke(Window);
+            harness.Close();
+        });
+        Assert.True(enteredOriginal.Wait(TimeSpan.FromSeconds(5)));
+        harness.Installer.DisableAll();
+        releaseOriginal.Set();
+        await closeTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, closeCalls);
+        Assert.Collection(
+            harness.Dispatcher.Events,
+            @event => Assert.IsType<DialogueOpened>(@event),
+            @event => Assert.IsType<DialogueChoicesPresented>(@event));
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueClosed>());
         Assert.Empty(harness.Dispatcher.Failures);
     }
 
@@ -703,6 +868,14 @@ public sealed class DialogueHookSetTests
         public void SetInactive(nuint window) =>
             SetSnapshot(window, ["Inactive"], [0], cursor: 0, pageBase: 0,
                 phase: 0, choiceCount: 0, selectedIndex: -1, active: 0);
+
+        public void SetInvalidActive(nuint window, byte active)
+        {
+            Assert.NotEqual((byte)0, active);
+            Assert.NotEqual((byte)1, active);
+            SetSnapshot(window, ["Invalid"], [0], cursor: 0, pageBase: 0,
+                phase: 0, choiceCount: 0, selectedIndex: -1, active);
+        }
 
         public bool TryRead(nuint address, Span<byte> destination)
         {

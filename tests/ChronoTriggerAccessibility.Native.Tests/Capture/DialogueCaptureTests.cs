@@ -14,6 +14,38 @@ public sealed class DialogueCaptureTests
     private const nuint FlagsAddress = 0x8000;
 
     [Theory]
+    [InlineData(0, DialogueCaptureStatus.Inactive)]
+    [InlineData(2, DialogueCaptureStatus.Invalid)]
+    public void CaptureStatusDistinguishesExpectedOpeningDelayFromMalformedActiveByte(
+        int active,
+        DialogueCaptureStatus expected)
+    {
+        var memory = CreateMemory(
+            ["Line"], [0x08], active: active, currentLine: 0, pageBase: 0, phase: 0);
+
+        var status = DialogueCapture.CaptureStatus(
+            memory, ImageBase, WindowAddress, out var snapshot, out var error);
+
+        Assert.Equal(expected, status);
+        Assert.Null(snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
+
+    [Fact]
+    public void CaptureStatusReturnsCompleteWithTheSameDefensiveSnapshotAsBoolApi()
+    {
+        var memory = CreateMemory(
+            ["Line"], [0x08], active: 1, currentLine: 0, pageBase: 0, phase: 0);
+
+        var status = DialogueCapture.CaptureStatus(
+            memory, ImageBase, WindowAddress, out var snapshot, out var error);
+
+        Assert.Equal(DialogueCaptureStatus.Complete, status);
+        Assert.Equal(new DialogueLineSnapshot(0, "Line", 0x08), snapshot.Line);
+        Assert.Empty(error);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(2)]
     public void TryCreateSnapshot_ActiveRenderingPhasesCaptureOnlyCurrentLine(int phase)

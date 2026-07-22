@@ -20,6 +20,13 @@ public sealed record DialogueSnapshot(
     DialogueLineSnapshot? Line,
     DialogueChoicesSnapshot? Choices);
 
+public enum DialogueCaptureStatus
+{
+    Complete,
+    Inactive,
+    Invalid,
+}
+
 public static class DialogueCapture
 {
     public const uint VtableRva = 0x3A0624;
@@ -44,17 +51,39 @@ public static class DialogueCapture
         nuint imageBase,
         nuint window,
         out DialogueSnapshot snapshot,
+        out string error) =>
+        CaptureStatus(memory, imageBase, window, out snapshot, out error) ==
+            DialogueCaptureStatus.Complete;
+
+    public static DialogueCaptureStatus CaptureStatus(
+        IReadableMemory? memory,
+        nuint imageBase,
+        nuint window,
+        out DialogueSnapshot snapshot,
         out string error)
     {
         try
         {
-            return TryCreateSnapshotCore(memory, imageBase, window, out snapshot, out error);
+            if (TryCreateSnapshotCore(
+                memory,
+                imageBase,
+                window,
+                out snapshot,
+                out error,
+                out var inactive))
+            {
+                return DialogueCaptureStatus.Complete;
+            }
+
+            return inactive
+                ? DialogueCaptureStatus.Inactive
+                : DialogueCaptureStatus.Invalid;
         }
         catch (Exception exception)
         {
             snapshot = null!;
             error = $"Dialogue memory capture failed safely: {exception.GetType().Name}: {exception.Message}";
-            return false;
+            return DialogueCaptureStatus.Invalid;
         }
     }
 
@@ -63,9 +92,11 @@ public static class DialogueCapture
         nuint imageBase,
         nuint window,
         out DialogueSnapshot snapshot,
-        out string error)
+        out string error,
+        out bool inactive)
     {
         snapshot = null!;
+        inactive = false;
         if (memory is null || imageBase == 0 || window == 0)
         {
             error = "Dialogue window memory, image base, or object address is unavailable.";
@@ -104,6 +135,12 @@ public static class DialogueCapture
         }
 
         var active = objectBytes[ActiveOffset];
+        if (active == 0)
+        {
+            inactive = true;
+            error = "Dialogue MsgWindow is not yet active.";
+            return false;
+        }
         if (active != 1)
         {
             error = $"Dialogue MsgWindow active byte {active} is not the required active value 1.";
