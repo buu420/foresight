@@ -10,7 +10,15 @@ public interface IRuntimeNativeHookFactory
         where TDelegate : Delegate;
 }
 
-public sealed class ReloadedNativeHookFactory(SharedReloadedHooks hooks) : IRuntimeNativeHookFactory
+public interface IRuntimeNativeFunctionWrapperFactory
+{
+    TDelegate CreateWrapper<TDelegate>(nuint address)
+        where TDelegate : Delegate;
+}
+
+public sealed class ReloadedNativeHookFactory(SharedReloadedHooks hooks) :
+    IRuntimeNativeHookFactory,
+    IRuntimeNativeFunctionWrapperFactory
 {
     private readonly SharedReloadedHooks hooks = hooks ?? throw new ArgumentNullException(nameof(hooks));
 
@@ -21,4 +29,8 @@ public sealed class ReloadedNativeHookFactory(SharedReloadedHooks hooks) : IRunt
         ArgumentNullException.ThrowIfNull(detour);
         return hooks.CreateHook(detour, checked((long)address));
     }
+
+    public TDelegate CreateWrapper<TDelegate>(nuint address)
+        where TDelegate : Delegate =>
+        hooks.CreateWrapper<TDelegate>(checked((long)address), out _);
 }
