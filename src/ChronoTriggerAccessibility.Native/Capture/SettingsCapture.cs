@@ -264,7 +264,20 @@ public static class SettingsCapture
             diagnostic = "Settings row value-vector address crosses x86 memory.";
             return false;
         }
-        if (!new MsvcStringVectorReader(capturedRowMemory).TryRead(valuesAddress, out var values, out var valuesError))
+        if (!TryCaptureValueStringHeaders(
+                memory,
+                rowBytes.AsSpan(RowValuesOffset, MsvcStringVectorReader.HeaderSize),
+                out var valueHeadersAddress,
+                out var capturedValueHeaders,
+                out diagnostic))
+        {
+            return false;
+        }
+        var capturedValuesMemory = new CapturedRangeMemory(
+            capturedRowMemory,
+            valueHeadersAddress,
+            capturedValueHeaders);
+        if (!new MsvcStringVectorReader(capturedValuesMemory).TryRead(valuesAddress, out var values, out var valuesError))
         {
             diagnostic = $"Settings row value vector is invalid: {valuesError}";
             return false;
@@ -279,6 +292,12 @@ public static class SettingsCapture
         if (selectedIndex < 0 || selectedIndex >= values.Count)
         {
             diagnostic = $"Settings selected value index {selectedIndex} is outside {values.Count} values.";
+            return false;
+        }
+        var displayedValue = values[selectedIndex];
+        if (string.IsNullOrWhiteSpace(displayedValue))
+        {
+            diagnostic = $"Settings selected displayed value at index {selectedIndex} is blank.";
             return false;
         }
         var expectedPrimaryKey = checked(rowIndex * 4 + 1);
@@ -306,7 +325,7 @@ public static class SettingsCapture
 
         var control = new MenuControlSnapshot(
             new string(label.AsSpan()),
-            new string(values[selectedIndex].AsSpan()),
+            new string(displayedValue.AsSpan()),
             new string(help.AsSpan()),
             nativeKey,
             rowIndex + 1,
@@ -321,6 +340,55 @@ public static class SettingsCapture
             nativeKey,
             selectedIndex,
             control);
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    private static bool TryCaptureValueStringHeaders(
+        IReadableMemory memory,
+        ReadOnlySpan<byte> header,
+        out uint begin,
+        out byte[] captured,
+        out string diagnostic)
+    {
+        begin = BinaryPrimitives.ReadUInt32LittleEndian(header);
+        var end = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
+        var capacity = BinaryPrimitives.ReadUInt32LittleEndian(header[8..]);
+        captured = [];
+        if (begin == 0 || end < begin || capacity < end)
+        {
+            diagnostic = "Settings value-string vector pointers are null, reversed, or exceed capacity.";
+            return false;
+        }
+
+        var span = end - begin;
+        var capacitySpan = capacity - begin;
+        if (span % MsvcStringReader.LayoutSize != 0 || capacitySpan % MsvcStringReader.LayoutSize != 0)
+        {
+            diagnostic = "Settings value-string vector bounds are not aligned to the exact 0x18-byte string stride.";
+            return false;
+        }
+        var count = span / MsvcStringReader.LayoutSize;
+        if (count > MsvcStringVectorReader.MaximumElementCount ||
+            span > MsvcStringVectorReader.MaximumVectorByteLength ||
+            capacitySpan > MsvcStringVectorReader.MaximumVectorByteLength)
+        {
+            diagnostic = "Settings value-string vector count, span, or capacity exceeds the hardened reader limits.";
+            return false;
+        }
+        if (span == 0 || !FitsX86Range(begin, checked((int)span)))
+        {
+            diagnostic = "Settings value-string vector is empty or crosses x86 memory.";
+            return false;
+        }
+
+        captured = new byte[checked((int)span)];
+        if (!memory.TryRead(begin, captured))
+        {
+            captured = [];
+            diagnostic = $"Settings value-string headers at 0x{begin:X8} are unreadable.";
+            return false;
+        }
         diagnostic = string.Empty;
         return true;
     }

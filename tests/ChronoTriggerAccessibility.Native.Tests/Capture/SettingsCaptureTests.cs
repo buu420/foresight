@@ -183,6 +183,8 @@ public sealed class SettingsCaptureTests
             new SettingsFixture(uiType: 1, values: [], nativeKey: 1));
         AssertFixtureFailure("all values blank", _ => { },
             new SettingsFixture(uiType: 1, values: [" ", "\t"], nativeKey: 1));
+        AssertFixtureFailure("selected displayed value blank", _ => { },
+            new SettingsFixture(uiType: 0, values: ["On", " "], selectedIndex: 1, nativeKey: 2));
         AssertFixtureFailure("blank label", fixture =>
             SettingsFixture.WriteInlineString(fixture.Rows, 0x04, " "));
         AssertFixtureFailure("blank help", fixture =>
@@ -267,6 +269,30 @@ public sealed class SettingsCaptureTests
         var memory = new MutatingVtableMemory(fixture.Memory, SettingsFixture.ConfigAddress);
 
         AssertCaptureFailure(memory, ImageBase, SettingsFixture.ConfigAddress, SettingsFixture.ManagerAddress, "mutated config vtable");
+    }
+
+    [Fact]
+    public void CapturesAllValueStringHeadersInOneGenerationBeforeDecoding()
+    {
+        var fixture = new SettingsFixture(
+            uiType: 0,
+            values: ["Old zero", "Old one"],
+            selectedIndex: 1,
+            nativeKey: 2);
+        var memory = new MutatingValueHeadersMemory(fixture.Memory, fixture.Values);
+
+        Assert.True(SettingsCapture.TryCreateSnapshot(
+            memory,
+            ImageBase,
+            SettingsFixture.ConfigAddress,
+            SettingsFixture.ManagerAddress,
+            out var snapshot,
+            out var diagnostic), diagnostic);
+
+        Assert.Equal("Old one", snapshot.Control.Value);
+        var read = Assert.Single(memory.ValueHeaderReads);
+        Assert.Equal(SettingsFixture.ValuesAddress, read.Address);
+        Assert.Equal(2 * MsvcStringReader.LayoutSize, read.Length);
     }
 
     [Fact]
@@ -531,6 +557,30 @@ public sealed class SettingsCaptureTests
                 }
             }
             return inner.TryRead(address, destination);
+        }
+    }
+
+    private sealed class MutatingValueHeadersMemory(IReadableMemory inner, byte[] values) : IReadableMemory
+    {
+        private bool mutated;
+
+        public List<(nuint Address, int Length)> ValueHeaderReads { get; } = [];
+
+        public bool TryRead(nuint address, Span<byte> destination)
+        {
+            var succeeded = inner.TryRead(address, destination);
+            if (address >= SettingsFixture.ValuesAddress &&
+                address < SettingsFixture.ValuesAddress + (nuint)values.Length)
+            {
+                ValueHeaderReads.Add((address, destination.Length));
+                if (!mutated)
+                {
+                    mutated = true;
+                    SettingsFixture.WriteInlineString(values, 0, "New zero");
+                    SettingsFixture.WriteInlineString(values, MsvcStringReader.LayoutSize, "New one");
+                }
+            }
+            return succeeded;
         }
     }
 
