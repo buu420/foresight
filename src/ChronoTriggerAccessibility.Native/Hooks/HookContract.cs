@@ -27,6 +27,9 @@ public enum HookId
     NameDirectEntryActivation,
     NameDirectEntryClose,
     GallerySceneSwitchNode,
+    ExtrasHubOnEnter,
+    EndingLogOnEnter,
+    EndingDetailOnEnter,
     ExtrasHubCallback,
     EndingLogCallback,
     EndingDetailCallback,
@@ -215,6 +218,15 @@ public delegate void NameDirectEntryCloseDelegate(nint capture);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate int GallerySceneSwitchNodeDelegate(nint galleryScene, int action, uint rawStackWord1);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasHubOnEnterDelegate(nint node);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingLogOnEnterDelegate(nint node);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingDetailOnEnterDelegate(nint node);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ExtrasHubCallbackDelegate(nint closure, int eventType, int action);

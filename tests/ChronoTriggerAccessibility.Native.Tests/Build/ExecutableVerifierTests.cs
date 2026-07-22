@@ -89,4 +89,31 @@ public sealed class ExecutableVerifierTests
         Assert.Null(result.VerifiedExecutable);
         Assert.Contains(result.Failures, failure => failure.Contains(corruptHook.Symbol, StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData(HookId.ExtrasHubOnEnter)]
+    [InlineData(HookId.EndingLogOnEnter)]
+    [InlineData(HookId.EndingDetailOnEnter)]
+    public void Verify_OneCorruptExtrasOnEnterByte_RejectsTheEntireHookTransaction(HookId hookId)
+    {
+        var bytes = File.ReadAllBytes(InstalledExecutable);
+        var corruptHook = GameVersionCatalog.Get(hookId);
+        int fileOffset;
+        using (var image = PeImage.FromBytes(bytes))
+        {
+            fileOffset = image.RvaToFileOffset(corruptHook.Rva, corruptHook.ExpectedBytes.Length);
+        }
+
+        bytes[fileOffset] ^= 0xFF;
+        var fixtureIdentity = GameVersionCatalog.Executable with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
+        };
+
+        var result = new ExecutableVerifier().Verify(bytes, fixtureIdentity, GameVersionCatalog.Hooks);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(result.VerifiedExecutable);
+        Assert.Contains(result.Failures, failure => failure.Contains(corruptHook.Symbol, StringComparison.Ordinal));
+    }
 }
