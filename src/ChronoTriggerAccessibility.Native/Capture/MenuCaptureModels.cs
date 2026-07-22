@@ -44,6 +44,7 @@ public enum SteamSettingsFocusKind
 }
 
 public sealed record SteamSettingsValueObservation(
+    int CaptureGeneration,
     nuint RootAddress,
     int PageIndex,
     nuint RowAddress,
@@ -194,9 +195,19 @@ public enum TouchSettingsFocusKind
 }
 
 public sealed record TouchSettingsSpecialControlObservation(
+    int CaptureGeneration,
+    nuint RootAddress,
+    int PageIndex,
     int Key,
     nuint ControlAddress,
     string Label);
+
+public sealed record TouchSettingsManagerObservation(
+    int CaptureGeneration,
+    nuint RootAddress,
+    int PageIndex,
+    nuint ManagerAddress,
+    nuint FocusedControlAddress);
 
 public sealed class TouchSettingsRowSnapshot
 {

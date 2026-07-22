@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections;
 using System.Text;
 using ChronoTriggerAccessibility.Native.Capture;
 using ChronoTriggerAccessibility.Native.Memory;
@@ -117,11 +118,65 @@ public sealed class SteamSettingsCaptureTests
 
         var action = new SteamFixture(rows: [new("Action", ["Open"], [], null)]);
         action.Observations.Add(new(
+            SteamFixture.CaptureGeneration,
             SteamFixture.RootAddress,
             0,
             SteamFixture.RowsAddress,
             SteamFixture.RowsAddress + 0x24u));
         AssertSteamFailure(action, _ => { }, "action observation");
+    }
+
+    [Fact]
+    public void RejectsGenuinelyStaleSteamObservationGenerationDespiteAddressReuse()
+    {
+        var fixture = new SteamFixture();
+        fixture.Observations[0] = fixture.Observations[0] with
+        {
+            CaptureGeneration = SteamFixture.CaptureGeneration - 1,
+        };
+
+        AssertSteamFailure(fixture, _ => { }, "stale observation generation");
+    }
+
+    [Fact]
+    public void ClonesBoundedSteamObservationsBeforeReadingNativeMemory()
+    {
+        var fixture = new SteamFixture();
+        var observations = fixture.Observations;
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            SteamFixture.RootAddress,
+            observations.Clear);
+
+        Assert.True(
+            SteamSettingsCapture.TryCreateSnapshot(
+                memory,
+                ImageBase,
+                SteamFixture.RootAddress,
+                SteamFixture.CaptureGeneration,
+                observations,
+                out var snapshot,
+                out var diagnostic),
+            diagnostic);
+        Assert.Single(snapshot.Page!.Rows);
+        Assert.Empty(observations);
+    }
+
+    [Fact]
+    public void RejectsOversizedSteamObservationsBeforeAccessingElements()
+    {
+        var observations = new OversizedReadOnlyList<SteamSettingsValueObservation>(
+            SteamSettingsCapture.MaximumRowCount + 1);
+        var fixture = new SteamFixture();
+
+        AssertSteamCallFailure(
+            fixture.Memory,
+            ImageBase,
+            SteamFixture.RootAddress,
+            observations,
+            "oversized observation collection");
+        Assert.False(observations.WasAccessed);
+        Assert.Empty(fixture.Memory.Reads);
     }
 
     [Fact]
@@ -172,6 +227,82 @@ public sealed class SteamSettingsCaptureTests
         AssertSteamFailure(new SteamFixture(), fixture => WriteInlineString(fixture.HelpBlocks[0], 0, " "), "help blank");
         AssertSteamFailure(new SteamFixture(), fixture => WriteInlineString(fixture.ValueBlocks[0], 0, " "), "value blank");
         AssertSteamFailure(new SteamFixture(rows: [new("Bad help", ["One", "Two"], ["A", "B", "C"], 0)]), _ => { }, "help count mismatch");
+    }
+
+    [Fact]
+    public void RejectsHeapBackedCategoryPayloadMutationDuringCapture()
+    {
+        const nuint payloadAddress = 0x70000;
+        var fixture = new SteamFixture();
+        var payload = WriteHeapString(
+            fixture.Memory,
+            fixture.Categories,
+            0,
+            payloadAddress,
+            "Category label longer than fifteen bytes");
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            payloadAddress,
+            () => payload[0] ^= 0x20);
+
+        AssertSteamCallFailure(memory, ImageBase, SteamFixture.RootAddress, fixture.Observations, "category heap payload mutation");
+    }
+
+    [Fact]
+    public void RejectsHeapBackedRowPayloadMutationDuringCapture()
+    {
+        const nuint payloadAddress = 0x71000;
+        var fixture = new SteamFixture();
+        var payload = WriteHeapString(
+            fixture.Memory,
+            fixture.Rows,
+            0,
+            payloadAddress,
+            "Settings row label longer than fifteen bytes");
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            payloadAddress,
+            () => payload[0] ^= 0x20);
+
+        AssertSteamCallFailure(memory, ImageBase, SteamFixture.RootAddress, fixture.Observations, "row heap payload mutation");
+    }
+
+    [Fact]
+    public void RejectsHeapBackedHelpPayloadMutationDuringCapture()
+    {
+        const nuint payloadAddress = 0x72000;
+        var fixture = new SteamFixture();
+        var payload = WriteHeapString(
+            fixture.Memory,
+            fixture.HelpBlocks[0],
+            0,
+            payloadAddress,
+            "Settings help text longer than fifteen bytes");
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            payloadAddress,
+            () => payload[0] ^= 0x20);
+
+        AssertSteamCallFailure(memory, ImageBase, SteamFixture.RootAddress, fixture.Observations, "help heap payload mutation");
+    }
+
+    [Fact]
+    public void RejectsHeapBackedValuePayloadMutationDuringCapture()
+    {
+        const nuint payloadAddress = 0x73000;
+        var fixture = new SteamFixture();
+        var payload = WriteHeapString(
+            fixture.Memory,
+            fixture.ValueBlocks[0],
+            0,
+            payloadAddress,
+            "Settings value text longer than fifteen bytes");
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            payloadAddress,
+            () => payload[0] ^= 0x20);
+
+        AssertSteamCallFailure(memory, ImageBase, SteamFixture.RootAddress, fixture.Observations, "value heap payload mutation");
     }
 
     [Fact]
@@ -256,7 +387,16 @@ public sealed class SteamSettingsCaptureTests
         IReadOnlyList<SteamSettingsValueObservation>? observations,
         string because)
     {
-        Assert.False(SteamSettingsCapture.TryCreateSnapshot(memory, imageBase, root, observations, out var snapshot, out var diagnostic), because);
+        Assert.False(
+            SteamSettingsCapture.TryCreateSnapshot(
+                memory,
+                imageBase,
+                root,
+                SteamFixture.CaptureGeneration,
+                observations,
+                out var snapshot,
+                out var diagnostic),
+            because);
         Assert.Null(snapshot);
         Assert.False(string.IsNullOrWhiteSpace(diagnostic));
     }
@@ -343,8 +483,68 @@ public sealed class TouchSettingsCaptureTests
         AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with { Label = " " }, "blank label");
         AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with { ControlAddress = 0xDEAD }, "wrong pointer");
         AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with { Key = 1002 }, "duplicate key");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with
+        {
+            CaptureGeneration = TouchFixture.CaptureGeneration - 1,
+        }, "stale generation");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with
+        {
+            RootAddress = TouchFixture.RootAddress + 4,
+        }, "wrong root");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with
+        {
+            PageIndex = 1,
+        }, "wrong page");
         AssertTouchFailure(new TouchFixture(focusedKey: 1000), _ => { }, "1000 without pointer");
         AssertTouchFailure(new TouchFixture(focusedKey: 1003), _ => { }, "unknown special key");
+    }
+
+    [Fact]
+    public void RejectsMissingStaleOrMismatchedTouchManagerObservation()
+    {
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.ManagerObservation = null, "missing manager observation");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            CaptureGeneration = TouchFixture.CaptureGeneration - 1,
+        }, "stale manager generation");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            RootAddress = TouchFixture.RootAddress + 4,
+        }, "wrong manager root");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            PageIndex = 1,
+        }, "wrong manager page");
+        AssertTouchFailure(new TouchFixture(), fixture => WritePointer(fixture.Manager, 0, ImageBase + 0x10), "wrong manager vtable");
+        AssertTouchFailure(new TouchFixture(), fixture => WriteInt32(fixture.Manager, 0x2C4, 2), "manager/root focus mismatch");
+        AssertTouchFailure(new TouchFixture(), fixture => fixture.Memory.Remove(TouchFixture.ManagerAddress), "manager unreadable");
+    }
+
+    [Fact]
+    public void RequiresObservedFocusedControlToBelongToTheCurrentCapturedGroup()
+    {
+        var fixture = new TouchFixture(
+            rows: [TouchRowSpec.Default, TouchRowSpec.Default],
+            focusedKey: 1);
+        fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            FocusedControlAddress = fixture.GroupControlAddresses[1][0],
+        };
+        AssertTouchFailure(fixture, _ => { }, "focused control from a different row group");
+
+        fixture = new TouchFixture(focusedKey: 1001);
+        fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            FocusedControlAddress = fixture.GroupControlAddresses[0][0],
+        };
+        AssertTouchFailure(fixture, _ => { }, "special focus requires exact permanent control");
+
+        fixture = new TouchFixture(focusedKey: -1);
+        fixture.ManagerObservation = fixture.ManagerObservation! with
+        {
+            FocusedControlAddress = fixture.GroupControlAddresses[0][0],
+        };
+        AssertTouchFailure(fixture, _ => { }, "unfocused manager requires a zero control pointer");
     }
 
     [Fact]
@@ -387,10 +587,28 @@ public sealed class TouchSettingsCaptureTests
             WriteVector(fixture.Root, 0x2EC, TouchFixture.GroupsAddress, 0x10), "group count mismatch");
         AssertTouchFailure(new TouchFixture(), fixture => fixture.Memory.Remove(TouchFixture.PagerAddress), "pager unreadable");
         AssertTouchFailure(new TouchFixture(), fixture => fixture.Memory.Remove(TouchFixture.GroupsAddress), "groups unreadable");
+        AssertTouchFailure(new TouchFixture(), fixture =>
+            fixture.Memory.Remove(fixture.GroupPointerAddresses[0]), "inner control-pointer payload unreadable");
+        AssertTouchFailure(new TouchFixture(), fixture =>
+            WriteRawVector(fixture.Groups, 0x04, 0, checked((uint)fixture.GroupPointerAddresses[0] + 4), checked((uint)fixture.GroupPointerAddresses[0] + 4)), "malformed inner vector");
+        AssertTouchFailure(new TouchFixture(), fixture =>
+            WriteVector(fixture.Groups, 0x04, fixture.GroupPointerAddresses[0], 5 * sizeof(uint)), "oversized inner vector");
+        AssertTouchFailure(new TouchFixture(), fixture =>
+            WritePointer(fixture.GroupPointerBlocks[0], 0, 0), "null inner control pointer");
     }
 
     [Fact]
-    public void RejectsUnknownTypesInvalidSelectionsAndEveryInvalidNormalKeyCorrelation()
+    public void AllowsAnEmptyNonFocusedControlGroup()
+    {
+        var fixture = new TouchFixture(focusedKey: 1001, groupControlCounts: [0]);
+
+        Assert.True(fixture.TryCapture(out var snapshot, out var diagnostic), diagnostic);
+        Assert.Equal(TouchSettingsFocusKind.SpecialControl, snapshot.FocusKind);
+        Assert.Equal(1, snapshot.ControlGroupCount);
+    }
+
+    [Fact]
+    public void RejectsUnknownTypesInvalidSelectionsAndNormalFocusOutsideCapturedGroups()
     {
         AssertTouchFailure(new TouchFixture(), fixture => WriteInt32(fixture.Rows, 0, -1), "negative type");
         AssertTouchFailure(new TouchFixture(), fixture => WriteInt32(fixture.Rows, 0, 3), "unknown type");
@@ -398,12 +616,24 @@ public sealed class TouchSettingsCaptureTests
         AssertTouchFailure(new TouchFixture(), fixture => WriteInt32(fixture.Rows, 0x90, 2), "selection beyond values");
         AssertTouchFailure(new TouchFixture(focusedKey: -2), _ => { }, "negative key other than -1");
         AssertTouchFailure(new TouchFixture(focusedKey: 5), _ => { }, "row outside vector");
-        AssertTouchFailure(new TouchFixture(focusedKey: 0), _ => { }, "type zero subcontrol zero");
-        AssertTouchFailure(new TouchFixture(focusedKey: 3), _ => { }, "type zero wrong selected subcontrol");
-        AssertTouchFailure(new TouchFixture(rows: [new(1, "Setting", "Help", ["A", "B"], 0)], focusedKey: 2), _ => { }, "type one wrong subcontrol");
-        AssertTouchFailure(new TouchFixture(rows: [new(2, "Setting", "Help", ["A", "B"], 0)], focusedKey: 2), _ => { }, "type two wrong subcontrol");
-        AssertTouchFailure(new TouchFixture(rows: [new(0, "Setting", "Help", ["Only"], 0)], focusedKey: 1), _ => { }, "type zero value count");
-        AssertTouchFailure(new TouchFixture(rows: [new(2, "Setting", "Help", ["A", "B", "C"], 0)], focusedKey: 1), _ => { }, "type two value count");
+        AssertTouchFailure(new TouchFixture(focusedKey: 3, groupControlCounts: [2]), _ => { }, "subcontrol outside captured group");
+    }
+
+    [Fact]
+    public void AcceptsDynamicValueCountsAndAnyObservedFocusedMemberForAuditedUiTypes()
+    {
+        TouchFixture[] fixtures =
+        [
+            new(rows: [new(0, "Toggle", "Help", ["Only"], 0)], focusedKey: 0),
+            new(rows: [new(0, "Toggle", "Help", ["Low", "Mid", "High"], 2)], focusedKey: 3),
+            new(rows: [new(1, "Slider", "Help", ["A", "B"], 0)], focusedKey: 2),
+            new(rows: [new(2, "Action", "Help", ["A", "B", "C"], 1)], focusedKey: 3),
+        ];
+
+        foreach (var fixture in fixtures)
+        {
+            Assert.True(fixture.TryCapture(out _, out var diagnostic), diagnostic);
+        }
     }
 
     [Fact]
@@ -416,6 +646,59 @@ public sealed class TouchSettingsCaptureTests
         AssertTouchFailure(new TouchFixture(), fixture => WriteInlineString(fixture.ValueBlocks[0], 0, " "), "blank value");
         AssertTouchFailure(new TouchFixture(rows: [new(1, "Setting", "Help", [], 0)]), _ => { }, "empty values");
         AssertTouchFailure(new TouchFixture(), fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with { Label = "\t" }, "blank special label");
+        var encodedLengthFixture = new TouchFixture();
+        AssertTouchFailure(encodedLengthFixture, fixture => fixture.SpecialControls[0] = fixture.SpecialControls[0] with
+        {
+            Label = new string('\u00E9', (MsvcStringReader.MaximumByteLength / 2) + 1),
+        }, "special label encoded byte length");
+        Assert.Empty(encodedLengthFixture.Memory.Reads);
+    }
+
+    [Fact]
+    public void ClonesBoundedTouchObservationsBeforeReadingNativeMemory()
+    {
+        var fixture = new TouchFixture();
+        var controls = fixture.SpecialControls;
+        var memory = new AfterReadMutationMemory(
+            fixture.Memory,
+            TouchFixture.RootAddress,
+            controls.Clear);
+
+        Assert.True(
+            TouchSettingsCapture.TryCreateSnapshot(
+                memory,
+                ImageBase,
+                TouchFixture.RootAddress,
+                TouchFixture.CaptureGeneration,
+                fixture.ManagerObservation,
+                controls,
+                out var snapshot,
+                out var diagnostic),
+            diagnostic);
+        Assert.Equal(2, snapshot.SpecialControls.Count);
+        Assert.Empty(controls);
+    }
+
+    [Fact]
+    public void RejectsOversizedTouchObservationsBeforeAccessingElements()
+    {
+        var controls = new OversizedReadOnlyList<TouchSettingsSpecialControlObservation>(4);
+        var fixture = new TouchFixture();
+
+        Assert.False(
+            TouchSettingsCapture.TryCreateSnapshot(
+                fixture.Memory,
+                ImageBase,
+                TouchFixture.RootAddress,
+                TouchFixture.CaptureGeneration,
+                fixture.ManagerObservation,
+                controls,
+                out var snapshot,
+                out var diagnostic));
+        Assert.Null(snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(diagnostic));
+        Assert.False(controls.WasAccessed);
+        Assert.Empty(fixture.Memory.Reads);
     }
 
     [Fact]
@@ -451,6 +734,27 @@ public sealed class TouchSettingsCaptureTests
         var groupMutation = new TouchFixture();
         var groupMemory = new AfterReadMutationMemory(groupMutation.Memory, TouchFixture.GroupsAddress, () => groupMutation.Groups[0] = 1);
         AssertTouchCallFailure(groupMemory, ImageBase, TouchFixture.RootAddress, groupMutation.SpecialControls, false, "group mutation");
+
+        var groupPointerMutation = new TouchFixture();
+        var groupPointerMemory = new AfterReadMutationMemory(
+            groupPointerMutation.Memory,
+            groupPointerMutation.GroupPointerAddresses[0],
+            () => groupPointerMutation.GroupPointerBlocks[0][0] ^= 0x10);
+        AssertTouchCallFailure(groupPointerMemory, ImageBase, TouchFixture.RootAddress, groupPointerMutation.SpecialControls, false, "group pointer mutation");
+
+        var groupHeaderMutation = new TouchFixture();
+        var groupHeaderMemory = new AfterReadMutationMemory(
+            groupHeaderMutation.Memory,
+            groupHeaderMutation.GroupPointerAddresses[0],
+            () => groupHeaderMutation.Groups[0x04] ^= 0x10);
+        AssertTouchCallFailure(groupHeaderMemory, ImageBase, TouchFixture.RootAddress, groupHeaderMutation.SpecialControls, false, "group header mutation");
+
+        var managerKeyMutation = new TouchFixture();
+        var managerKeyMemory = new AfterReadMutationMemory(
+            managerKeyMutation.Memory,
+            TouchFixture.ManagerAddress + 0x2C4u,
+            () => WriteInt32(managerKeyMutation.Manager, 0x2C4, 2));
+        AssertTouchCallFailure(managerKeyMemory, ImageBase, TouchFixture.RootAddress, managerKeyMutation.SpecialControls, false, "manager key mutation");
 
         var valueMutation = new TouchFixture();
         var valueMemory = new AfterReadMutationMemory(valueMutation.Memory, valueMutation.ValueAddresses[0], () => valueMutation.ValueBlocks[0][0] ^= 0x20);
@@ -498,8 +802,24 @@ public sealed class TouchSettingsCaptureTests
         string because)
     {
         var succeeded = transition
-            ? TouchSettingsCapture.TryCreateTransitionSnapshot(memory, imageBase, root, controls, out var snapshot, out var diagnostic)
-            : TouchSettingsCapture.TryCreateSnapshot(memory, imageBase, root, controls, out snapshot, out diagnostic);
+            ? TouchSettingsCapture.TryCreateTransitionSnapshot(
+                memory,
+                imageBase,
+                root,
+                TouchFixture.CaptureGeneration,
+                TouchFixture.DefaultManagerObservation,
+                controls,
+                out var snapshot,
+                out var diagnostic)
+            : TouchSettingsCapture.TryCreateSnapshot(
+                memory,
+                imageBase,
+                root,
+                TouchFixture.CaptureGeneration,
+                TouchFixture.DefaultManagerObservation,
+                controls,
+                out snapshot,
+                out diagnostic);
         Assert.False(succeeded, because);
         Assert.Null(snapshot);
         Assert.False(string.IsNullOrWhiteSpace(diagnostic));
@@ -514,6 +834,7 @@ internal sealed record SteamRowSpec(
 
 internal sealed class SteamFixture
 {
+    internal const int CaptureGeneration = 41;
     internal const nuint RootAddress = 0x10000;
     internal const nuint DescriptorsAddress = 0x20000;
     internal const nuint CategoriesAddress = 0x21000;
@@ -624,6 +945,7 @@ internal sealed class SteamFixture
                 if (!categoryMode && spec.SelectedIndex is int selected)
                 {
                     Observations.Add(new(
+                        CaptureGeneration,
                         RootAddress,
                         activePage,
                         RowsAddress + (nuint)rowOffset,
@@ -648,7 +970,14 @@ internal sealed class SteamFixture
     public List<SteamSettingsValueObservation> Observations { get; } = [];
 
     public bool TryCapture(out SteamSettingsSnapshot snapshot, out string diagnostic) =>
-        SteamSettingsCapture.TryCreateSnapshot(Memory, ImageBase, RootAddress, Observations, out snapshot, out diagnostic);
+        SteamSettingsCapture.TryCreateSnapshot(
+            Memory,
+            ImageBase,
+            RootAddress,
+            CaptureGeneration,
+            Observations,
+            out snapshot,
+            out diagnostic);
 }
 
 internal sealed record TouchRowSpec(
@@ -663,30 +992,47 @@ internal sealed record TouchRowSpec(
 
 internal sealed class TouchFixture
 {
+    internal const int CaptureGeneration = 53;
     internal const nuint RootAddress = 0x110000;
     internal const nuint PagerAddress = 0x120000;
     internal const nuint DescriptorsAddress = 0x130000;
     internal const nuint RowsAddress = 0x140000;
     internal const nuint GroupsAddress = 0x150000;
+    internal const nuint GroupPointerBaseAddress = 0x151000;
+    internal const nuint GroupControlBaseAddress = 0x158000;
     internal const nuint Control1001Address = 0x160000;
     internal const nuint Control1002Address = 0x160100;
     internal const nuint Control1000Address = 0x160200;
+    internal const nuint ActivePageRootAddress = 0x180000;
+    internal const nuint ManagerAddress = 0x181000;
+    internal const nuint DefaultFocusedControlAddress = GroupControlBaseAddress + 0x10;
 
     private const nuint ImageBase = 0x400000;
+
+    internal static TouchSettingsManagerObservation DefaultManagerObservation { get; } = new(
+        CaptureGeneration,
+        RootAddress,
+        0,
+        ManagerAddress,
+        DefaultFocusedControlAddress);
 
     public TouchFixture(
         IReadOnlyList<TouchRowSpec>? rows = null,
         int focusedKey = 1,
         int activePage = 0,
         byte transition = 0,
-        bool includeConditional1000 = false)
+        bool includeConditional1000 = false,
+        IReadOnlyList<int>? groupControlCounts = null)
     {
         rows ??= [TouchRowSpec.Default];
+        groupControlCounts ??= Enumerable.Repeat(4, rows.Count).ToArray();
+        Assert.Equal(rows.Count, groupControlCounts.Count);
         Root = new byte[0x2FC];
         Pager = new byte[0x2E2];
         Descriptors = new byte[4 * 0x0C];
         Rows = new byte[rows.Count * 0x98];
         Groups = new byte[rows.Count * 0x10];
+        Manager = new byte[0x2C8];
 
         WritePointer(Root, 0, ImageBase + TouchSettingsCapture.RootVtableRva);
         WriteVector(Root, 0x2C8, DescriptorsAddress, Descriptors.Length);
@@ -701,8 +1047,11 @@ internal sealed class TouchFixture
         WritePointer(Pager, 0, ImageBase + TouchSettingsCapture.PagerVtableRva);
         WriteInt32(Pager, 0x2D0, 4);
         WriteInt32(Pager, 0x2D4, activePage);
-        WritePointer(Pager, 0x2D8, 0x180000);
+        WritePointer(Pager, 0x2D8, ActivePageRootAddress);
         Pager[0x2E1] = transition;
+
+        WritePointer(Manager, 0, ImageBase + SteamSettingsCapture.InputManagerVtableRva);
+        WriteInt32(Manager, 0x2C4, focusedKey);
 
         for (var index = 0; index < 4; index++)
         {
@@ -724,7 +1073,8 @@ internal sealed class TouchFixture
             .Add(GroupsAddress, Groups)
             .Add(Control1001Address, [0])
             .Add(Control1002Address, [0])
-            .Add(0x180000, [0]);
+            .Add(ActivePageRootAddress, [0])
+            .Add(ManagerAddress, Manager);
         if (includeConditional1000)
         {
             Memory.Add(Control1000Address, [0]);
@@ -734,6 +1084,22 @@ internal sealed class TouchFixture
         {
             var spec = rows[index];
             var rowOffset = index * 0x98;
+            var groupPointerAddress = GroupPointerBaseAddress + (nuint)(index * 0x100);
+            var groupControlAddresses = new nuint[groupControlCounts[index]];
+            var groupPointerBlock = new byte[groupControlAddresses.Length * sizeof(uint)];
+            for (var controlIndex = 0; controlIndex < groupControlAddresses.Length; controlIndex++)
+            {
+                var controlAddress = GroupControlBaseAddress + (nuint)(index * 0x100) + (nuint)(controlIndex * 0x10);
+                groupControlAddresses[controlIndex] = controlAddress;
+                WritePointer(groupPointerBlock, controlIndex * sizeof(uint), controlAddress);
+                Memory.Add(controlAddress, [0]);
+            }
+            WriteVector(Groups, (index * 0x10) + 0x04, groupPointerAddress, groupPointerBlock.Length);
+            GroupPointerAddresses.Add(groupPointerAddress);
+            GroupPointerBlocks.Add(groupPointerBlock);
+            GroupControlAddresses.Add(groupControlAddresses);
+            Memory.Add(groupPointerAddress, groupPointerBlock);
+
             WriteInt32(Rows, rowOffset, spec.UiType);
             WriteInlineString(Rows, rowOffset + 0x04, spec.Label);
             WriteInlineString(Rows, rowOffset + 0x1C, spec.Help);
@@ -755,13 +1121,31 @@ internal sealed class TouchFixture
 
         SpecialControls =
         [
-            new(1001, Control1001Address, "Confirm A"),
-            new(1002, Control1002Address, "Confirm B"),
+            new(CaptureGeneration, RootAddress, activePage, 1001, Control1001Address, "Confirm A"),
+            new(CaptureGeneration, RootAddress, activePage, 1002, Control1002Address, "Confirm B"),
         ];
         if (includeConditional1000)
         {
-            SpecialControls.Add(new(1000, Control1000Address, "Observed 1000"));
+            SpecialControls.Add(new(CaptureGeneration, RootAddress, activePage, 1000, Control1000Address, "Observed 1000"));
         }
+
+        nuint focusedControlAddress = focusedKey switch
+        {
+            -1 => 0,
+            1000 when includeConditional1000 => Control1000Address,
+            1001 => Control1001Address,
+            1002 => Control1002Address,
+            >= 0 and < 1000 when focusedKey / 4 < GroupControlAddresses.Count &&
+                focusedKey % 4 < GroupControlAddresses[focusedKey / 4].Length =>
+                GroupControlAddresses[focusedKey / 4][focusedKey % 4],
+            _ => 0,
+        };
+        ManagerObservation = new(
+            CaptureGeneration,
+            RootAddress,
+            activePage,
+            ManagerAddress,
+            focusedControlAddress);
     }
 
     public SegmentedMemory Memory { get; }
@@ -770,15 +1154,36 @@ internal sealed class TouchFixture
     public byte[] Descriptors { get; }
     public byte[] Rows { get; }
     public byte[] Groups { get; }
+    public byte[] Manager { get; }
+    public List<nuint> GroupPointerAddresses { get; } = [];
+    public List<byte[]> GroupPointerBlocks { get; } = [];
+    public List<nuint[]> GroupControlAddresses { get; } = [];
     public List<nuint> ValueAddresses { get; } = [];
     public List<byte[]> ValueBlocks { get; } = [];
     public List<TouchSettingsSpecialControlObservation> SpecialControls { get; }
+    public TouchSettingsManagerObservation? ManagerObservation { get; set; }
 
     public bool TryCapture(out TouchSettingsSnapshot snapshot, out string diagnostic) =>
-        TouchSettingsCapture.TryCreateSnapshot(Memory, ImageBase, RootAddress, SpecialControls, out snapshot, out diagnostic);
+        TouchSettingsCapture.TryCreateSnapshot(
+            Memory,
+            ImageBase,
+            RootAddress,
+            CaptureGeneration,
+            ManagerObservation,
+            SpecialControls,
+            out snapshot,
+            out diagnostic);
 
     public bool TryTransitionCapture(out TouchSettingsSnapshot snapshot, out string diagnostic) =>
-        TouchSettingsCapture.TryCreateTransitionSnapshot(Memory, ImageBase, RootAddress, SpecialControls, out snapshot, out diagnostic);
+        TouchSettingsCapture.TryCreateTransitionSnapshot(
+            Memory,
+            ImageBase,
+            RootAddress,
+            CaptureGeneration,
+            ManagerObservation,
+            SpecialControls,
+            out snapshot,
+            out diagnostic);
 }
 
 internal sealed class SegmentedMemory : IReadableMemory
@@ -848,6 +1253,29 @@ internal sealed class ThrowingMemory : IReadableMemory
         throw new InvalidOperationException("Synthetic Settings read failure.");
 }
 
+internal sealed class OversizedReadOnlyList<T>(int count) : IReadOnlyList<T>
+{
+    public int Count { get; } = count;
+    public bool WasAccessed { get; private set; }
+
+    public T this[int index]
+    {
+        get
+        {
+            WasAccessed = true;
+            throw new InvalidOperationException($"Element {index} must not be accessed for an oversized collection.");
+        }
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        WasAccessed = true;
+        throw new InvalidOperationException("An oversized collection must not be enumerated.");
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
 internal static class SettingsFixtureEncoding
 {
     public static byte[] CreateStringVector(IReadOnlyList<string> values)
@@ -882,6 +1310,23 @@ internal static class SettingsFixtureEncoding
         encoded.CopyTo(destination, offset);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.AsSpan(offset + 0x10), (uint)encoded.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.AsSpan(offset + 0x14), 15);
+    }
+
+    public static byte[] WriteHeapString(
+        SegmentedMemory memory,
+        byte[] destination,
+        int offset,
+        nuint payloadAddress,
+        string value)
+    {
+        var encoded = Encoding.UTF8.GetBytes(value);
+        Assert.True(encoded.Length is > 15 and <= MsvcStringReader.MaximumByteLength);
+        destination.AsSpan(offset, MsvcStringReader.LayoutSize).Clear();
+        WritePointer(destination, offset, payloadAddress);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination.AsSpan(offset + 0x10), (uint)encoded.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination.AsSpan(offset + 0x14), (uint)encoded.Length);
+        memory.Add(payloadAddress, encoded);
+        return encoded;
     }
 
     public static void WriteInvalidInlineString(byte[] destination, int offset)

@@ -6,8 +6,11 @@ public static class TouchSettingsCapture
 {
     public const uint RootVtableRva = 0x3A6BC4;
     public const uint PagerVtableRva = 0x3AC940;
+    public const uint InputManagerVtableRva = 0x3A5D0C;
     public const int DescriptorCount = 4;
     public const int MaximumRowCount = 64;
+    public const int MaximumControlsPerGroup = 4;
+    public const int MaximumSpecialControlObservationCount = 3;
 
     private const int RootSize = 0x2FC;
     private const int DescriptorVectorOffset = 0x2C8;
@@ -25,35 +28,62 @@ public static class TouchSettingsCapture
     private const int PagerTransitionOffset = 0x2E1;
     private const int DescriptorStride = 0x0C;
     private const int GroupStride = 0x10;
+    private const int GroupControlVectorOffset = 0x04;
     private const int RowStride = 0x98;
     private const int RowUiTypeOffset = 0x00;
     private const int RowLabelOffset = 0x04;
     private const int RowHelpOffset = 0x1C;
     private const int RowValuesOffset = 0x34;
     private const int RowSelectedIndexOffset = 0x90;
+    private const int ManagerKeyOffset = 0x2C4;
+    private const int ManagerRequiredSize = ManagerKeyOffset + sizeof(int);
 
     public static bool TryCreateSnapshot(
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
+        int captureGeneration,
+        TouchSettingsManagerObservation? managerObservation,
         IReadOnlyList<TouchSettingsSpecialControlObservation>? specialControls,
         out TouchSettingsSnapshot snapshot,
         out string diagnostic) =>
-        TryCreateSnapshot(memory, imageBase, root, specialControls, allowActiveTransition: false, out snapshot, out diagnostic);
+        TryCreateSnapshot(
+            memory,
+            imageBase,
+            root,
+            captureGeneration,
+            managerObservation,
+            specialControls,
+            allowActiveTransition: false,
+            out snapshot,
+            out diagnostic);
 
     public static bool TryCreateTransitionSnapshot(
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
+        int captureGeneration,
+        TouchSettingsManagerObservation? managerObservation,
         IReadOnlyList<TouchSettingsSpecialControlObservation>? specialControls,
         out TouchSettingsSnapshot snapshot,
         out string diagnostic) =>
-        TryCreateSnapshot(memory, imageBase, root, specialControls, allowActiveTransition: true, out snapshot, out diagnostic);
+        TryCreateSnapshot(
+            memory,
+            imageBase,
+            root,
+            captureGeneration,
+            managerObservation,
+            specialControls,
+            allowActiveTransition: true,
+            out snapshot,
+            out diagnostic);
 
     private static bool TryCreateSnapshot(
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
+        int captureGeneration,
+        TouchSettingsManagerObservation? managerObservation,
         IReadOnlyList<TouchSettingsSpecialControlObservation>? specialControls,
         bool allowActiveTransition,
         out TouchSettingsSnapshot snapshot,
@@ -61,11 +91,41 @@ public static class TouchSettingsCapture
     {
         try
         {
+            if (!SettingsCaptureMemory.TryCloneBounded(
+                    specialControls,
+                    MaximumSpecialControlObservationCount,
+                    "Touch Settings special-control observations",
+                    out var capturedSpecialControls,
+                    out diagnostic))
+            {
+                snapshot = null!;
+                return false;
+            }
+            for (var index = 0; index < capturedSpecialControls.Length; index++)
+            {
+                if (!SettingsCaptureMemory.TryValidateObservedText(
+                        capturedSpecialControls[index].Label,
+                        MsvcStringReader.MaximumByteLength,
+                        $"Touch Settings special-control observation {index} label",
+                        out diagnostic))
+                {
+                    snapshot = null!;
+                    return false;
+                }
+            }
+            if (managerObservation is null)
+            {
+                snapshot = null!;
+                diagnostic = "Touch Settings requires one generation-correlated manager observation.";
+                return false;
+            }
             return TryCreateSnapshotCore(
                 memory,
                 imageBase,
                 root,
-                specialControls,
+                captureGeneration,
+                managerObservation,
+                capturedSpecialControls,
                 allowActiveTransition,
                 out snapshot,
                 out diagnostic);
@@ -82,7 +142,9 @@ public static class TouchSettingsCapture
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
-        IReadOnlyList<TouchSettingsSpecialControlObservation>? specialControls,
+        int captureGeneration,
+        TouchSettingsManagerObservation managerObservation,
+        IReadOnlyList<TouchSettingsSpecialControlObservation> specialControls,
         bool allowActiveTransition,
         out TouchSettingsSnapshot snapshot,
         out string diagnostic)
@@ -93,13 +155,9 @@ public static class TouchSettingsCapture
             diagnostic = "Touch Settings memory or root is unavailable or outside the x86 address space.";
             return false;
         }
-        if (specialControls is null || specialControls.Any(control => control is null))
-        {
-            diagnostic = "Touch Settings requires a non-null special-control observation collection.";
-            return false;
-        }
         if (!SettingsCaptureMemory.TryResolveVtable(imageBase, RootVtableRva, out var expectedRootVtable, out diagnostic) ||
-            !SettingsCaptureMemory.TryResolveVtable(imageBase, PagerVtableRva, out var expectedPagerVtable, out diagnostic))
+            !SettingsCaptureMemory.TryResolveVtable(imageBase, PagerVtableRva, out var expectedPagerVtable, out diagnostic) ||
+            !SettingsCaptureMemory.TryResolveVtable(imageBase, InputManagerVtableRva, out var expectedManagerVtable, out diagnostic))
         {
             return false;
         }
@@ -184,6 +242,13 @@ public static class TouchSettingsCapture
                 : $"Touch Settings stable capture rejects active pager transition byte {transition}.";
             return false;
         }
+        if (managerObservation.CaptureGeneration != captureGeneration ||
+            managerObservation.RootAddress != root ||
+            managerObservation.PageIndex != rootActivePage)
+        {
+            diagnostic = "Touch Settings manager observation does not match the current capture generation, root, and page.";
+            return false;
+        }
 
         if (!SettingsCaptureMemory.TryReadBytes(
                 memory,
@@ -245,6 +310,30 @@ public static class TouchSettingsCapture
             new(groupVector.Begin, groupBytes, "Touch Settings active control groups"),
         };
 
+        if (!TryCaptureControlGroups(
+                memory,
+                groupVector,
+                groupBytes,
+                guards,
+                out var controlGroups,
+                out diagnostic) ||
+            !TryCaptureManager(
+                memory,
+                managerObservation.ManagerAddress,
+                expectedManagerVtable,
+                guards,
+                out var managerKey,
+                out diagnostic))
+        {
+            return false;
+        }
+        var focusedKey = SettingsCaptureMemory.ReadInt32(rootBytes, FocusKeyOffset);
+        if (managerKey != focusedKey)
+        {
+            diagnostic = $"Touch Settings manager key {managerKey} does not match root focus key {focusedKey}.";
+            return false;
+        }
+
         var rows = new TouchSettingsRowSnapshot[rowVector.Count];
         for (var index = 0; index < rows.Length; index++)
         {
@@ -263,6 +352,9 @@ public static class TouchSettingsCapture
 
         if (!TryCaptureSpecialControls(
                 rootBytes,
+                captureGeneration,
+                root,
+                rootActivePage,
                 specialControls,
                 out var capturedSpecialControls,
                 out diagnostic))
@@ -270,13 +362,17 @@ public static class TouchSettingsCapture
             return false;
         }
 
-        var focusedKey = SettingsCaptureMemory.ReadInt32(rootBytes, FocusKeyOffset);
         TouchSettingsFocusKind focusKind;
         int? focusedRow;
         int? focusedSubcontrol;
         int? focusedSpecial;
         if (focusedKey == -1)
         {
+            if (managerObservation.FocusedControlAddress != 0)
+            {
+                diagnostic = "Touch Settings unfocused state requires a zero observed focused-control address.";
+                return false;
+            }
             focusKind = TouchSettingsFocusKind.None;
             focusedRow = null;
             focusedSubcontrol = null;
@@ -296,15 +392,10 @@ public static class TouchSettingsCapture
                 diagnostic = $"Touch Settings key {focusedKey} decodes to row {rowIndex}, outside {rows.Length} rows.";
                 return false;
             }
-            var row = rows[rowIndex];
-            if (row.UiType == 0 && subcontrol != row.SelectedIndex + 1)
+            if (!SettingsCaptureMemory.FitsX86Address(managerObservation.FocusedControlAddress) ||
+                !controlGroups[rowIndex].Contains(managerObservation.FocusedControlAddress))
             {
-                diagnostic = "Touch Settings type-0 focus must identify the subcontrol for its stored selected value.";
-                return false;
-            }
-            if (row.UiType is 1 or 2 && subcontrol != 1)
-            {
-                diagnostic = "Touch Settings type-1/type-2 focus must identify the primary row subcontrol.";
+                diagnostic = $"Touch Settings observed focused control does not belong to captured row group {rowIndex}.";
                 return false;
             }
 
@@ -315,9 +406,12 @@ public static class TouchSettingsCapture
         }
         else
         {
-            if (focusedKey is < 1000 or > 1002 || capturedSpecialControls.All(control => control.Key != focusedKey))
+            var focusedControl = capturedSpecialControls.SingleOrDefault(control => control.Key == focusedKey);
+            if (focusedKey is < 1000 or > 1002 ||
+                focusedControl is null ||
+                managerObservation.FocusedControlAddress != focusedControl.NativeControlAddress)
             {
-                diagnostic = $"Touch Settings special focus key {focusedKey} has no separately captured visible control.";
+                diagnostic = $"Touch Settings special focus key {focusedKey} has no exact observed permanent-control match.";
                 return false;
             }
 
@@ -346,6 +440,130 @@ public static class TouchSettingsCapture
             focusedRow,
             focusedSubcontrol,
             focusedSpecial);
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    private static bool TryCaptureControlGroups(
+        IReadableMemory memory,
+        SettingsVector groupVector,
+        byte[] groupBytes,
+        ICollection<SettingsMemoryGuard> guards,
+        out IReadOnlyList<nuint>[] groups,
+        out string diagnostic)
+    {
+        groups = new IReadOnlyList<nuint>[groupVector.Count];
+        for (var index = 0; index < groups.Length; index++)
+        {
+            if (!SettingsCaptureMemory.TryElementAddress(groupVector.Begin, index, GroupStride, out var groupAddress) ||
+                !SettingsCaptureMemory.TryAddX86(groupAddress, GroupControlVectorOffset, out var headerAddress))
+            {
+                diagnostic = $"Touch Settings control group {index} address crosses x86 memory.";
+                return false;
+            }
+
+            var offset = (index * GroupStride) + GroupControlVectorOffset;
+            var capturedHeader = groupBytes.AsSpan(offset, SettingsCaptureMemory.VectorHeaderSize);
+            if (!SettingsCaptureMemory.TryReadVector(
+                    capturedHeader,
+                    sizeof(uint),
+                    MaximumControlsPerGroup,
+                    allowEmpty: true,
+                    $"Touch Settings control group {index} member",
+                    out var memberVector,
+                    out diagnostic))
+            {
+                return false;
+            }
+
+            guards.Add(new SettingsMemoryGuard(
+                headerAddress,
+                capturedHeader.ToArray(),
+                $"Touch Settings control group {index} member header"));
+            if (memberVector.Count == 0)
+            {
+                groups[index] = Array.Empty<nuint>();
+                continue;
+            }
+            if (!SettingsCaptureMemory.TryReadBytes(
+                    memory,
+                    memberVector.Begin,
+                    memberVector.ByteLength,
+                    $"Touch Settings control group {index} member pointers",
+                    out var memberBytes,
+                    out diagnostic))
+            {
+                return false;
+            }
+
+            var addresses = new nuint[memberVector.Count];
+            for (var memberIndex = 0; memberIndex < addresses.Length; memberIndex++)
+            {
+                var address = SettingsCaptureMemory.ReadUInt32(memberBytes, memberIndex * sizeof(uint));
+                if (!SettingsCaptureMemory.FitsX86Address(address) ||
+                    (address & 3) != 0)
+                {
+                    diagnostic = $"Touch Settings control group {index} contains a null or unaligned control pointer.";
+                    return false;
+                }
+                addresses[memberIndex] = address;
+            }
+
+            groups[index] = addresses;
+            guards.Add(new SettingsMemoryGuard(
+                memberVector.Begin,
+                memberBytes,
+                $"Touch Settings control group {index} member pointers"));
+        }
+
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    private static bool TryCaptureManager(
+        IReadableMemory memory,
+        nuint manager,
+        uint expectedVtable,
+        ICollection<SettingsMemoryGuard> guards,
+        out int key,
+        out string diagnostic)
+    {
+        key = 0;
+        if (!SettingsCaptureMemory.FitsX86Range(manager, ManagerRequiredSize))
+        {
+            diagnostic = "Touch Settings observed input manager is null or crosses the x86 address space.";
+            return false;
+        }
+        if (!SettingsCaptureMemory.TryReadBytes(
+                memory,
+                manager,
+                sizeof(uint),
+                "Touch Settings observed input-manager vtable",
+                out var vtableBytes,
+                out diagnostic))
+        {
+            return false;
+        }
+        if (SettingsCaptureMemory.ReadUInt32(vtableBytes, 0) != expectedVtable)
+        {
+            diagnostic = "Touch Settings observed input-manager vtable does not match the audited generic manager type.";
+            return false;
+        }
+        if (!SettingsCaptureMemory.TryAddX86(manager, ManagerKeyOffset, out var keyAddress) ||
+            !SettingsCaptureMemory.TryReadBytes(
+                memory,
+                keyAddress,
+                sizeof(int),
+                "Touch Settings observed input-manager key",
+                out var keyBytes,
+                out diagnostic))
+        {
+            return false;
+        }
+
+        key = SettingsCaptureMemory.ReadInt32(keyBytes, 0);
+        guards.Add(new SettingsMemoryGuard(manager, vtableBytes, "Touch Settings observed input-manager vtable"));
+        guards.Add(new SettingsMemoryGuard(keyAddress, keyBytes, "Touch Settings observed input-manager key"));
         diagnostic = string.Empty;
         return true;
     }
@@ -381,6 +599,7 @@ public static class TouchSettingsCapture
                 labelAddress,
                 rowBytes.AsSpan(offset + RowLabelOffset, MsvcStringReader.LayoutSize),
                 $"Touch Settings row {index} label",
+                guards,
                 out var label,
                 out diagnostic) ||
             !SettingsCaptureMemory.TryReadString(
@@ -388,6 +607,7 @@ public static class TouchSettingsCapture
                 helpAddress,
                 rowBytes.AsSpan(offset + RowHelpOffset, MsvcStringReader.LayoutSize),
                 $"Touch Settings row {index} help",
+                guards,
                 out var help,
                 out diagnostic) ||
             !SettingsCaptureMemory.TryReadStringVector(
@@ -403,12 +623,6 @@ public static class TouchSettingsCapture
         {
             return false;
         }
-        if (uiType is 0 or 2 && values.Count != 2)
-        {
-            diagnostic = $"Touch Settings type-{uiType} row {index} requires exactly two displayed values.";
-            return false;
-        }
-
         var selectedIndex = SettingsCaptureMemory.ReadInt32(rowBytes, offset + RowSelectedIndexOffset);
         if (selectedIndex < 0 || selectedIndex >= values.Count)
         {
@@ -430,11 +644,15 @@ public static class TouchSettingsCapture
 
     private static bool TryCaptureSpecialControls(
         byte[] rootBytes,
+        int captureGeneration,
+        nuint root,
+        int activePage,
         IReadOnlyList<TouchSettingsSpecialControlObservation> observations,
         out IReadOnlyList<TouchSettingsSpecialControlSnapshot> controls,
         out string diagnostic)
     {
         controls = Array.Empty<TouchSettingsSpecialControlSnapshot>();
+        diagnostic = string.Empty;
         var expected = new Dictionary<int, nuint>
         {
             [1001] = SettingsCaptureMemory.ReadUInt32(rootBytes, Control1001PointerOffset),
@@ -461,11 +679,21 @@ public static class TouchSettingsCapture
         var captured = new List<TouchSettingsSpecialControlSnapshot>(observations.Count);
         foreach (var observation in observations)
         {
-            if (!expected.TryGetValue(observation.Key, out var expectedAddress) ||
+            if (observation.CaptureGeneration != captureGeneration ||
+                observation.RootAddress != root ||
+                observation.PageIndex != activePage ||
+                !expected.TryGetValue(observation.Key, out var expectedAddress) ||
                 observation.ControlAddress != expectedAddress ||
-                string.IsNullOrWhiteSpace(observation.Label))
+                !SettingsCaptureMemory.TryValidateObservedText(
+                    observation.Label,
+                    MsvcStringReader.MaximumByteLength,
+                    $"Touch Settings special control key {observation.Key} label",
+                    out diagnostic))
             {
-                diagnostic = $"Touch Settings special control key {observation.Key} is blank or does not match its live native control pointer.";
+                if (string.IsNullOrWhiteSpace(diagnostic))
+                {
+                    diagnostic = $"Touch Settings special control key {observation.Key} does not match the current generation, root, page, or live native pointer.";
+                }
                 return false;
             }
             captured.Add(new TouchSettingsSpecialControlSnapshot(

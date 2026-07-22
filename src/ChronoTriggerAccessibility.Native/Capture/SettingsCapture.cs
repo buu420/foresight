@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
@@ -10,6 +11,80 @@ internal sealed record SettingsMemoryGuard(nuint Address, byte[] Expected, strin
 internal static class SettingsCaptureMemory
 {
     internal const int VectorHeaderSize = 0x0C;
+
+    private static readonly UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
+
+    internal static bool TryCloneBounded<T>(
+        IReadOnlyList<T>? source,
+        int maximumCount,
+        string name,
+        out T[] clone,
+        out string diagnostic)
+        where T : class
+    {
+        clone = [];
+        if (source is null || maximumCount < 0)
+        {
+            diagnostic = $"{name} collection or capture limit is invalid.";
+            return false;
+        }
+
+        var count = source.Count;
+        if (count < 0 || count > maximumCount)
+        {
+            diagnostic = $"{name} count {count} exceeds the defensive {maximumCount}-element limit.";
+            return false;
+        }
+
+        clone = new T[count];
+        for (var index = 0; index < clone.Length; index++)
+        {
+            var item = source[index];
+            if (item is null)
+            {
+                clone = [];
+                diagnostic = $"{name} contains a null element at index {index}.";
+                return false;
+            }
+            clone[index] = item;
+        }
+
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryValidateObservedText(
+        string? value,
+        int maximumEncodedByteLength,
+        string name,
+        out string diagnostic)
+    {
+        if (string.IsNullOrWhiteSpace(value) || maximumEncodedByteLength < 0)
+        {
+            diagnostic = $"{name} is blank or its capture limit is invalid.";
+            return false;
+        }
+
+        try
+        {
+            var encodedByteLength = StrictUtf8.GetByteCount(value);
+            if (encodedByteLength > maximumEncodedByteLength)
+            {
+                diagnostic = $"{name} encoded UTF-8 length {encodedByteLength} exceeds the {maximumEncodedByteLength}-byte safety limit.";
+                return false;
+            }
+        }
+        catch (EncoderFallbackException)
+        {
+            diagnostic = $"{name} is not valid Unicode text.";
+            return false;
+        }
+
+        diagnostic = string.Empty;
+        return true;
+    }
 
     internal static bool FitsX86Address(nuint address) =>
         address != 0 && address <= uint.MaxValue;
@@ -209,6 +284,7 @@ internal static class SettingsCaptureMemory
         nuint address,
         ReadOnlySpan<byte> capturedLayout,
         string name,
+        ICollection<SettingsMemoryGuard> guards,
         out string value,
         out string diagnostic)
     {
@@ -220,7 +296,37 @@ internal static class SettingsCaptureMemory
         }
 
         var captured = capturedLayout[..MsvcStringReader.LayoutSize].ToArray();
-        var capturedMemory = new CapturedRangeMemory(memory, address, captured);
+        var length = ReadUInt32(captured, 0x10);
+        var capacity = ReadUInt32(captured, 0x14);
+        if (length > MsvcStringReader.MaximumByteLength)
+        {
+            diagnostic = $"{name} length {length} exceeds the {MsvcStringReader.MaximumByteLength}-byte safety limit.";
+            return false;
+        }
+        if (capacity < length)
+        {
+            diagnostic = $"{name} capacity {capacity} is smaller than length {length}.";
+            return false;
+        }
+
+        nuint payloadAddress = 0;
+        byte[] payload = [];
+        if (capacity >= 16 && length != 0)
+        {
+            payloadAddress = ReadUInt32(captured, 0);
+            if (!TryReadBytes(
+                    memory,
+                    payloadAddress,
+                    checked((int)length),
+                    $"{name} payload",
+                    out payload,
+                    out diagnostic))
+            {
+                return false;
+            }
+        }
+
+        var capturedMemory = new CapturedStringMemory(address, captured, payloadAddress, payload);
         if (!new MsvcStringReader(capturedMemory).TryRead(address, out value, out var error))
         {
             diagnostic = $"{name} is invalid: {error}";
@@ -233,6 +339,11 @@ internal static class SettingsCaptureMemory
         }
 
         value = new string(value.AsSpan());
+        guards.Add(new SettingsMemoryGuard(address, captured, $"{name} layout"));
+        if (payload.Length != 0)
+        {
+            guards.Add(new SettingsMemoryGuard(payloadAddress, payload, $"{name} payload"));
+        }
         diagnostic = string.Empty;
         return true;
     }
@@ -273,22 +384,32 @@ internal static class SettingsCaptureMemory
             return false;
         }
 
-        var capturedMemory = new CapturedRangeMemory(
-            new CapturedRangeMemory(memory, headerAddress, headerCopy),
-            vector.Begin,
-            layouts);
-        if (!new MsvcStringVectorReader(capturedMemory).TryRead(headerAddress, out values, out var error))
+        var capturedValues = new string[vector.Count];
+        var totalEncodedByteLength = 0;
+        for (var index = 0; index < capturedValues.Length; index++)
         {
-            diagnostic = $"{name} is invalid: {error}";
-            return false;
-        }
-        if (values.Any(string.IsNullOrWhiteSpace))
-        {
-            diagnostic = $"{name} contains blank localized text.";
-            return false;
+            if (!TryElementAddress(vector.Begin, index, MsvcStringReader.LayoutSize, out var elementAddress) ||
+                !TryReadString(
+                    memory,
+                    elementAddress,
+                    layouts.AsSpan(index * MsvcStringReader.LayoutSize, MsvcStringReader.LayoutSize),
+                    $"{name} element {index}",
+                    guards,
+                    out capturedValues[index],
+                    out diagnostic))
+            {
+                return false;
+            }
+
+            totalEncodedByteLength = checked(totalEncodedByteLength + Encoding.UTF8.GetByteCount(capturedValues[index]));
+            if (totalEncodedByteLength > MsvcStringVectorReader.MaximumTotalStringByteLength)
+            {
+                diagnostic = $"{name} total decoded UTF-8 length exceeds the {MsvcStringVectorReader.MaximumTotalStringByteLength}-byte safety limit.";
+                return false;
+            }
         }
 
-        values = values.Select(value => new string(value.AsSpan())).ToArray();
+        values = capturedValues;
         guards.Add(new SettingsMemoryGuard(vector.Begin, layouts, $"{name} string layouts"));
         diagnostic = string.Empty;
         return true;
@@ -316,25 +437,39 @@ internal static class SettingsCaptureMemory
         return true;
     }
 
-    private sealed class CapturedRangeMemory(
-        IReadableMemory inner,
-        nuint capturedAddress,
-        byte[] capturedBytes) : IReadableMemory
+    private sealed class CapturedStringMemory(
+        nuint layoutAddress,
+        byte[] layoutBytes,
+        nuint payloadAddress,
+        byte[] payloadBytes) : IReadableMemory
     {
         public bool TryRead(nuint address, Span<byte> destination)
         {
-            if (address >= capturedAddress)
+            if (TryCopy(layoutAddress, layoutBytes, address, destination))
             {
-                var offset = address - capturedAddress;
-                if (offset <= int.MaxValue &&
-                    (ulong)offset + (ulong)destination.Length <= (ulong)capturedBytes.Length)
-                {
-                    capturedBytes.AsSpan((int)offset, destination.Length).CopyTo(destination);
-                    return true;
-                }
+                return true;
+            }
+            return payloadBytes.Length != 0 && TryCopy(payloadAddress, payloadBytes, address, destination);
+        }
+
+        private static bool TryCopy(
+            nuint capturedAddress,
+            byte[] capturedBytes,
+            nuint address,
+            Span<byte> destination)
+        {
+            if (address < capturedAddress)
+            {
+                return false;
+            }
+            var offset = address - capturedAddress;
+            if (offset > int.MaxValue || (ulong)offset + (ulong)destination.Length > (ulong)capturedBytes.Length)
+            {
+                return false;
             }
 
-            return inner.TryRead(address, destination);
+            capturedBytes.AsSpan((int)offset, destination.Length).CopyTo(destination);
+            return true;
         }
     }
 }

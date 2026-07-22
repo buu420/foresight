@@ -38,17 +38,29 @@ public static class SteamSettingsCapture
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
+        int captureGeneration,
         IReadOnlyList<SteamSettingsValueObservation>? valueObservations,
         out SteamSettingsSnapshot snapshot,
         out string diagnostic)
     {
         try
         {
+            if (!SettingsCaptureMemory.TryCloneBounded(
+                    valueObservations,
+                    MaximumRowCount,
+                    "Steam Settings audited builder observations",
+                    out var capturedValueObservations,
+                    out diagnostic))
+            {
+                snapshot = null!;
+                return false;
+            }
             return TryCreateSnapshotCore(
                 memory,
                 imageBase,
                 root,
-                valueObservations,
+                captureGeneration,
+                capturedValueObservations,
                 out snapshot,
                 out diagnostic);
         }
@@ -64,7 +76,8 @@ public static class SteamSettingsCapture
         IReadableMemory? memory,
         nuint imageBase,
         nuint root,
-        IReadOnlyList<SteamSettingsValueObservation>? valueObservations,
+        int captureGeneration,
+        IReadOnlyList<SteamSettingsValueObservation> valueObservations,
         out SteamSettingsSnapshot snapshot,
         out string diagnostic)
     {
@@ -72,11 +85,6 @@ public static class SteamSettingsCapture
         if (memory is null || !SettingsCaptureMemory.FitsX86Range(root, RootSize))
         {
             diagnostic = "Steam Settings memory or root is unavailable or outside the x86 address space.";
-            return false;
-        }
-        if (valueObservations is null || valueObservations.Any(observation => observation is null))
-        {
-            diagnostic = "Steam Settings requires a non-null audited builder-observation collection.";
             return false;
         }
         if (!SettingsCaptureMemory.TryResolveVtable(imageBase, RootVtableRva, out var expectedRootVtable, out diagnostic) ||
@@ -183,6 +191,7 @@ public static class SteamSettingsCapture
                     categoryAddress,
                     categoryBytes.AsSpan(offset + CategoryLabelOffset, MsvcStringReader.LayoutSize),
                     $"Steam Settings category {index} label",
+                    guards,
                     out var label,
                     out diagnostic) ||
                 !SettingsCaptureMemory.TryReadString(
@@ -190,6 +199,7 @@ public static class SteamSettingsCapture
                     helpAddress,
                     categoryBytes.AsSpan(offset + CategoryHelpOffset, MsvcStringReader.LayoutSize),
                     $"Steam Settings category {index} help",
+                    guards,
                     out var help,
                     out diagnostic))
             {
@@ -350,6 +360,7 @@ public static class SteamSettingsCapture
             {
                 if (!TryCaptureRow(
                         memory,
+                        captureGeneration,
                         root,
                         activePage,
                         rowVector,
@@ -435,6 +446,7 @@ public static class SteamSettingsCapture
 
     private static bool TryCaptureRow(
         IReadableMemory memory,
+        int captureGeneration,
         nuint root,
         int activePage,
         SettingsVector rowVector,
@@ -461,6 +473,7 @@ public static class SteamSettingsCapture
                 rowAddress,
                 rowBytes.AsSpan(offset + RowLabelOffset, MsvcStringReader.LayoutSize),
                 $"Steam Settings row {index} label",
+                guards,
                 out var label,
                 out diagnostic) ||
             !SettingsCaptureMemory.TryReadStringVector(
@@ -488,6 +501,7 @@ public static class SteamSettingsCapture
         }
 
         var matching = observations.Where(observation =>
+            observation.CaptureGeneration == captureGeneration &&
             observation.RootAddress == root &&
             observation.PageIndex == activePage &&
             observation.RowAddress == rowAddress).ToArray();
