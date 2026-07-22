@@ -26,6 +26,25 @@ public enum HookId
     NameActionCallback,
     NameDirectEntryActivation,
     NameDirectEntryClose,
+    GallerySceneSwitchNode,
+    ExtrasHubCallback,
+    EndingLogCallback,
+    EndingDetailCallback,
+    MenuNodeConfigSteamConstructor,
+    MenuNodeConfigSteamBuilder,
+    MenuNodeConfigSteamDestructor,
+    SettingsValueMutation,
+    MsgWindowOpen,
+    MsgWindowUpdate,
+    MsgWindowClose,
+    ClassicTopMenuBuilder,
+    TouchTopMenuBuilder,
+    MenuTextLabelFactory,
+    StatusBarFormatScope,
+    StatusBarGlyphRenderer,
+    StatusBarDestructor,
+    ClassicTopMenuDeletingDestructor,
+    TouchTopMenuDeletingDestructor,
 }
 
 public enum X86CallingConvention
@@ -148,6 +167,63 @@ public delegate void NameDirectEntryActivationDelegate(nint capture);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void NameDirectEntryCloseDelegate(nint capture);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate int GallerySceneSwitchNodeDelegate(nint galleryScene, int action, uint rawStackWord1);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasHubCallbackDelegate(nint closure, int eventType, int action);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingLogCallbackDelegate(nint closure, int eventType, int action);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingDetailCallbackDelegate(nint closure, int eventType, int action);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint MenuNodeConfigSteamConstructorDelegate(nint instance, int context);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MenuNodeConfigSteamBuilderDelegate(nint instance);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MenuNodeConfigSteamDestructorDelegate(nint instance);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte SettingsValueMutationDelegate(nint config, int page, int row, int proposedIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MsgWindowOpenDelegate(nint msgWindow, uint rawStackWord);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MsgWindowUpdateDelegate(nint msgWindow, uint deltaSecondsBits);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void MsgWindowCloseDelegate(nint msgWindow, uint dummyStackWord);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ClassicTopMenuBuilderDelegate(nint topMenu, uint rawStackWord);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void TouchTopMenuBuilderDelegate(nint topMenu, uint rawStackWord);
+
+[Function(CallingConventions.Fastcall)]
+public delegate nint MenuTextLabelFactoryDelegate(nint position, nint msvcUtf8String, nint anchor, int fontSize);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void StatusBarFormatScopeDelegate(nint statusBar, nint msvcUtf8String, uint rawMode);
+
+[Function(CallingConventions.Fastcall)]
+public delegate nint StatusBarGlyphRendererDelegate(nint glyphOutput, nint msvcUtf16String, nint outputArgument);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void StatusBarDestructorDelegate(nint statusBar);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint ClassicTopMenuDeletingDestructorDelegate(nint topMenu, uint deletingFlags);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint TouchTopMenuDeletingDestructorDelegate(nint topOrEndingDetail, uint deletingFlags);
 
 // Callable wrapper for the audited std::function<int()>::_Do_call target. Reloaded
 // supplies the x86 thiscall-to-managed wrapper; the target object is passed in ECX.

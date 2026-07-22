@@ -28,6 +28,13 @@ public sealed class ExecutableVerifierTests
             Assert.True(section.IsExecutable, $"{hook.Symbol} is not inside an executable section.");
             Assert.Equal(hook.ExpectedBytes.ToArray(), image.ReadBytesAtRva(hook.Rva, hook.ExpectedBytes.Length));
         }
+
+        Assert.Equal(
+            Convert.FromHexString("E8E1E5FFFF"),
+            image.ReadBytesAtRva(GameVersionCatalog.MsgWindowChoiceConfirmCallRva, 5));
+        Assert.Equal(
+            GameVersionCatalog.MsgWindowChoiceConfirmCallRva + 5,
+            GameVersionCatalog.MsgWindowChoiceConfirmReturnRva);
     }
 
     [Fact]

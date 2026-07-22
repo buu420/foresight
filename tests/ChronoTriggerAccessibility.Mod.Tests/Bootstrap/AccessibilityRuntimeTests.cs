@@ -61,7 +61,7 @@ public sealed class AccessibilityRuntimeTests
         Assert.Contains(GameVersionCatalog.Executable.Sha256, identityLog, StringComparison.Ordinal);
         Assert.Contains(GameVersionCatalog.Executable.Machine.ToString(), identityLog, StringComparison.Ordinal);
         Assert.Contains("0x00400000", identityLog, StringComparison.Ordinal);
-        Assert.Contains("21 required hook byte contracts", identityLog, StringComparison.Ordinal);
+        Assert.Contains($"{GameVersionCatalog.Hooks.Count} required hook byte contracts", identityLog, StringComparison.Ordinal);
 
         var verifiedLogs = scenario.Log.Infos
             .Where(message => message.StartsWith("Hook byte verification passed:", StringComparison.Ordinal))

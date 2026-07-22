@@ -29,6 +29,25 @@ public sealed class GameVersionCatalogTests
         { HookId.NameActionCallback, "Name action callback", 0x2C1760, "558BEC6AFF68FFD4770064A1000000005083EC70A1D0A07F0033C58945F05657", typeof(NameActionCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.NameDirectEntryActivation, "Name direct-entry activation", 0x2C1B50, "56578BF96A018B07C68090020000018B4F04E829DBFFFF33F60F1F8000000000", typeof(NameDirectEntryActivationDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.NameDirectEntryClose, "Name direct-entry close", 0x2C1BA0, "56578BF933F68B07C6809002000000908B47046A018B0C068B01FF90B8020000", typeof(NameDirectEntryCloseDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.GallerySceneSwitchNode, "GalleryScene::switchNode", 0x2A52B0, "558BEC6AFF6838AB770064A1000000005083EC64A1D0A07F", typeof(GallerySceneSwitchNodeDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ExtrasHubCallback, "Extras hub callback", 0x1DC610, "558BEC83E4F88B450883EC08568BF15783E8000F849E0000", typeof(ExtrasHubCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.EndingLogCallback, "Ending Log callback", 0x1D4850, "558BEC8B4508568BF15783E8000F849200000083E8017435", typeof(EndingLogCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.EndingDetailCallback, "Ending Detail callback", 0x1D35A0, "558BEC8B4508568BF183E800745983E801744083E8010F85", typeof(EndingDetailCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigSteamConstructor, "MenuNodeConfigSteam constructor", 0x1ECB00, "558BEC6AFF681044760064A1000000005056A1D0A07F0033C5508D45F464A300", typeof(MenuNodeConfigSteamConstructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigSteamBuilder, "MenuNodeConfigSteam builder", 0x1ED020, "558BEC6AFF684102770064A1000000005081EC640E0000A1D0A07F0033C58945", typeof(MenuNodeConfigSteamBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuNodeConfigSteamDestructor, "MenuNodeConfigSteam destructor", 0x1EC970, "558BEC6AFF689EC6760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(MenuNodeConfigSteamDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SettingsValueMutation, "Settings value mutation", 0x1E3980, "558BEC538BD95669750C98000000", typeof(SettingsValueMutationDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MsgWindowOpen, "MsgWindow open/parser", 0x195B40, "558BEC6AFF68CF9C760064A1000000005083EC30A1D0A07F0033C58945EC5356", typeof(MsgWindowOpenDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MsgWindowUpdate, "MsgWindow update", 0x197530, "558BEC6AFF68A89F760064A1000000005083EC54A1D0A07F0033C58945F05356", typeof(MsgWindowUpdateDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MsgWindowClose, "MsgWindow close", 0x195C70, "558BEC6AFF68179D760064A1000000005083EC48A1D0A07F0033C58945EC5356", typeof(MsgWindowCloseDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ClassicTopMenuBuilder, "Classic top-menu builder", 0x1D0560, "558BEC6AFF683ECE760064A1000000005081EC94010000A1D0A07F0033C58945", typeof(ClassicTopMenuBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchTopMenuBuilder, "Touch/mouse top-menu builder", 0x221660, "558BEC6AFF681648770064A1000000005081ECEC000000A1D0A07F0033C58945", typeof(TouchTopMenuBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuTextLabelFactory, "Menu UTF-8 text-label factory", 0x2400B0, "558BEC83E4F883EC0C8BC28B550C53568BD98BC857E8C6F9DCFF6A0083EC088D", typeof(MenuTextLabelFactoryDelegate), X86CallingConvention.MicrosoftFastcall },
+        { HookId.StatusBarFormatScope, "StatusBar text-format scope", 0x22F160, "558BEC6AFF682F5D770064A1000000005081EC24010000A1D0A07F0033C58945", typeof(StatusBarFormatScopeDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.StatusBarGlyphRenderer, "StatusBar UTF-16 glyph renderer", 0x22E080, "558BEC6AFF68C1C5760064A1000000005083EC58A1D0A07F0033C58945EC5356", typeof(StatusBarGlyphRendererDelegate), X86CallingConvention.MicrosoftFastcall },
+        { HookId.StatusBarDestructor, "StatusBar destructor", 0x22E650, "558BEC6AFF68EEE6760064A10000000050515657A1D0A07F0033C5508D45F464", typeof(StatusBarDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.ClassicTopMenuDeletingDestructor, "Classic top-menu deleting destructor", 0x1D0470, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(ClassicTopMenuDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchTopMenuDeletingDestructor, "Touch top/Ending Detail deleting destructor", 0x1D2690, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(TouchTopMenuDeletingDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
     };
 
     [Theory]
@@ -52,12 +71,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyTwentyOneUniqueContracts()
+    public void HookCatalog_HasExactlyFortyUniqueContracts()
     {
-        Assert.Equal(21, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(21, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(21, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(21, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(40, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -110,6 +129,36 @@ public sealed class GameVersionCatalogTests
         AssertReturnType<OpeManualSceneInitDelegate>(typeof(byte));
         AssertReturnType<NameInputSceneInitDelegate>(typeof(byte));
         AssertReturnType<TitleMenuModeEnterDelegate>(typeof(void));
+    }
+
+    [Fact]
+    public void ExtrasSettingsDialogueAndMenuDelegatesPreserveAuditedNativeContracts()
+    {
+        AssertSignatureWithReturn<GallerySceneSwitchNodeDelegate>(typeof(int), typeof(nint), typeof(int), typeof(uint));
+        AssertSignature<ExtrasHubCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignature<EndingLogCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignature<EndingDetailCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignatureWithReturn<MenuNodeConfigSteamConstructorDelegate>(typeof(nint), typeof(nint), typeof(int));
+        AssertSignature<MenuNodeConfigSteamBuilderDelegate>(typeof(nint));
+        AssertSignature<MenuNodeConfigSteamDestructorDelegate>(typeof(nint));
+        AssertSignatureWithReturn<SettingsValueMutationDelegate>(typeof(byte), typeof(nint), typeof(int), typeof(int), typeof(int));
+        AssertSignature<MsgWindowOpenDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<MsgWindowUpdateDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<MsgWindowCloseDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<ClassicTopMenuBuilderDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<TouchTopMenuBuilderDelegate>(typeof(nint), typeof(uint));
+        AssertSignatureWithReturn<MenuTextLabelFactoryDelegate>(typeof(nint), typeof(nint), typeof(nint), typeof(nint), typeof(int));
+        AssertSignature<StatusBarFormatScopeDelegate>(typeof(nint), typeof(nint), typeof(uint));
+        AssertSignatureWithReturn<StatusBarGlyphRendererDelegate>(typeof(nint), typeof(nint), typeof(nint), typeof(nint));
+        AssertSignature<StatusBarDestructorDelegate>(typeof(nint));
+        AssertSignatureWithReturn<ClassicTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
+        AssertSignatureWithReturn<TouchTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
+    }
+
+    [Fact]
+    public void MsgWindowChoiceConfirmReturnFollowsItsExactCallInstruction()
+    {
+        Assert.Equal(GameVersionCatalog.MsgWindowChoiceConfirmCallRva + 5, GameVersionCatalog.MsgWindowChoiceConfirmReturnRva);
     }
 
     [Fact]

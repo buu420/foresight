@@ -11,7 +11,7 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Mod.NewGame;
 
-public sealed class NewGameHookSet : IHookActivationObserver, INewGameSharedNativeObserver
+public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookObserver
 {
     public const uint ControllerConfigurationRootRva = 0x41B4C4;
     public const uint ControllerArtworkSelectorOffset = 0x109C4;
