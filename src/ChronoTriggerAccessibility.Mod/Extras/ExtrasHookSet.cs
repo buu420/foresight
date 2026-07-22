@@ -620,6 +620,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         TransitionScope? scope = null;
         string? setupError = null;
         var preserveUnsupportedReview = false;
+        var unsupportedReviewValidated = false;
         if (instrument)
         {
             try
@@ -630,7 +631,12 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                         $"{source} transition payload 0x{(nuint)payload:X} has no readable action.");
                 }
                 preserveUnsupportedReview = source == Surface.EndingDetail && action == 3;
-                if (!preserveUnsupportedReview)
+                if (preserveUnsupportedReview)
+                {
+                    ValidateUnsupportedReviewTransition((nuint)payload, epoch);
+                    unsupportedReviewValidated = true;
+                }
+                else
                 {
                     scope = BeginTransition(source, (nuint)payload, action, epoch);
                     threadTransitionScope = scope;
@@ -660,12 +666,20 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             }
         }
 
-        if (!instrument || preserveUnsupportedReview)
+        if (!instrument)
         {
             return;
         }
         RunInstrumentationSafely(epoch, $"{source} transition post-capture failed", () =>
         {
+            if (preserveUnsupportedReview)
+            {
+                if (!unsupportedReviewValidated)
+                {
+                    FailCoverage($"{source} Review transition validation failed: {setupError}");
+                }
+                return;
+            }
             if (scope is null)
             {
                 FailCoverage($"{source} transition validation failed: {setupError}");
@@ -673,6 +687,43 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             }
             FinalizeTransition(scope);
         });
+    }
+
+    private void ValidateUnsupportedReviewTransition(nuint payload, int epoch)
+    {
+        if (threadTransitionScope is not null || threadSwitchScope is not null ||
+            threadBuildScope is not null || threadPendingNode is not null)
+        {
+            throw new InvalidOperationException(
+                "Ending Detail Review was nested inside another Extras transition, switch, or build observation.");
+        }
+        if (!TryReadPointer(payload + 4, out var scene) || scene == 0)
+        {
+            throw new InvalidOperationException(
+                "Ending Detail Review payload has no readable Gallery scene identity.");
+        }
+
+        var callback = GetOwnedCallbackScope();
+        var context = GetActiveContext();
+        if (callback is null || callback.Epoch != epoch || callback.ReviewTransitionObserved ||
+            callback.Context.Surface != Surface.EndingDetail || context is null ||
+            !ReferenceEquals(callback.Context, context) || context.Scene != scene)
+        {
+            throw new InvalidOperationException(
+                "Ending Detail Review does not belong to one exact active Detail callback and Gallery scene.");
+        }
+        if (!TryValidateActiveContext(context, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+        if (callback.EventType != 0 || callback.Action != 0 || callback.EntryFocusKey != 0 ||
+            !context.Controls.TryGetValue(0, out var review) || review.Focus.Position != 1 ||
+            review.Focus.Disabled)
+        {
+            throw new InvalidOperationException(
+                "Ending Detail Review is not related to its exact focused, enabled Review control callback.");
+        }
+        callback.ReviewTransitionObserved = true;
     }
 
     private TransitionScope BeginTransition(Surface source, nuint payload, int action, int epoch)
@@ -1642,6 +1693,11 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage(error);
             return;
         }
+        if (!TryValidateFinalTransitionFocus(scope, completed, out error))
+        {
+            FailCoverage(error);
+            return;
+        }
         if (scope.Source == Surface.EndingDetail && scope.Action == 4 &&
             (!TryReadInt32(imageBase + SelectedEndingGlobalRva, out var selected) ||
              selected != scope.SelectedEnding ||
@@ -1652,6 +1708,27 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             return;
         }
         ActivateContext(completed.Context, completed.Presented);
+    }
+
+    private bool TryValidateFinalTransitionFocus(
+        TransitionScope scope,
+        CompletedBuild completed,
+        out string error)
+    {
+        if (!TryReadInt32(completed.Context.Manager + ManagerFocusKeyOffset, out var focusedKey) ||
+            !completed.Context.Controls.TryGetValue(focusedKey, out var focused) ||
+            completed.Presented.Focus is null || !Equals(completed.Presented.Focus, focused.Focus))
+        {
+            error = $"{scope.Target} transition final manager focus does not match the exact published target focus.";
+            return false;
+        }
+        if (scope.Source == Surface.EndingLog && scope.Action == 4 && focusedKey != 3)
+        {
+            error = "Ending Log Back did not restore Hub manager key 3 from its exact action 0/raw word 3 switch.";
+            return false;
+        }
+        error = string.Empty;
+        return true;
     }
 
     private void ActivateContext(ActiveContext context, MenuPresented presented)
@@ -2157,6 +2234,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         public List<FocusObservation> Focus { get; } = [];
         public List<AccessibilityEvent> DeferredEvents { get; } = [];
         public bool ExitObserved { get; set; }
+        public bool ReviewTransitionObserved { get; set; }
     }
 
     private sealed record PendingNode(
