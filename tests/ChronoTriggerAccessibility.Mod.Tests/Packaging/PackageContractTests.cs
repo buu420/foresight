@@ -68,6 +68,7 @@ public sealed class PackageContractTests
             Assert.DoesNotContain(packagedFiles, path => path.Contains("x64", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(0x014c, ReadPeMachine(Path.Combine(packageRoot, "prism.dll")));
 
+            AssertCanonicalReloadedManifestIsPackagedByteForByte(repositoryRoot, packageRoot);
             AssertPrismLicenseTreeMatchesPinnedSource(repositoryRoot, packageRoot);
             AssertDepsRuntimeFilesArePresent(packageRoot);
             AssertExactSha256Manifest(packageRoot, packagedFiles);
@@ -211,6 +212,35 @@ public sealed class PackageContractTests
                 Assert.True(File.Exists(Path.Combine(packageRoot, fileName)), $"Runtime dependency is missing: {fileName}");
             }
         }
+    }
+
+    private static void AssertCanonicalReloadedManifestIsPackagedByteForByte(string repositoryRoot, string packageRoot)
+    {
+        const string canonicalHash = "03E59C99C823A6B2F86A66FADF1A2B3FAB9D99DA40E67F4A0EFA89E88766A499";
+        var sourcePath = Path.Combine(repositoryRoot, "src", "ChronoTriggerAccessibility.Mod", "ModConfig.json");
+        var packagedPath = Path.Combine(packageRoot, "ModConfig.json");
+        var sourceBytes = File.ReadAllBytes(sourcePath);
+        var packagedBytes = File.ReadAllBytes(packagedPath);
+
+        Assert.Equal(sourceBytes, packagedBytes);
+        Assert.Equal(canonicalHash, Convert.ToHexString(SHA256.HashData(packagedBytes)));
+
+        using var document = JsonDocument.Parse(packagedBytes);
+        var root = document.RootElement;
+        Assert.False(root.GetProperty("CanUnload").GetBoolean());
+        Assert.False(root.GetProperty("HasExports").GetBoolean());
+        Assert.Equal(string.Empty, root.GetProperty("ModIcon").GetString());
+        Assert.Equal(string.Empty, root.GetProperty("ModR2RManagedDll32").GetString());
+        Assert.Equal(string.Empty, root.GetProperty("ModR2RManagedDll64").GetString());
+        Assert.Equal(string.Empty, root.GetProperty("ModNativeDll32").GetString());
+        Assert.Equal(string.Empty, root.GetProperty("ModNativeDll64").GetString());
+        Assert.Empty(root.GetProperty("Tags").EnumerateArray());
+        Assert.Equal("Sewer56.Update.ReleaseMetadata.json", root.GetProperty("ReleaseMetadataFileName").GetString());
+        Assert.Equal([".*\\.json"], root.GetProperty("IgnoreRegexes").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(
+            ["\\.deps\\.json", "\\.runtimeconfig\\.json", "ModConfig\\.json"],
+            root.GetProperty("IncludeRegexes").EnumerateArray().Select(item => item.GetString()));
+        Assert.Empty(root.GetProperty("PluginData").EnumerateObject());
     }
 
     private static void AssertPrismLicenseTreeMatchesPinnedSource(string repositoryRoot, string packageRoot)

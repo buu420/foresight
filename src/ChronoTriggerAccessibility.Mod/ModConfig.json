@@ -5,11 +5,32 @@
   "ModVersion": "0.1.0",
   "ModDescription": "Screen-reader access for Chrono Trigger startup and New Game screens.",
   "ModDll": "ChronoTriggerAccessibility.Mod.dll",
+  "ModIcon": "",
+  "ModR2RManagedDll32": "",
+  "ModR2RManagedDll64": "",
+  "ModNativeDll32": "",
+  "ModNativeDll64": "",
+  "Tags": [],
   "CanUnload": false,
+  "HasExports": false,
   "IsLibrary": false,
+  "ReleaseMetadataFileName": "Sewer56.Update.ReleaseMetadata.json",
+  "IgnoreRegexes": [
+    ".*\\.json"
+  ],
+  "IncludeRegexes": [
+    "\\.deps\\.json",
+    "\\.runtimeconfig\\.json",
+    "ModConfig\\.json"
+  ],
+  "PluginData": {},
   "IsUniversalMod": false,
-  "ModDependencies": [ "reloaded.sharedlib.hooks" ],
+  "ModDependencies": [
+    "reloaded.sharedlib.hooks"
+  ],
   "OptionalDependencies": [],
-  "SupportedAppId": [ "chrono trigger.exe" ],
+  "SupportedAppId": [
+    "chrono trigger.exe"
+  ],
   "ProjectUrl": ""
 }
