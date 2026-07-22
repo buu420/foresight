@@ -47,11 +47,13 @@ The transactional deployer installed and independently verified:
 
 `Verify-Deployment.ps1` and the launcher's `-VerifyOnly` mode both passed. They verify the game and Prism hashes, PE architecture, complete package manifest, Reloaded profile and shared-hook dependency, x86 .NET host/frameworks, and exact launcher copy.
 
+Reloaded-II's complete 24-field mod manifest is packaged up front, including its runtime-computed `HasExports: false` and `CanUnload: false` values. A post-launch verification also passed: source, package, and deployed `ModConfig.json` remained byte-identical at SHA-256 `03E59C99C823A6B2F86A66FADF1A2B3FAB9D99DA40E67F4A0EFA89E88766A499`.
+
 ## Live smoke verification
 
 The game was launched through the deployed accessible launcher with NVDA active, then closed at the opening movie without accessing save data. Reloaded log:
 
-`C:\Users\User\AppData\Roaming\Reloaded-Mod-Loader-II\Logs\2026-07-22 04.43.06 ~ Chrono Trigger.txt`
+`C:\Users\User\AppData\Roaming\Reloaded-Mod-Loader-II\Logs\2026-07-22 04.57.46 ~ Chrono Trigger.txt`
 
 Observed:
 
