@@ -44,6 +44,7 @@ Add the following exact-build entries. Prefixes are hexadecimal bytes from the i
 | `MsgWindow` open/parser | `0x195B40` | `55 8B EC 6A FF 68 CF 9C 76 00 64 A1 00 00 00 00 50 83 EC 30 A1 D0 A0 7F 00 33 C5 89 45 EC 53 56` |
 | `MsgWindow` update | `0x197530` | `55 8B EC 6A FF 68 A8 9F 76 00 64 A1 00 00 00 00 50 83 EC 54 A1 D0 A0 7F 00 33 C5 89 45 F0 53 56` |
 | `MsgWindow` close | `0x195C70` | `55 8B EC 6A FF 68 17 9D 76 00 64 A1 00 00 00 00 50 83 EC 48 A1 D0 A0 7F 00 33 C5 89 45 EC 53 56` |
+| `MsgWindow` choice-confirm close call site (assembly probe) | `0x19768A` | `E8 E1 E5 FF FF` |
 | Classic top-menu builder | `0x1D0560` | `55 8B EC 6A FF 68 3E CE 76 00 64 A1 00 00 00 00 50 81 EC 94 01 00 00 A1 D0 A0 7F 00 33 C5 89 45` |
 | Touch/mouse top-menu builder | `0x221660` | `55 8B EC 6A FF 68 16 48 77 00 64 A1 00 00 00 00 50 81 EC EC 00 00 00 A1 D0 A0 7F 00 33 C5 89 45` |
 | Menu UTF-8 text-label factory | `0x2400B0` | `55 8B EC 83 E4 F8 83 EC 0C 8B C2 8B 55 0C 53 56 8B D9 8B C8 57 E8 C6 F9 DC FF 6A 00 83 EC 08 8D` |
@@ -53,7 +54,7 @@ Add the following exact-build entries. Prefixes are hexadecimal bytes from the i
 | Classic top-menu deleting destructor | `0x1D0470` | `55 8B EC 6A FF 68 C7 5B 76 00 64 A1 00 00 00 00 50 56 57 A1 D0 A0 7F 00 33 C5 50 8D 45 F4 64 A3` |
 | Touch top/Ending Detail deleting destructor | `0x1D2690` | `55 8B EC 6A FF 68 C7 5B 76 00 64 A1 00 00 00 00 50 56 57 A1 D0 A0 7F 00 33 C5 50 8D 45 F4 64 A3` |
 
-Retain and share the existing `TextManager::getMsg` `0x1B9110`, `nsMenu` focus setter `0x1DD3E0`, CustomButton constructor `0x1D2160`, and control binder `0x1DD260` contracts. The Gallery switch is thiscall with two stack words, native `ret 8`, and a 32-bit zero return that callers consume. The shared Settings mutation is `bool __thiscall(config, page, row, proposedIndex)` and publishes only after the original returns true. Both top builders are thiscall with one raw stack word and native `ret 4`. The text-label factory is caller-clean fastcall with `ECX=position`, `EDX=MSVC UTF-8 string`, followed by anchor and font-size stack arguments, returning the original Label pointer. The glyph renderer is caller-clean fastcall with `ECX=glyph output`, `EDX=MSVC UTF-16 string`, and one stack output argument; it ends in plain `ret`, returns the original glyph-output pointer, and is accepted only under the validated StatusBar scope and return RVA `0x22F3BD`. `MsgWindow` close receives the caller's dummy stack word so the managed delegate preserves native `ret 4`; the audited choice-confirm return address is image-base plus RVA `0x19768F`, from call bytes `E8 E1 E5 FF FF` at RVA `0x19768A`.
+Retain and share the existing `TextManager::getMsg` `0x1B9110`, `nsMenu` focus setter `0x1DD3E0`, CustomButton constructor `0x1D2160`, and control binder `0x1DD260` contracts. The Gallery switch is thiscall with two stack words, native `ret 8`, and a 32-bit zero return that callers consume. The shared Settings mutation is `bool __thiscall(config, page, row, proposedIndex)` and publishes only after the original returns true. Both top builders are thiscall with one raw stack word and native `ret 4`. The text-label factory is caller-clean fastcall with `ECX=position`, `EDX=MSVC UTF-8 string`, followed by anchor and font-size stack arguments, returning the original Label pointer. The glyph renderer is caller-clean fastcall with `ECX=glyph output`, `EDX=MSVC UTF-16 string`, and one stack output argument; it ends in plain `ret`, returns the original glyph-output pointer, and is accepted only under the validated StatusBar scope and return RVA `0x22F3BD`. `MsgWindow` close receives the caller's dummy stack word so the managed delegate preserves native `ret 4`. A normal managed function-entry detour cannot safely recover its native caller's return address, so choice confirmation is identified by a separate audited assembly probe over the exact five-byte call at RVA `0x19768A`, whose return RVA is `0x19768F`.
 
 The UTF-8 factory accepts only these return RVAs while the corresponding validated top-builder scope is active: classic time `0x1D0AAA`, currency `0x1D0B54`, row caption `0x1D179E`, and active-member name `0x23B1D0`; touch time `0x221A4F`, currency `0x221B1C`, row caption `0x2221C6`, and active-member name `0x23A9E6`. Touch return RVA `0x23AE3A` is unreachable from the exact top builder because it passes the reserve-name flag as false and is rejected as drift. The compact party formatter uses `0x23973B`, `0x239891`, `0x239914`, `0x2399AA`, and `0x239A73`. The distinct classic active-party formatter uses row label `0x23A2F2`; row-zero value `0x23A552`; later-row placeholder `0x23A3C2` or ordered current/maximum values `0x23A5EF`/`0x23A697`; and extra token `0x23A73B`. Preserve every branch and construction order rather than globally deduplicating equal strings.
 
@@ -202,6 +203,40 @@ git add src/ChronoTriggerAccessibility.Native src/ChronoTriggerAccessibility.Mod
 git commit -m 'feat: register shared menu and dialogue hooks'
 ```
 
+## Task 4B: Add the Verified Dialogue Confirm Call-Site Probe
+
+**Files:**
+
+- Modify `src/ChronoTriggerAccessibility.Native/Hooks/HookContract.cs`
+- Modify `src/ChronoTriggerAccessibility.Native/Hooks/GameVersionCatalog.cs`
+- Add a fakeable assembly-hook bridge under `src/ChronoTriggerAccessibility.Mod/Runtime/`
+- Modify exact-contract/runtime-hook tests in the Native and Mod test projects
+
+**Step 1 — RED:** Add catalog tests that distinguish function-entry hooks from assembly call sites and verify the exact five bytes `E8 E1 E5 FF FF` at RVA `0x19768A`. Add bridge tests proving the callback and generated reverse wrapper remain rooted; code is built once; preparation is inert; activation and disable are transactional; and the installed Reloaded.Hooks 4.3.2 options are exactly `ExecuteFirst`, `HookLength=5`, `PreferRelativeJump=true`, and `MaxOpcodeSize=5`.
+
+```powershell
+& $dotnet test .\tests\ChronoTriggerAccessibility.Native.Tests\ChronoTriggerAccessibility.Native.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~GameVersionCatalogTests'; if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& $dotnet test .\tests\ChronoTriggerAccessibility.Mod.Tests\ChronoTriggerAccessibility.Mod.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~RuntimeNativeAsmHookFactoryTests'
+```
+
+Expected RED: the assembly-call-site contract kind and fakeable assembly-hook bridge do not exist.
+
+**Step 2 — GREEN:** Add `AssemblyCallSite` as a non-callable exact hook kind rather than assigning it a false managed delegate ABI. Build one x86 FASM probe that preserves flags and caller-saved `EAX`/`ECX`/`EDX`, passes the original `ECX` window pointer to a rooted cdecl managed callback, restores state, and then lets Reloaded relocate and execute the original close call exactly once. Use `IReloadedHooks.Utilities.GetAbsoluteCallMnemonics` for the managed callback thunk. Do not use the legacy five-byte `CreateAsmHook` overload: Reloaded.Hooks 4.3.2 defaults to a six-byte x86 absolute jump. Supply `AsmHookOptions` with an explicit relative five-byte jump so byte `0x19768F` is never overwritten.
+
+```powershell
+& $dotnet test .\tests\ChronoTriggerAccessibility.Native.Tests\ChronoTriggerAccessibility.Native.Tests.csproj -c Release --no-restore
+& $dotnet test .\tests\ChronoTriggerAccessibility.Mod.Tests\ChronoTriggerAccessibility.Mod.Tests.csproj -c Release --no-restore
+```
+
+Expected GREEN: all Native and Mod tests pass, zero warnings.
+
+**Step 3 — review and commit:** Compare the call bytes to the supported executable, inspect emitted FASM and option values, and prove the original call is relocated exactly once. Run `git diff --check`, then commit:
+
+```powershell
+git add src/ChronoTriggerAccessibility.Native src/ChronoTriggerAccessibility.Mod tests/ChronoTriggerAccessibility.Native.Tests tests/ChronoTriggerAccessibility.Mod.Tests
+git commit -m 'feat: add verified dialogue confirm probe'
+```
+
 ## Task 5: Implement the Field Dialogue Hook Set
 
 **Files:**
@@ -209,7 +244,7 @@ git commit -m 'feat: register shared menu and dialogue hooks'
 - Create `src/ChronoTriggerAccessibility.Mod/Dialogue/DialogueHookSet.cs`
 - Create `tests/ChronoTriggerAccessibility.Mod.Tests/Dialogue/DialogueHookSetTests.cs`
 
-**Step 1 — RED:** With fake native hooks and memory, test prepare-before-activate, open/update/close original-call-once behavior, post-open generation registration, first active current line, line-index/page-base progression, fast-reveal de-duplication, phase-4 choices and `-1` focus, focus changes, exact choice activation only when the close caller RVA is `0x19768F`, ordinary close/auto-end non-activation, close/reopen reset, invalid snapshot coverage failure before semantic dispatch, original exceptions, active-epoch suppression, disable clearing state, and no callback exception crossing unmanaged boundaries.
+**Step 1 — RED:** With fake native hooks and memory, test prepare-before-activate, open/update/close original-call-once behavior, post-open generation registration, first active current line, line-index/page-base progression, fast-reveal de-duplication, phase-4 choices and `-1` focus, focus changes, exact choice activation only when the verified RVA `0x19768A` assembly probe marks that window immediately before close, ordinary close/auto-end non-activation, mismatched-window and stale probe rejection, close/reopen reset, invalid snapshot coverage failure before semantic dispatch, original exceptions, active-epoch suppression, disable clearing state, and no callback exception crossing unmanaged boundaries.
 
 ```powershell
 & $dotnet test .\tests\ChronoTriggerAccessibility.Mod.Tests\ChronoTriggerAccessibility.Mod.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~DialogueHookSetTests'
@@ -217,7 +252,7 @@ git commit -m 'feat: register shared menu and dialogue hooks'
 
 Expected RED: `DialogueHookSet` and its registrations do not exist.
 
-**Step 2 — GREEN:** Own only `MsgWindow` open `0x195B40`, update `0x197530`, and close `0x195C70`. Call the original once, capture post-original committed state, translate complete snapshots into dialogue events, and dispatch through `ISemanticEventDispatcher`. Do not announce on open merely because future lines were parsed. Read the close caller address before the original while preserving the dummy argument/stack cleanup, classify selection only under all audited conditions, then clear after close. Implement epoch and fail-closed behavior. Keep this hook set independently constructible and tested; Task 6 performs the single production composition change after every menu observer exists.
+**Step 2 — GREEN:** Own `MsgWindow` open `0x195B40`, update `0x197530`, and close `0x195C70`, plus the Task 4B verified call-site probe at `0x19768A`. The probe sets only a thread-local, window-correlated confirmation marker before Reloaded executes the relocated original close call. The close detour consumes that marker before its original, classifies selection only under all audited choice conditions, calls the original once, and always clears dialogue and marker state. Capture post-original committed state for open/update, translate only complete snapshots into dialogue events, and dispatch through `ISemanticEventDispatcher`. Do not announce on open merely because future lines were parsed. Implement epoch and fail-closed behavior. Keep this hook set independently constructible and tested; Task 6 performs the single production composition change after every menu observer exists.
 
 ```powershell
 & $dotnet test .\tests\ChronoTriggerAccessibility.Mod.Tests\ChronoTriggerAccessibility.Mod.Tests.csproj -c Release --no-restore

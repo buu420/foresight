@@ -142,10 +142,10 @@ The new class-specific hooks are:
 
 - Extras hub/submenu construction or on-enter boundaries needed to bracket dynamic capture;
 - `MenuNodeConfigSteam` constructor, builder, and destructor for context, complete dynamic construction, and lifetime, plus common value mutation RVA `0x1E3980` for post-refresh changes;
-- `MsgWindow` open, update, and close boundaries for visible line/page/choice transitions and exact choice activation classification;
+- `MsgWindow` open, update, and close boundaries for visible line/page/choice transitions, plus an exact five-byte assembly probe at the audited confirm-close call site for choice activation classification;
 - both controller/keyboard and touch/mouse top-menu builders for field-menu construction, the menu Label factory RVA `0x2400B0` for scoped UTF-8 row/status strings, `StatusBar` scope/UTF-16 render RVAs `0x22F160`/`0x22E080` for the conditional visible text, and audited top-root/StatusBar destructors for immediate lifetime invalidation.
 
-Every hook receives a `GameVersionCatalog` entry with exact calling convention, RVA, and at least a stable prologue byte contract. All contracts are verified against the installed PE before any hook activates. Preparation remains atomic and fail-closed.
+Every function-entry hook receives a `GameVersionCatalog` entry with its exact calling convention, RVA, and stable prologue byte contract. The choice-confirm assembly call site is represented separately as non-callable executable code with exact bytes. All function and assembly-site contracts are verified against the installed PE before any hook activates. Preparation remains atomic and fail-closed. Reloaded.Hooks 4.3.2 must use explicit `ExecuteFirst`, five-byte relative-jump options at that call site; its default x86 absolute jump is six bytes and would overwrite the return instruction boundary.
 
 ### Lifecycle
 
@@ -177,7 +177,7 @@ Entering Gamepad Settings, Keyboard Settings, or License content announces the s
 
 When `MsgWindow` becomes active, enter dialogue state without a generic preamble. As each parsed line begins rendering, queue that line once. Do not announce later vector entries until the native current-line index reaches them. Reset line identity when the visible-page base advances so repeated visible text on a later page is announced again.
 
-When phase 4 exposes choices, validate choice count and contiguous flagged line records, announce all visible choices in order, then the selected choice and position when selection is nonnegative. Focus movement announces the new choice. Choice activation is classified only for the audited confirm caller at RVA `0x19768F`; ordinary close and auto-end callers must not be announced as a selected choice. On close, clear the entire dialogue snapshot so the next NPC can repeat identical text legitimately.
+When phase 4 exposes choices, validate choice count and contiguous flagged line records, announce all visible choices in order, then the selected choice and position when selection is nonnegative. Focus movement announces the new choice. Choice activation is classified only when the audited five-byte call at RVA `0x19768A` sets a thread-local, window-correlated marker immediately before the native close; ordinary close and auto-end callers must not be announced as a selected choice. The normal close detour does not attempt to inspect its caller's return address. On close, clear the marker and the entire dialogue snapshot so the next NPC can repeat identical text legitimately.
 
 No speaker name is inferred from a nearby sprite or portrait. A name is included only if the game exposes it as visible text in the committed message state.
 
@@ -211,7 +211,7 @@ Development is test-first. Automated coverage includes:
 - each builder's dynamic localized row correlation;
 - dialogue line-by-line progression, repeated later-page text, choices, and close/reopen;
 - original-call-once, pre/post exception, activation epoch, disable, and observer isolation behavior;
-- exact hook catalog RVAs, byte prefixes, delegate types, calling conventions, executable ranges, and installed-file bytes;
+- exact hook catalog RVAs, byte prefixes, function delegate types/calling conventions, assembly-site kind and options, executable ranges, and installed-file bytes;
 - composition proving every shared native address is detoured once;
 - package and deployment completeness.
 
