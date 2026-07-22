@@ -3,468 +3,22 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
-public static class SettingsCapture
+internal readonly record struct SettingsVector(uint Begin, int Count, int ByteLength);
+
+internal sealed record SettingsMemoryGuard(nuint Address, byte[] Expected, string Name);
+
+internal static class SettingsCaptureMemory
 {
-    public const uint ConfigVtableRva = 0x3A702C;
-    public const uint PagerVtableRva = 0x3AC940;
-    public const int MaximumPageCount = 32;
-    public const int MaximumRowCount = 64;
+    internal const int VectorHeaderSize = 0x0C;
 
-    private const int ConfigSize = 0x2FC;
-    private const int DescriptorVectorOffset = 0x2C8;
-    private const int PagerPointerOffset = 0x2D4;
-    private const int ConfigActivePageOffset = 0x2E8;
-    private const int ContextOffset = 0x2F8;
-    private const int PagerSize = 0x2E2;
-    private const int PagerPageCountOffset = 0x2D0;
-    private const int PagerActivePageOffset = 0x2D4;
-    private const int PagerActiveRootOffset = 0x2D8;
-    private const int PagerTransitionOffset = 0x2E1;
-    private const int ManagerKeyOffset = 0x2C4;
-    private const int ManagerRequiredSize = ManagerKeyOffset + sizeof(int);
-    private const int DescriptorStride = 0x0C;
-    private const int RowStride = 0x98;
-    private const int RowUiTypeOffset = 0x00;
-    private const int RowLabelOffset = 0x04;
-    private const int RowHelpOffset = 0x1C;
-    private const int RowValuesOffset = 0x34;
-    private const int RowSelectedIndexOffset = 0x90;
+    internal static bool FitsX86Address(nuint address) =>
+        address != 0 && address <= uint.MaxValue;
 
-    public static bool TryCreateSnapshot(
-        IReadableMemory? memory,
-        nuint imageBase,
-        nuint config,
-        nuint manager,
-        out SettingsSnapshot snapshot,
-        out string diagnostic)
-    {
-        try
-        {
-            return TryCreateSnapshotCore(memory, imageBase, config, manager, out snapshot, out diagnostic);
-        }
-        catch (Exception exception)
-        {
-            snapshot = null!;
-            diagnostic = $"Settings memory capture failed safely: {exception.GetType().Name}: {exception.Message}";
-            return false;
-        }
-    }
-
-    private static bool TryCreateSnapshotCore(
-        IReadableMemory? memory,
-        nuint imageBase,
-        nuint config,
-        nuint manager,
-        out SettingsSnapshot snapshot,
-        out string diagnostic)
-    {
-        snapshot = null!;
-        if (memory is null || !FitsX86Address(imageBase) ||
-            !FitsX86Range(config, ConfigSize) || !FitsX86Range(manager, ManagerRequiredSize))
-        {
-            diagnostic = "Settings memory, image base, config, or input manager is unavailable or outside x86 memory.";
-            return false;
-        }
-        if (!TryAddX86(imageBase, ConfigVtableRva, out var expectedConfigVtable) ||
-            !TryAddX86(imageBase, PagerVtableRva, out var expectedPagerVtable))
-        {
-            diagnostic = "Settings vtable resolution crosses the x86 address space.";
-            return false;
-        }
-        if (!TryReadUInt32(memory, config, out var observedConfigVtable) || observedConfigVtable != expectedConfigVtable)
-        {
-            diagnostic = "Settings config vtable is unreadable or does not match MenuNodeConfigSteam.";
-            return false;
-        }
-
-        var configBytes = new byte[ConfigSize];
-        if (!memory.TryRead(config, configBytes))
-        {
-            diagnostic = $"Settings config at 0x{config:X8} is unreadable.";
-            return false;
-        }
-        if (ReadUInt32(configBytes, 0) != expectedConfigVtable)
-        {
-            diagnostic = "Settings config vtable changed while its header was being captured.";
-            return false;
-        }
-
-        var contextValue = ReadInt32(configBytes, ContextOffset);
-        if (contextValue is not 0 and not 1)
-        {
-            diagnostic = $"Settings context {contextValue} is outside the audited in-game/title values 0 and 1.";
-            return false;
-        }
-        var context = (SettingsContext)contextValue;
-
-        var pager = ReadUInt32(configBytes, PagerPointerOffset);
-        if (!FitsX86Range(pager, PagerSize))
-        {
-            diagnostic = "Settings ConfigPager pointer is null or crosses the x86 address space.";
-            return false;
-        }
-        var pagerBytes = new byte[PagerSize];
-        if (!memory.TryRead(pager, pagerBytes))
-        {
-            diagnostic = $"Settings ConfigPager at 0x{pager:X8} is unreadable.";
-            return false;
-        }
-        if (ReadUInt32(pagerBytes, 0) != expectedPagerVtable)
-        {
-            diagnostic = "Settings ConfigPager vtable does not match the audited pager type.";
-            return false;
-        }
-
-        var pageCount = ReadInt32(pagerBytes, PagerPageCountOffset);
-        var pagerActivePage = ReadInt32(pagerBytes, PagerActivePageOffset);
-        var configActivePage = ReadInt32(configBytes, ConfigActivePageOffset);
-        var activeRoot = ReadUInt32(pagerBytes, PagerActiveRootOffset);
-        var transition = pagerBytes[PagerTransitionOffset];
-        if (pageCount <= 0 || pageCount > MaximumPageCount)
-        {
-            diagnostic = $"Settings page count {pageCount} is outside the defensive 1..{MaximumPageCount} range.";
-            return false;
-        }
-        if (pagerActivePage < 0 || pagerActivePage >= pageCount || configActivePage != pagerActivePage)
-        {
-            diagnostic = "Settings config and pager do not identify one valid matching active page.";
-            return false;
-        }
-        if (!FitsX86Address(activeRoot))
-        {
-            diagnostic = "Settings active page root is null or outside x86 memory.";
-            return false;
-        }
-        if (transition != 0)
-        {
-            diagnostic = $"Settings pager transition byte {transition} is nonzero.";
-            return false;
-        }
-
-        if (!TryReadVectorBounds(
-                configBytes.AsSpan(DescriptorVectorOffset, MsvcStringVectorReader.HeaderSize),
-                DescriptorStride,
-                MaximumPageCount,
-                "Settings descriptor",
-                out var descriptorBegin,
-                out var descriptorCount,
-                out diagnostic))
-        {
-            return false;
-        }
-        if (descriptorCount != pageCount)
-        {
-            diagnostic = $"Settings descriptor count {descriptorCount} does not match pager page count {pageCount}.";
-            return false;
-        }
-        if (!TryAddX86(descriptorBegin, checked((uint)(pagerActivePage * DescriptorStride)), out var activeDescriptor) ||
-            !FitsX86Range(activeDescriptor, DescriptorStride))
-        {
-            diagnostic = "Settings active descriptor address crosses the x86 address space.";
-            return false;
-        }
-
-        Span<byte> descriptorBytes = stackalloc byte[DescriptorStride];
-        if (!memory.TryRead(activeDescriptor, descriptorBytes))
-        {
-            diagnostic = $"Settings active descriptor at 0x{activeDescriptor:X8} is unreadable.";
-            return false;
-        }
-        if (!TryReadVectorBounds(
-                descriptorBytes,
-                RowStride,
-                MaximumRowCount,
-                "Settings row",
-                out var rowBegin,
-                out var rowCount,
-                out diagnostic))
-        {
-            return false;
-        }
-        if (rowCount == 0)
-        {
-            diagnostic = "Settings active descriptor contains no rows.";
-            return false;
-        }
-
-        if (!TryAddX86(manager, ManagerKeyOffset, out var managerKeyAddress))
-        {
-            diagnostic = "Settings input-manager key address crosses x86 memory.";
-            return false;
-        }
-        Span<byte> managerKeyBytes = stackalloc byte[sizeof(int)];
-        if (!memory.TryRead(managerKeyAddress, managerKeyBytes))
-        {
-            diagnostic = $"Settings input-manager key at 0x{managerKeyAddress:X8} is unreadable.";
-            return false;
-        }
-        var nativeKey = BinaryPrimitives.ReadInt32LittleEndian(managerKeyBytes);
-        if (nativeKey < 0 || nativeKey >= 1000)
-        {
-            diagnostic = $"Settings input-manager key {nativeKey} is negative, sentinel, or reserved.";
-            return false;
-        }
-        var rowIndex = nativeKey / 4;
-        var subcontrol = nativeKey % 4;
-        if (rowIndex < 0 || rowIndex >= rowCount)
-        {
-            diagnostic = $"Settings key {nativeKey} decodes to row {rowIndex}, outside {rowCount} rows.";
-            return false;
-        }
-        if (!TryAddX86(rowBegin, checked((uint)(rowIndex * RowStride)), out var rowAddress) ||
-            !FitsX86Range(rowAddress, RowStride))
-        {
-            diagnostic = "Settings selected row address crosses the x86 address space.";
-            return false;
-        }
-
-        var rowBytes = new byte[RowStride];
-        if (!memory.TryRead(rowAddress, rowBytes))
-        {
-            diagnostic = $"Settings selected row at 0x{rowAddress:X8} is unreadable.";
-            return false;
-        }
-        var uiType = ReadInt32(rowBytes, RowUiTypeOffset);
-        if (uiType is < 0 or > 2)
-        {
-            diagnostic = $"Settings row UI type {uiType} is outside the audited 0..2 range.";
-            return false;
-        }
-
-        var capturedRowMemory = new CapturedRangeMemory(memory, rowAddress, rowBytes);
-        var stringReader = new MsvcStringReader(capturedRowMemory);
-        if (!TryAddX86(rowAddress, RowLabelOffset, out var labelAddress))
-        {
-            diagnostic = "Settings row label address crosses x86 memory.";
-            return false;
-        }
-        if (!stringReader.TryRead(labelAddress, out var label, out var labelError))
-        {
-            diagnostic = $"Settings row label is invalid: {labelError}";
-            return false;
-        }
-        if (!TryAddX86(rowAddress, RowHelpOffset, out var helpAddress))
-        {
-            diagnostic = "Settings row help address crosses x86 memory.";
-            return false;
-        }
-        if (!stringReader.TryRead(helpAddress, out var help, out var helpError))
-        {
-            diagnostic = $"Settings row help is invalid: {helpError}";
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(help))
-        {
-            diagnostic = "Settings row requires nonblank localized label and help text.";
-            return false;
-        }
-
-        if (!TryAddX86(rowAddress, RowValuesOffset, out var valuesAddress))
-        {
-            diagnostic = "Settings row value-vector address crosses x86 memory.";
-            return false;
-        }
-        if (!TryCaptureValueStringHeaders(
-                memory,
-                rowBytes.AsSpan(RowValuesOffset, MsvcStringVectorReader.HeaderSize),
-                out var valueHeadersAddress,
-                out var capturedValueHeaders,
-                out diagnostic))
-        {
-            return false;
-        }
-        var capturedValuesMemory = new CapturedRangeMemory(
-            capturedRowMemory,
-            valueHeadersAddress,
-            capturedValueHeaders);
-        if (!new MsvcStringVectorReader(capturedValuesMemory).TryRead(valuesAddress, out var values, out var valuesError))
-        {
-            diagnostic = $"Settings row value vector is invalid: {valuesError}";
-            return false;
-        }
-        if (values.Count == 0 || !values.Any(value => !string.IsNullOrWhiteSpace(value)))
-        {
-            diagnostic = "Settings row requires at least one nonblank localized displayed value.";
-            return false;
-        }
-
-        var selectedIndex = ReadInt32(rowBytes, RowSelectedIndexOffset);
-        if (selectedIndex < 0 || selectedIndex >= values.Count)
-        {
-            diagnostic = $"Settings selected value index {selectedIndex} is outside {values.Count} values.";
-            return false;
-        }
-        var displayedValue = values[selectedIndex];
-        if (string.IsNullOrWhiteSpace(displayedValue))
-        {
-            diagnostic = $"Settings selected displayed value at index {selectedIndex} is blank.";
-            return false;
-        }
-        var expectedPrimaryKey = checked(rowIndex * 4 + 1);
-        if (uiType == 0 && (values.Count != 2 || nativeKey != checked(expectedPrimaryKey + selectedIndex)))
-        {
-            diagnostic = "Settings type-0 row requires exactly two values and a key matching its displayed selection.";
-            return false;
-        }
-        if (uiType is 1 or 2 && (subcontrol != 1 || nativeKey != expectedPrimaryKey))
-        {
-            diagnostic = "Settings type-1/type-2 row requires the primary row subcontrol key.";
-            return false;
-        }
-        if (uiType == 2 && values.Count != 2)
-        {
-            diagnostic = "Settings type-2 row requires exactly two displayed values.";
-            return false;
-        }
-
-        if (!TryReadUInt32(memory, config, out var finalConfigVtable) || finalConfigVtable != expectedConfigVtable)
-        {
-            diagnostic = "Settings config vtable changed while dependent state was being captured.";
-            return false;
-        }
-
-        var control = new MenuControlSnapshot(
-            new string(label.AsSpan()),
-            new string(displayedValue.AsSpan()),
-            new string(help.AsSpan()),
-            nativeKey,
-            rowIndex + 1,
-            rowCount,
-            Enabled: true,
-            Visible: true);
-        snapshot = new SettingsSnapshot(
-            context,
-            pagerActivePage,
-            pageCount,
-            uiType,
-            nativeKey,
-            selectedIndex,
-            control);
-        diagnostic = string.Empty;
-        return true;
-    }
-
-    private static bool TryCaptureValueStringHeaders(
-        IReadableMemory memory,
-        ReadOnlySpan<byte> header,
-        out uint begin,
-        out byte[] captured,
-        out string diagnostic)
-    {
-        begin = BinaryPrimitives.ReadUInt32LittleEndian(header);
-        var end = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
-        var capacity = BinaryPrimitives.ReadUInt32LittleEndian(header[8..]);
-        captured = [];
-        if (begin == 0 || end < begin || capacity < end)
-        {
-            diagnostic = "Settings value-string vector pointers are null, reversed, or exceed capacity.";
-            return false;
-        }
-
-        var span = end - begin;
-        var capacitySpan = capacity - begin;
-        if (span % MsvcStringReader.LayoutSize != 0 || capacitySpan % MsvcStringReader.LayoutSize != 0)
-        {
-            diagnostic = "Settings value-string vector bounds are not aligned to the exact 0x18-byte string stride.";
-            return false;
-        }
-        var count = span / MsvcStringReader.LayoutSize;
-        if (count > MsvcStringVectorReader.MaximumElementCount ||
-            span > MsvcStringVectorReader.MaximumVectorByteLength ||
-            capacitySpan > MsvcStringVectorReader.MaximumVectorByteLength)
-        {
-            diagnostic = "Settings value-string vector count, span, or capacity exceeds the hardened reader limits.";
-            return false;
-        }
-        if (span == 0 || !FitsX86Range(begin, checked((int)span)))
-        {
-            diagnostic = "Settings value-string vector is empty or crosses x86 memory.";
-            return false;
-        }
-
-        captured = new byte[checked((int)span)];
-        if (!memory.TryRead(begin, captured))
-        {
-            captured = [];
-            diagnostic = $"Settings value-string headers at 0x{begin:X8} are unreadable.";
-            return false;
-        }
-        diagnostic = string.Empty;
-        return true;
-    }
-
-    private static bool TryReadVectorBounds(
-        ReadOnlySpan<byte> header,
-        int stride,
-        int maximumCount,
-        string name,
-        out uint begin,
-        out int count,
-        out string diagnostic)
-    {
-        begin = BinaryPrimitives.ReadUInt32LittleEndian(header);
-        var end = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
-        var capacity = BinaryPrimitives.ReadUInt32LittleEndian(header[8..]);
-        count = 0;
-        if (begin == 0 || end < begin || capacity < end)
-        {
-            diagnostic = $"{name} vector pointers are null, reversed, or exceed capacity.";
-            return false;
-        }
-        if ((begin & 3) != 0 || (end & 3) != 0 || (capacity & 3) != 0)
-        {
-            diagnostic = $"{name} vector pointers are not naturally aligned x86 addresses.";
-            return false;
-        }
-        var span = end - begin;
-        var capacitySpan = capacity - begin;
-        if (span % (uint)stride != 0 || capacitySpan % (uint)stride != 0)
-        {
-            diagnostic = $"{name} vector bounds are not aligned to the exact 0x{stride:X}-byte stride.";
-            return false;
-        }
-        var elementCount = span / (uint)stride;
-        var capacityCount = capacitySpan / (uint)stride;
-        if (elementCount > maximumCount || capacityCount > maximumCount)
-        {
-            diagnostic = $"{name} vector count or capacity exceeds the defensive {maximumCount}-element limit.";
-            return false;
-        }
-        if (!FitsX86Range(begin, checked((int)span)))
-        {
-            diagnostic = $"{name} vector range crosses x86 memory.";
-            return false;
-        }
-        count = checked((int)elementCount);
-        diagnostic = string.Empty;
-        return true;
-    }
-
-    private static bool TryReadUInt32(IReadableMemory memory, nuint address, out uint value)
-    {
-        Span<byte> bytes = stackalloc byte[sizeof(uint)];
-        if (!memory.TryRead(address, bytes))
-        {
-            value = 0;
-            return false;
-        }
-        value = BinaryPrimitives.ReadUInt32LittleEndian(bytes);
-        return true;
-    }
-
-    private static int ReadInt32(byte[] bytes, int offset) =>
-        BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset));
-
-    private static uint ReadUInt32(byte[] bytes, int offset) =>
-        BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset));
-
-    private static bool FitsX86Address(nuint address) => address != 0 && address <= uint.MaxValue;
-
-    private static bool FitsX86Range(nuint address, int byteLength) =>
+    internal static bool FitsX86Range(nuint address, int byteLength) =>
         address != 0 && byteLength > 0 && address <= uint.MaxValue &&
         (ulong)address + (uint)byteLength - 1 <= uint.MaxValue;
 
-    private static bool TryAddX86(nuint address, uint offset, out uint result)
+    internal static bool TryAddX86(nuint address, uint offset, out nuint result)
     {
         var sum = (ulong)address + offset;
         if (!FitsX86Address(address) || sum > uint.MaxValue)
@@ -472,7 +26,293 @@ public static class SettingsCapture
             result = 0;
             return false;
         }
-        result = (uint)sum;
+
+        result = (nuint)sum;
+        return true;
+    }
+
+    internal static bool TryElementAddress(
+        nuint begin,
+        int index,
+        int stride,
+        out nuint address)
+    {
+        if (index < 0 || stride <= 0)
+        {
+            address = 0;
+            return false;
+        }
+
+        var offset = (ulong)(uint)index * (uint)stride;
+        var sum = (ulong)begin + offset;
+        if (!FitsX86Address(begin) || sum > uint.MaxValue)
+        {
+            address = 0;
+            return false;
+        }
+
+        address = (nuint)sum;
+        return true;
+    }
+
+    internal static bool TryResolveVtable(
+        nuint imageBase,
+        uint rva,
+        out uint expected,
+        out string diagnostic)
+    {
+        var sum = (ulong)imageBase + rva;
+        if (!FitsX86Address(imageBase) || sum > uint.MaxValue)
+        {
+            expected = 0;
+            diagnostic = "Settings image base or expected vtable crosses the x86 address space.";
+            return false;
+        }
+
+        expected = (uint)sum;
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryReadBytes(
+        IReadableMemory memory,
+        nuint address,
+        int length,
+        string name,
+        out byte[] bytes,
+        out string diagnostic)
+    {
+        bytes = [];
+        if (!FitsX86Range(address, length))
+        {
+            diagnostic = $"{name} range crosses the x86 address space.";
+            return false;
+        }
+
+        bytes = new byte[length];
+        if (!memory.TryRead(address, bytes))
+        {
+            bytes = [];
+            diagnostic = $"{name} at 0x{address:X8} is unreadable.";
+            return false;
+        }
+
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryReadUInt32(
+        IReadableMemory memory,
+        nuint address,
+        string name,
+        out uint value,
+        out string diagnostic)
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        if (!FitsX86Range(address, bytes.Length) || !memory.TryRead(address, bytes))
+        {
+            value = 0;
+            diagnostic = $"{name} at 0x{address:X8} is unreadable or crosses x86 memory.";
+            return false;
+        }
+
+        value = BinaryPrimitives.ReadUInt32LittleEndian(bytes);
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static uint ReadUInt32(ReadOnlySpan<byte> bytes, int offset) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(bytes[offset..]);
+
+    internal static int ReadInt32(ReadOnlySpan<byte> bytes, int offset) =>
+        BinaryPrimitives.ReadInt32LittleEndian(bytes[offset..]);
+
+    internal static bool TryReadVector(
+        ReadOnlySpan<byte> header,
+        int stride,
+        int maximumCount,
+        bool allowEmpty,
+        string name,
+        out SettingsVector vector,
+        out string diagnostic)
+    {
+        vector = default;
+        if (header.Length < VectorHeaderSize || stride <= 0 || maximumCount < 0)
+        {
+            diagnostic = $"{name} vector header or capture limits are invalid.";
+            return false;
+        }
+
+        var begin = BinaryPrimitives.ReadUInt32LittleEndian(header);
+        var end = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
+        var capacity = BinaryPrimitives.ReadUInt32LittleEndian(header[8..]);
+        if (begin == 0)
+        {
+            if (end != 0 || capacity != 0)
+            {
+                diagnostic = $"{name} vector has a null begin with non-null end or capacity.";
+                return false;
+            }
+            if (!allowEmpty)
+            {
+                diagnostic = $"{name} vector is empty.";
+                return false;
+            }
+
+            diagnostic = string.Empty;
+            return true;
+        }
+        if ((begin & 3) != 0 || (end & 3) != 0 || (capacity & 3) != 0)
+        {
+            diagnostic = $"{name} vector pointers are not naturally aligned x86 addresses.";
+            return false;
+        }
+        if (end < begin || capacity < end)
+        {
+            diagnostic = $"{name} vector pointers are reversed or exceed capacity.";
+            return false;
+        }
+
+        var span = end - begin;
+        var capacitySpan = capacity - begin;
+        if (span % (uint)stride != 0 || capacitySpan % (uint)stride != 0)
+        {
+            diagnostic = $"{name} vector bounds are not aligned to the exact 0x{stride:X}-byte stride.";
+            return false;
+        }
+
+        var count = span / (uint)stride;
+        var capacityCount = capacitySpan / (uint)stride;
+        if (count > maximumCount || capacityCount > maximumCount)
+        {
+            diagnostic = $"{name} vector count or capacity exceeds the defensive {maximumCount}-element limit.";
+            return false;
+        }
+        if (count == 0 && !allowEmpty)
+        {
+            diagnostic = $"{name} vector is empty.";
+            return false;
+        }
+        if (span > int.MaxValue || (span != 0 && !FitsX86Range(begin, checked((int)span))))
+        {
+            diagnostic = $"{name} vector range crosses the x86 address space.";
+            return false;
+        }
+
+        vector = new SettingsVector(begin, checked((int)count), checked((int)span));
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryReadString(
+        IReadableMemory memory,
+        nuint address,
+        ReadOnlySpan<byte> capturedLayout,
+        string name,
+        out string value,
+        out string diagnostic)
+    {
+        value = string.Empty;
+        if (capturedLayout.Length < MsvcStringReader.LayoutSize || !FitsX86Range(address, MsvcStringReader.LayoutSize))
+        {
+            diagnostic = $"{name} string layout crosses x86 memory.";
+            return false;
+        }
+
+        var captured = capturedLayout[..MsvcStringReader.LayoutSize].ToArray();
+        var capturedMemory = new CapturedRangeMemory(memory, address, captured);
+        if (!new MsvcStringReader(capturedMemory).TryRead(address, out value, out var error))
+        {
+            diagnostic = $"{name} is invalid: {error}";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            diagnostic = $"{name} is blank.";
+            return false;
+        }
+
+        value = new string(value.AsSpan());
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryReadStringVector(
+        IReadableMemory memory,
+        nuint headerAddress,
+        ReadOnlySpan<byte> capturedHeader,
+        bool allowEmpty,
+        string name,
+        ICollection<SettingsMemoryGuard> guards,
+        out IReadOnlyList<string> values,
+        out SettingsVector vector,
+        out string diagnostic)
+    {
+        values = Array.Empty<string>();
+        if (!TryReadVector(
+                capturedHeader,
+                MsvcStringReader.LayoutSize,
+                checked((int)MsvcStringVectorReader.MaximumElementCount),
+                allowEmpty,
+                name,
+                out vector,
+                out diagnostic))
+        {
+            return false;
+        }
+
+        var headerCopy = capturedHeader[..VectorHeaderSize].ToArray();
+        guards.Add(new SettingsMemoryGuard(headerAddress, headerCopy, $"{name} header"));
+        if (vector.Count == 0)
+        {
+            diagnostic = string.Empty;
+            return true;
+        }
+        if (!TryReadBytes(memory, vector.Begin, vector.ByteLength, $"{name} string layouts", out var layouts, out diagnostic))
+        {
+            return false;
+        }
+
+        var capturedMemory = new CapturedRangeMemory(
+            new CapturedRangeMemory(memory, headerAddress, headerCopy),
+            vector.Begin,
+            layouts);
+        if (!new MsvcStringVectorReader(capturedMemory).TryRead(headerAddress, out values, out var error))
+        {
+            diagnostic = $"{name} is invalid: {error}";
+            return false;
+        }
+        if (values.Any(string.IsNullOrWhiteSpace))
+        {
+            diagnostic = $"{name} contains blank localized text.";
+            return false;
+        }
+
+        values = values.Select(value => new string(value.AsSpan())).ToArray();
+        guards.Add(new SettingsMemoryGuard(vector.Begin, layouts, $"{name} string layouts"));
+        diagnostic = string.Empty;
+        return true;
+    }
+
+    internal static bool TryRevalidate(
+        IReadableMemory memory,
+        IEnumerable<SettingsMemoryGuard> guards,
+        out string diagnostic)
+    {
+        foreach (var guard in guards)
+        {
+            if (!TryReadBytes(memory, guard.Address, guard.Expected.Length, guard.Name, out var observed, out diagnostic))
+            {
+                return false;
+            }
+            if (!observed.AsSpan().SequenceEqual(guard.Expected))
+            {
+                diagnostic = $"{guard.Name} changed while dependent Settings state was captured.";
+                return false;
+            }
+        }
+
+        diagnostic = string.Empty;
         return true;
     }
 
@@ -493,6 +333,7 @@ public static class SettingsCapture
                     return true;
                 }
             }
+
             return inner.TryRead(address, destination);
         }
     }
