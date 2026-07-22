@@ -359,6 +359,30 @@ public sealed class DialogueHookSetTests
     }
 
     [Fact]
+    public void SameUpdateFirstSelectionThenConfirmPromotesPresentedNegativeOneBeforeActivation()
+    {
+        var harness = CreateHarness();
+        harness.Functions.SetOriginal<MsgWindowUpdateDelegate>(HookId.MsgWindowUpdate, (_, _) =>
+        {
+            harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: 0);
+            harness.Assembly.Invoke(Window);
+            harness.Close();
+        });
+        harness.Memory.SetChoices(Window, "Prompt", ["Yes", "No"], selectedIndex: -1);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        harness.Update();
+
+        Assert.Collection(
+            harness.Dispatcher.Events.TakeLast(3),
+            item => Assert.Equal(new DialogueChoiceFocused("Yes", 0, 2), item),
+            item => Assert.Equal(new DialogueChoiceActivated("Yes"), item),
+            item => Assert.IsType<DialogueClosed>(item));
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
     public void MarkedCloseListMismatchCallsOriginalOnceThenFailsWithoutStaleActivationOrClose()
     {
         var harness = CreateHarness();

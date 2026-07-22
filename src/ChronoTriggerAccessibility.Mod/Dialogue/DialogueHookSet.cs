@@ -518,7 +518,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
             }
 
             if (activeWindow != window || marker is null || marker.Value.Epoch != epoch ||
-                marker.Value.Window != window || choiceLabels is null || selectedChoice < 0 ||
+                marker.Value.Window != window || choiceLabels is null || selectedChoice < -1 ||
                 selectedChoice >= choiceLabels.Length)
             {
                 return new ClosePreparation(epoch, window, Recognized: true, null, null);
@@ -544,7 +544,7 @@ public sealed class DialogueHookSet : IHookActivationObserver
                 snapshot.Choices.FirstLineIndex != choiceFirstLine ||
                 snapshot.Choices.Labels.Count != choiceLabels.Length ||
                 !snapshot.Choices.Labels.SequenceEqual(choiceLabels, StringComparer.Ordinal) ||
-                snapshot.Choices.SelectedIndex < 0 ||
+                snapshot.Choices.SelectedIndex < -1 ||
                 snapshot.Choices.SelectedIndex >= snapshot.Choices.Labels.Count)
             {
                 return new ClosePreparation(
@@ -556,6 +556,11 @@ public sealed class DialogueHookSet : IHookActivationObserver
             }
 
             var freshSelection = snapshot.Choices.SelectedIndex;
+            if (freshSelection < 0)
+            {
+                return new ClosePreparation(epoch, window, Recognized: true, null, null);
+            }
+
             var activation = new CloseActivation(
                 new string(snapshot.Choices.Labels[freshSelection].AsSpan()),
                 freshSelection,
