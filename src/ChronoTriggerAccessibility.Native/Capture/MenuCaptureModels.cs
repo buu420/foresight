@@ -89,3 +89,112 @@ public sealed class MenuCaptureResult
     public static MenuCaptureResult Failure(string diagnostic) =>
         new(null, string.IsNullOrWhiteSpace(diagnostic) ? "Capture failed without a diagnostic." : diagnostic);
 }
+
+public enum TopMenuStyle
+{
+    Classic = 0,
+    Touch = 1,
+}
+
+public enum TopMenuMemberKind
+{
+    Active = 0,
+    Reserve = 1,
+}
+
+public sealed class TopMenuStatRowSnapshot
+{
+    public TopMenuStatRowSnapshot(string label, IEnumerable<string> valueTokens, string? extra)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(valueTokens);
+        Label = new string(label.AsSpan());
+        ValueTokens = new ReadOnlyCollection<string>(valueTokens.Select(token =>
+            new string((token ?? throw new ArgumentNullException(nameof(valueTokens))).AsSpan())).ToArray());
+        Extra = extra is null ? null : new string(extra.AsSpan());
+    }
+
+    public string Label { get; }
+    public IReadOnlyList<string> ValueTokens { get; }
+    public string? Extra { get; }
+}
+
+public sealed class TopMenuMemberSnapshot
+{
+    public TopMenuMemberSnapshot(
+        string name,
+        TopMenuMemberKind kind,
+        IEnumerable<TopMenuStatRowSnapshot> rows)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(rows);
+        Name = new string(name.AsSpan());
+        Kind = kind;
+        Rows = new ReadOnlyCollection<TopMenuStatRowSnapshot>(rows.Select(row =>
+            new TopMenuStatRowSnapshot(
+                (row ?? throw new ArgumentNullException(nameof(rows))).Label,
+                row.ValueTokens,
+                row.Extra)).ToArray());
+    }
+
+    public string Name { get; }
+    public TopMenuMemberKind Kind { get; }
+    public IReadOnlyList<TopMenuStatRowSnapshot> Rows { get; }
+}
+
+public sealed class TopMenuSnapshot
+{
+    public TopMenuSnapshot(
+        TopMenuStyle style,
+        IEnumerable<MenuControlSnapshot> controls,
+        int focusedKey,
+        string time,
+        string currency,
+        IEnumerable<TopMenuMemberSnapshot> members,
+        IEnumerable<string> conditionalLines,
+        IEnumerable<string> flattenedStatus)
+    {
+        ArgumentNullException.ThrowIfNull(controls);
+        ArgumentNullException.ThrowIfNull(time);
+        ArgumentNullException.ThrowIfNull(currency);
+        ArgumentNullException.ThrowIfNull(members);
+        ArgumentNullException.ThrowIfNull(conditionalLines);
+        ArgumentNullException.ThrowIfNull(flattenedStatus);
+
+        Style = style;
+        Controls = new ReadOnlyCollection<MenuControlSnapshot>(controls.Select(control =>
+        {
+            ArgumentNullException.ThrowIfNull(control);
+            return new MenuControlSnapshot(
+                new string(control.Label.AsSpan()),
+                control.Value is null ? null : new string(control.Value.AsSpan()),
+                control.Help is null ? null : new string(control.Help.AsSpan()),
+                control.Key,
+                control.Position,
+                control.Count,
+                control.Enabled,
+                control.Visible);
+        }).ToArray());
+        FocusedKey = focusedKey;
+        Time = new string(time.AsSpan());
+        Currency = new string(currency.AsSpan());
+        Members = new ReadOnlyCollection<TopMenuMemberSnapshot>(members.Select(member =>
+            new TopMenuMemberSnapshot(
+                (member ?? throw new ArgumentNullException(nameof(members))).Name,
+                member.Kind,
+                member.Rows)).ToArray());
+        ConditionalLines = new ReadOnlyCollection<string>(conditionalLines.Select(line =>
+            new string((line ?? throw new ArgumentNullException(nameof(conditionalLines))).AsSpan())).ToArray());
+        FlattenedStatus = new ReadOnlyCollection<string>(flattenedStatus.Select(item =>
+            new string((item ?? throw new ArgumentNullException(nameof(flattenedStatus))).AsSpan())).ToArray());
+    }
+
+    public TopMenuStyle Style { get; }
+    public IReadOnlyList<MenuControlSnapshot> Controls { get; }
+    public int FocusedKey { get; }
+    public string Time { get; }
+    public string Currency { get; }
+    public IReadOnlyList<TopMenuMemberSnapshot> Members { get; }
+    public IReadOnlyList<string> ConditionalLines { get; }
+    public IReadOnlyList<string> FlattenedStatus { get; }
+}
