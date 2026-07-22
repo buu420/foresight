@@ -392,10 +392,11 @@ public static class TouchSettingsCapture
                 diagnostic = $"Touch Settings key {focusedKey} decodes to row {rowIndex}, outside {rows.Length} rows.";
                 return false;
             }
-            if (!SettingsCaptureMemory.FitsX86Address(managerObservation.FocusedControlAddress) ||
-                !controlGroups[rowIndex].Contains(managerObservation.FocusedControlAddress))
+            if (subcontrol >= controlGroups[rowIndex].Length ||
+                !SettingsCaptureMemory.FitsX86Address(managerObservation.FocusedControlAddress) ||
+                controlGroups[rowIndex][subcontrol] != managerObservation.FocusedControlAddress)
             {
-                diagnostic = $"Touch Settings observed focused control does not belong to captured row group {rowIndex}.";
+                diagnostic = $"Touch Settings observed focused control does not match captured row {rowIndex}, subcontrol {subcontrol}.";
                 return false;
             }
 
