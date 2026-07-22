@@ -65,10 +65,13 @@ Known native anchors include:
 - `TapToStartMode::update` RVA `0x2CF440`
 - `TitleMenuMode` setup RVA `0x2CF560`
 - title-row builder RVA `0x2CF7A0`
+- title row factory RVA `0x2CD7A0` (called once per enabled row with its localized string record in `ECX`)
 - title selection callback RVA `0x2D12A0`
 - title action dispatcher RVA `0x2CFFF0`
 
 The implementation may add stronger focus-change boundaries identified during Ghidra analysis, but it must retain the executable and expected-byte checks.
+
+Startup scene identities for this build are 2 for the Square Enix logo, `0x1E` for `DemoMovieScene`, and 3 for `TitleScene`. Title composition is captured from actual row-factory calls made inside `TitleMenuMode::enter`, not reconstructed from save-data predicates.
 
 All detours use explicit Reloaded x86 calling-convention metadata. In particular, `std::function::_Do_call` hooks treat `ECX` as the closure and preserve whether each stack argument is passed by value or by pointer; an ABI guess is a release-blocking defect.
 

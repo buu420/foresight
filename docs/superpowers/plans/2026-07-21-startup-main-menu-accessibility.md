@@ -151,10 +151,12 @@ Tests against the installed executable must assert the SHA-256, i386 machine, im
 ```text
 TextManager::getMsg       0x1B92D0  55 8B EC 51 8B 45 0C FF 75 10 C7 45 FC 00 00 00 00
 SceneManager::create      0x297860  55 8B EC 6A FF 68 F8 73 76 00 64 A1 00 00 00 00
+SceneManager::NextScene   0x297B60  55 8B EC 6A FF 68 E8 94 77 00 64 A1 00 00 00 00
 ModeSelectSteam::init     0x2A9C60  55 8B EC 6A FF 68 B2 AE 77 00 64 A1 00 00 00 00
 OpeManualScene::init      0x2ADB50  55 8B EC 6A FF 68 E4 B5 77 00 64 A1 00 00 00 00
 NameInputScene::update    0x2C2C50  55 8B EC 83 E4 F8 51 53 56 57 8B F9 80 BF 94 02
 TitleMenuMode::enter      0x2CF560  55 8B EC 6A FF 68 84 E4 77 00 64 A1 00 00 00 00
+Title row factory         0x2CD7A0  55 8B EC 6A FF 68 11 E2 77 00 64 A1 00 00 00 00
 TitleScene::update        0x2D1030  55 8B EC F3 0F 10 45 08 56 8B F1 8B 8E 90 02 00
 TitleMenu callback        0x2D12A0  55 8B EC 8B 45 0C 56 57 8B F1 8B 38 8B 45 08 8B
 nsMenu focus setter       0x1DD3E0  55 8B EC 83 EC 20 8B C1 53 8B 5D 08 57 8D B8 C4 02 00 00 89 45 FC C6 80 CC 02 00 00 01 89 7D EC
@@ -242,7 +244,7 @@ git commit -m "feat: bootstrap Reloaded accessibility runtime"
 
 **Step 1: Write failing recorded-state tests**
 
-Test clean, intermediate, and populated title menus with these exact visible row sets:
+Extend the exact-build catalog with `SceneManager::NextScene` and the title row factory using the reviewed bytes above. Test clean, intermediate, and populated title menus with these exact visible row sets:
 
 - New Game, Extras, Settings, Quit;
 - Resume, New Game, Extras, Settings, Quit;
@@ -256,11 +258,13 @@ Test movie narration generation: leaving the opening scene cancels all future sc
 
 Hook `TextManager::getMsg` as `std::string* thiscall(TextManager*, std::string* result, int fileId, int msgId)`, call original first, decode the returned MSVC string, and cache by `(fileId,msgId)`. Title-row source IDs are constructed in this order: `(0x41,3)`, `(0x41,0)`, `(0x41,1)`, `(0x41,2)`, `(0x41,6)`, `(0x23,0x24)`, `(0x3A,4)`. Include only rows the native menu actually constructs/enables; do not infer a visible row solely from this superset.
 
-Hook `TitleScene::update`, call original, then validate `this + 0x290` and its vtable against `TapToStart` RVA `0x3B7FC4` or `TitleMenuMode` RVA `0x3B7FA8`. For title-menu focus, follow `TitleMenuMode + 0x10` to the `nsMenu::Manager`, whose authoritative index is at `+0x2C4`; hook the shared focus setter at RVA `0x1DD3E0` and snapshot before/original/after. Hook title callback RVA `0x2D12A0` to announce activation using the already captured visible row label. It is a `std::function` dispatcher: `ECX` is the closure and its two stack arguments are pointers to `EventType` and row index. Event 0 activates; event 1 is non-activating feedback.
+Wrap `TitleMenuMode::enter` in a thread-local capture scope. During that scope, hook the title row factory at RVA `0x2CD7A0`; its `ECX` points at the current 0x1C-byte row record whose first 24 bytes are the localized MSVC string, and the factory is called only for rows the game enabled. Capture each resulting label in call order. This is the authoritative compact visible row list; do not reconstruct availability predicates.
+
+Hook `TitleScene::update`, call original, then validate `this + 0x290` and its vtable against `TapToStart` RVA `0x3B7FC4` or `TitleMenuMode` RVA `0x3B7FA8`. For title-menu focus, follow `TitleMenuMode + 0x10` to the `nsMenu::Manager`, whose authoritative index is at `+0x2C4`; hook the shared focus setter at RVA `0x1DD3E0` and snapshot before/original/after. Suppress the setter's initial event while the row-capture scope is active, then announce the manager's validated current focus after `enter` returns. Hook title callback RVA `0x2D12A0` to announce activation using the already captured visible row label. It is a `std::function` dispatcher: `ECX` is the closure and its two stack arguments are pointers to `EventType` and row index. Event 0 activates; event 1 is non-activating feedback.
 
 **Step 3: Implement startup descriptions**
 
-Scene hooks announce Square Enix, the opening movie, Chrono Trigger, and the live confirm prompt. Opening descriptions are generation-scoped and dispatched only while the opening scene remains authoritative. Keep the lines concise and visual; do not duplicate dialogue/music or reveal information beyond the movie.
+Scene ID 2 is the Square Enix logo, scene ID `0x1E` constructs `DemoMovieScene`, and scene ID 3 constructs `TitleScene`. Hook `SceneManager::create` for initial creation and `SceneManager::NextScene` for transitions; after `NextScene` returns, read and validate the current-scene global at RVA `0x41C3E8`. Scene hooks announce Square Enix, the opening movie, Chrono Trigger, and the live confirm prompt. Opening descriptions are generation-scoped and dispatched only while scene `0x1E` remains authoritative. Keep the lines concise and visual; do not duplicate dialogue/music or reveal information beyond the movie.
 
 **Step 4: Run tests and commit**
 
