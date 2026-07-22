@@ -212,7 +212,7 @@ git commit -m 'feat: register shared menu and dialogue hooks'
 - Add a fakeable assembly-hook bridge under `src/ChronoTriggerAccessibility.Mod/Runtime/`
 - Modify exact-contract/runtime-hook tests in the Native and Mod test projects
 
-**Step 1 — RED:** Add catalog tests that distinguish function-entry hooks from assembly call sites and verify the exact five bytes `E8 E1 E5 FF FF` at RVA `0x19768A`. Add bridge tests proving the callback and generated reverse wrapper remain rooted; code is built once; preparation is inert; activation and disable are transactional; and the installed Reloaded.Hooks 4.3.2 options are exactly `ExecuteFirst`, `HookLength=5`, `PreferRelativeJump=true`, and `MaxOpcodeSize=5`.
+**Step 1 — RED:** Add catalog tests that distinguish function-entry hooks from assembly call sites and verify the exact five bytes `E8 E1 E5 FF FF` at RVA `0x19768A`. Add bridge tests proving the callback and generated reverse wrapper remain rooted; code is built once; preparation is inert; activation and disable are transactional even when activation/enable/disable fails; and the installed Reloaded.Hooks 4.3.2 options are exactly `ExecuteFirst`, `HookLength=5`, `PreferRelativeJump=true`, and `MaxOpcodeSize=5`.
 
 ```powershell
 & $dotnet test .\tests\ChronoTriggerAccessibility.Native.Tests\ChronoTriggerAccessibility.Native.Tests.csproj -c Release --no-restore --filter 'FullyQualifiedName~GameVersionCatalogTests'; if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -221,7 +221,7 @@ git commit -m 'feat: register shared menu and dialogue hooks'
 
 Expected RED: the assembly-call-site contract kind and fakeable assembly-hook bridge do not exist.
 
-**Step 2 — GREEN:** Add `AssemblyCallSite` as a non-callable exact hook kind rather than assigning it a false managed delegate ABI. Build one x86 FASM probe that preserves flags and caller-saved `EAX`/`ECX`/`EDX`, passes the original `ECX` window pointer to a rooted cdecl managed callback, restores state, and then lets Reloaded relocate and execute the original close call exactly once. Use `IReloadedHooks.Utilities.GetAbsoluteCallMnemonics` for the managed callback thunk. Do not use the legacy five-byte `CreateAsmHook` overload: Reloaded.Hooks 4.3.2 defaults to a six-byte x86 absolute jump. Supply `AsmHookOptions` with an explicit relative five-byte jump so byte `0x19768F` is never overwritten.
+**Step 2 — GREEN:** Add `AssemblyCallSite` as a non-callable exact hook kind rather than assigning it a false managed delegate ABI. Build one x86 FASM probe that preserves flags and caller-saved `EAX`/`ECX`/`EDX`, passes the original `ECX` window pointer to a rooted cdecl managed callback, restores state, and then lets Reloaded relocate and execute the original close call exactly once. Use `IReloadedHooks.Utilities.GetAbsoluteCallMnemonics` for the managed callback thunk. Do not use the legacy five-byte `CreateAsmHook` overload: Reloaded.Hooks 4.3.2 defaults to a six-byte x86 absolute jump. Supply `AsmHookOptions` with an explicit relative five-byte jump so byte `0x19768F` is never overwritten. Its `AsmHook.Activate()` also applies patches without setting `IsEnabled`; the prepared adapter must therefore retain its own conservative activation-attempt state, call `Enable()` after successful activation when needed, attempt rollback even after a partial activation/enable failure, and clear that state only after `Disable()` succeeds.
 
 ```powershell
 & $dotnet test .\tests\ChronoTriggerAccessibility.Native.Tests\ChronoTriggerAccessibility.Native.Tests.csproj -c Release --no-restore
