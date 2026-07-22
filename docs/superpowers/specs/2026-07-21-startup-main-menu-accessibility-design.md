@@ -55,12 +55,14 @@ Known native anchors include:
 - `SceneManager::popAllScenes` RVA `0x2984E0`
 - current-scene global RVA `0x41C3E8`
 - `SqexLogoScene::create` RVA `0x2CC3C0`
-- `TextManager::getMsg` RVA `0x1B92D0`
+- `TextManager::getMsg` RVA `0x1B9110`
 - `NameInputScene::update` RVA `0x2C2C50`
 - generic `nsMenu::Manager` focus setter RVA `0x1DD3E0` (`Manager + 0x2C4` is the current index)
 - `ModeSelectSteamScene` callback RVA `0x2AB9E0` (`scene + 0x29C` is the composite focus)
 - Control Descriptions Next callback RVA `0x2AE840`
 - name-action callback RVA `0x2C1760`
+- delayed direct-keyboard-entry activation RVA `0x2C1B50`
+- direct-keyboard-entry close/restoration callback RVA `0x2C1BA0`
 - `TitleScene::init` RVA `0x2D0C50`
 - `TapToStartMode::update` RVA `0x2CF440`
 - `TitleMenuMode` setup RVA `0x2CF560`
@@ -152,7 +154,8 @@ On entry the mod announces “Enter a name,” the current/default name, the fiv
 
 - the currently focused character or editing control;
 - the complete resulting name after an edit, deletion, default restoration, or cursor operation that changes visible state;
-- Defaults and Accept buttons when focused;
+- Defaults, Accept, and Keyboard name entry controls when focused;
+- direct keyboard/IME entry opening, the current full name while typing, and IME closure;
 - the full proposed name when Accept is chosen;
 - the Yes/No confirmation prompt and focused choice.
 

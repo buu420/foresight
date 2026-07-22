@@ -149,7 +149,7 @@ git commit -m "feat: add verified x86 Prism output"
 Tests against the installed executable must assert the SHA-256, i386 machine, image base `0x00400000`, executable `.text` membership, and the following entry bytes:
 
 ```text
-TextManager::getMsg       0x1B92D0  55 8B EC 51 8B 45 0C FF 75 10 C7 45 FC 00 00 00 00
+TextManager::getMsg       0x1B9110  55 8B EC 6A FF 68 A1 AD 76 00 64 A1 00 00 00 00
 SceneManager::create      0x297860  55 8B EC 6A FF 68 F8 73 76 00 64 A1 00 00 00 00
 SceneManager::NextScene   0x297B60  55 8B EC 6A FF 68 E8 94 77 00 64 A1 00 00 00 00
 ModeSelectSteam::init     0x2A9C60  55 8B EC 6A FF 68 B2 AE 77 00 64 A1 00 00 00 00
@@ -163,6 +163,8 @@ nsMenu focus setter       0x1DD3E0  55 8B EC 83 EC 20 8B C1 53 8B 5D 08 57 8D B8
 ModeSelect callback       0x2AB9E0  55 8B EC 83 E4 F8 83 EC 14 8B 45 08 53 8B D9 89 5C 24 04 56 57 83 F8 03 0F 87 B2 02 00 00 FF 24
 Control Next callback     0x2AE840  55 8B EC 83 E4 F8 51 8B 45 08 56 8B F1 8B 00 83 E8 00 74 05 83 E8 02 75 23 C7 05 CC C3 81 00 18
 Name action callback      0x2C1760  55 8B EC 6A FF 68 FF D4 77 00 64 A1 00 00 00 00 50 83 EC 70 A1 D0 A0 7F 00 33 C5 89 45 F0 56 57
+Name direct entry         0x2C1B50  56 57 8B F9 6A 01 8B 07 C6 80 90 02 00 00 01 8B 4F 04 E8 29 DB FF FF 33 F6 0F 1F 80 00 00 00 00
+Name direct close         0x2C1BA0  56 57 8B F9 33 F6 8B 07 C6 80 90 02 00 00 00 90 8B 47 04 6A 01 8B 0C 06 8B 01 FF 90 B8 02 00 00
 ```
 
 Corrupt one byte in an in-memory fixture and assert that verification rejects the entire hook transaction.
@@ -300,7 +302,7 @@ Add a fatal coverage test: if a required screen enters but its authoritative foc
 
 Mode Select owns three `0x88`-byte row records in the vector at scene `+0x290/+0x294/+0x298`. Its authoritative composite focus is scene `+0x29C`, encoded as `row * 10 + subfocus`, where subfocus 0/1 is left/right and Start Game is 30. Hook callback RVA `0x2AB9E0`, snapshot state, call original, then publish the validated result. Event 1 focuses, event 3 changes a value (direction 3 left, 4 right), event 0 activates, and event 2 cancels. Read localized text IDs: Battle `(0x23,0x5A)` with values `(0x23,0xC0/C1)` and help `(0x3F,5/6)`; Graphics `(0x3F,0x31)` with values `(0x23,0xC7/C6)` and help `(0x3F,0x32/0x33)`; Interface `(0x42,0x1A)` with values `(0x41,0x55/0x54)` and help `(0x42,0x1C/0x1D)`.
 
-Name text comes from the MSVC string at `NameInputScene + 0x350`; length is at `+0x360`, capacity at `+0x364`, and the supported maximum is five. Compare the complete validated string after each native update and emit only changes. The authoritative grid focus is column `+0x29C` (0..10), row `+0x2A0` (0..7), and page `+0x298`; capture only while `+0x294 != 0` and page is non-negative. Read the focused UTF-8 glyph from the pointer table at RVA `0x39B708` (VA `0x79B708`) using index `(row + page * 8) * 11 + column`, validating all pointers. Page-zero column 10 changes character page (`ABC`, `かな`, `カナ`) and the name-action dispatcher is RVA `0x2C1760`.
+Name text comes from the MSVC string at `NameInputScene + 0x350`; length is at `+0x360`, capacity at `+0x364`, and the supported maximum is five. Compare the complete validated string after each native update and emit only changes. The authoritative grid focus is column `+0x29C` (0..10), row `+0x2A0` (0..7), and page `+0x298`; capture only while `+0x294 != 0` and page is non-negative. Read the focused UTF-8 glyph from the pointer table at RVA `0x39B708` (VA `0x79B708`) using index `(row + page * 8) * 11 + column`, validating all pointers. Page-zero column 10 changes character page (`ABC`, `かな`, `カナ`) and the name-action dispatcher is RVA `0x2C1760`. Its action 2 schedules direct keyboard/IME activation at RVA `0x2C1B50`; the common close/restoration callback is RVA `0x2C1BA0`. Hook both delayed boundaries so the grid close, IME activation, resulting full-name edits, and every native IME close path are narrated in order. The close callback re-enables the three name-action widgets and preserves manager focus key 2; it does not reopen the character grid or construct confirmation. The name action manager has exactly three correlated controls (Defaults, Accept, and Keyboard name entry); confirmation has exactly two correlated choices.
 
 Use the reviewed nsMenu focus setter RVA `0x1DD3E0` and Manager focus offset `+0x2C4` for generic menus. Control Descriptions' only action is Next through callback RVA `0x2AE840` (events 0 or 2 transition). Use runtime-observed localized labels for Defaults, Accept, and Yes/No; do not guess unresolved static action indices. Runtime sanity checks must validate ranges, row counts, pointers, and label/value presence before publishing any event.
 
