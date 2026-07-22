@@ -1,5 +1,6 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Reloaded;
+using ChronoTriggerAccessibility.Native.Hooks;
 
 namespace ChronoTriggerAccessibility.Mod.Runtime;
 
@@ -15,6 +16,7 @@ public sealed class AccessibilityRuntime
     private readonly IAccessibleFatalError fatalError;
     private readonly int processId;
     private readonly ISemanticEventDispatcher? semanticDispatcher;
+    private readonly IReadOnlyList<HookContract> requiredHookContracts;
     private readonly object lifecycleGate = new();
     private readonly CancellationTokenSource shutdownCancellation = new();
     private IRuntimePrismSession? prismSession;
@@ -33,7 +35,8 @@ public sealed class AccessibilityRuntime
         IModLog log,
         IAccessibleFatalError fatalError,
         int processId,
-        ISemanticEventDispatcher? semanticDispatcher = null)
+        ISemanticEventDispatcher? semanticDispatcher = null,
+        IReadOnlyList<HookContract>? requiredHookContracts = null)
     {
         this.executableVerifier = executableVerifier ?? throw new ArgumentNullException(nameof(executableVerifier));
         this.windowWaiter = windowWaiter ?? throw new ArgumentNullException(nameof(windowWaiter));
@@ -43,6 +46,13 @@ public sealed class AccessibilityRuntime
         this.fatalError = fatalError ?? throw new ArgumentNullException(nameof(fatalError));
         this.processId = processId > 0 ? processId : throw new ArgumentOutOfRangeException(nameof(processId));
         this.semanticDispatcher = semanticDispatcher;
+        this.requiredHookContracts = (requiredHookContracts ?? GameVersionCatalog.Hooks).ToArray();
+        if (this.requiredHookContracts.Count == 0)
+        {
+            throw new ArgumentException(
+                "At least one required hook contract must be supplied.",
+                nameof(requiredHookContracts));
+        }
     }
 
     public AccessibilityRuntimeState State => (AccessibilityRuntimeState)Volatile.Read(ref state);
@@ -78,6 +88,8 @@ public sealed class AccessibilityRuntime
         {
             linkedCancellation.Token.ThrowIfCancellationRequested();
             var build = executableVerifier.VerifyCurrentProcess();
+            var resolvedHooks = SnapshotResolvedHooks(build);
+            LogVerifiedBuild(build, resolvedHooks);
             linkedCancellation.Token.ThrowIfCancellationRequested();
             _ = windowWaiter.WaitForSoleVisibleWindow(processId, linkedCancellation.Token);
             linkedCancellation.Token.ThrowIfCancellationRequested();
@@ -107,13 +119,31 @@ public sealed class AccessibilityRuntime
                             "A prepared hook was active before the atomic activation phase.");
                     }
 
+                    VerifyPreparedHookState(resolvedHooks, expectedActive: false);
+                    foreach (var hook in resolvedHooks)
+                    {
+                        log.Info(
+                            $"Hook preparation verified: '{hook.Contract.Symbol}' at " +
+                            $"0x{hook.Address:X8} is prepared and inactive.");
+                    }
+
                     if (!TryCommitActivation())
                     {
                         throw new OperationCanceledException(shutdownCancellation.Token);
                     }
 
+                    log.Info(
+                        $"Atomic hook activation starting for {hookInstaller.PreparedHooks.Count} prepared hooks.");
                     hookInstaller.ActivateAll();
                     linkedCancellation.Token.ThrowIfCancellationRequested();
+                    VerifyPreparedHookState(resolvedHooks, expectedActive: true);
+                    foreach (var hook in resolvedHooks)
+                    {
+                        log.Info(
+                            $"Hook activation verified: '{hook.Contract.Symbol}' at " +
+                            $"0x{hook.Address:X8} is active.");
+                    }
+
                     SetState(AccessibilityRuntimeState.Active);
                     log.Info("Accessibility runtime active.");
                 }
@@ -188,6 +218,94 @@ public sealed class AccessibilityRuntime
 
     private bool IsShutdownRequested =>
         (Volatile.Read(ref lifecycleSignals) & ShutdownRequestedSignal) != 0;
+
+    private IReadOnlyList<ResolvedRequiredHook> SnapshotResolvedHooks(IVerifiedGameBuild build)
+    {
+        if (build.HookAddresses.Count != requiredHookContracts.Count)
+        {
+            throw new InvalidOperationException(
+                $"Verified build exposed {build.HookAddresses.Count} hook addresses; " +
+                $"expected {requiredHookContracts.Count}.");
+        }
+
+        var resolvedHooks = new List<ResolvedRequiredHook>(requiredHookContracts.Count);
+        foreach (var contract in requiredHookContracts)
+        {
+            if (!build.HookAddresses.TryGetValue(contract.Id, out var address) || address == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Verified build did not expose a resolved address for '{contract.Symbol}'.");
+            }
+
+            if (build.ImageBaseAddress != 0 &&
+                address != checked(build.ImageBaseAddress + contract.Rva))
+            {
+                throw new InvalidOperationException(
+                    $"Resolved address for '{contract.Symbol}' did not match its verified RVA.");
+            }
+
+            resolvedHooks.Add(new ResolvedRequiredHook(contract, address));
+        }
+
+        return resolvedHooks.AsReadOnly();
+    }
+
+    private void LogVerifiedBuild(
+        IVerifiedGameBuild build,
+        IReadOnlyList<ResolvedRequiredHook> resolvedHooks)
+    {
+        log.Info(
+            $"Supported executable verified: SHA-256 {GameVersionCatalog.Executable.Sha256}; " +
+            $"machine {GameVersionCatalog.Executable.Machine}; preferred image base " +
+            $"0x{GameVersionCatalog.Executable.ImageBase:X8}; loaded image base " +
+            $"0x{build.ImageBaseAddress:X8}; {requiredHookContracts.Count} required hook byte contracts verified.");
+
+        foreach (var hook in resolvedHooks)
+        {
+            log.Info(
+                $"Hook byte verification passed: '{hook.Contract.Symbol}' at 0x{hook.Address:X8}.");
+        }
+    }
+
+    private void VerifyPreparedHookState(
+        IReadOnlyList<ResolvedRequiredHook> resolvedHooks,
+        bool expectedActive)
+    {
+        if (resolvedHooks.Count == 0)
+        {
+            return;
+        }
+
+        if (hookInstaller.PreparedHooks.Count != resolvedHooks.Count)
+        {
+            throw new InvalidOperationException(
+                $"Hook installer exposed {hookInstaller.PreparedHooks.Count} prepared hooks; " +
+                $"expected {resolvedHooks.Count}.");
+        }
+
+        foreach (var resolvedHook in resolvedHooks)
+        {
+            var matches = hookInstaller.PreparedHooks
+                .Where(hook => string.Equals(
+                    hook.Name,
+                    resolvedHook.Contract.Symbol,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (matches.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Expected exactly one prepared hook named '{resolvedHook.Contract.Symbol}', " +
+                    $"but found {matches.Length}.");
+            }
+
+            if (matches[0].IsActive != expectedActive)
+            {
+                var expectedState = expectedActive ? "active" : "inactive";
+                throw new InvalidOperationException(
+                    $"Hook '{resolvedHook.Contract.Symbol}' was not {expectedState} at phase verification.");
+            }
+        }
+    }
 
     private bool TryCommitActivation()
     {
@@ -341,4 +459,6 @@ public sealed class AccessibilityRuntime
     {
         public static CleanupOutcome Success { get; } = new(Array.Empty<Exception>(), true);
     }
+
+    private readonly record struct ResolvedRequiredHook(HookContract Contract, nuint Address);
 }

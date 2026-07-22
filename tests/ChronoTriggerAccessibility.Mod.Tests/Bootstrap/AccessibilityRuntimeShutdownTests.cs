@@ -76,7 +76,8 @@ public sealed class AccessibilityRuntimeShutdownTests
             installer,
             new AccessibilityRuntimeTests.RecordingLog(),
             fatal,
-            processId: 1234);
+            processId: 1234,
+            requiredHookContracts: [AccessibilityRuntimeTests.TestHookCatalog[0]]);
         runtime.Initialize();
 
         runtime.Shutdown();
@@ -114,7 +115,8 @@ public sealed class AccessibilityRuntimeShutdownTests
                 Installer,
                 new AccessibilityRuntimeTests.RecordingLog(),
                 Fatal,
-                processId: 1234);
+                processId: 1234,
+                requiredHookContracts: AccessibilityRuntimeTests.TestHookCatalog);
         }
 
         public AccessibilityRuntime Runtime { get; }
@@ -228,7 +230,11 @@ public sealed class AccessibilityRuntimeShutdownTests
 
         private sealed class VerifiedBuild : IVerifiedGameBuild
         {
-            public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; } = new Dictionary<HookId, nuint>();
+            public nuint ImageBaseAddress => 0x00400000;
+            public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; } =
+                AccessibilityRuntimeTests.TestHookCatalog.ToDictionary(
+                    contract => contract.Id,
+                    contract => checked((nuint)0x00400000 + contract.Rva));
         }
     }
 
@@ -273,6 +279,12 @@ public sealed class AccessibilityRuntimeShutdownTests
 
     private sealed class StandaloneBuild : IVerifiedGameBuild
     {
-        public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; } = new Dictionary<HookId, nuint>();
+        public nuint ImageBaseAddress => 0x00400000;
+        public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; } =
+            new Dictionary<HookId, nuint>
+            {
+                [AccessibilityRuntimeTests.TestHookCatalog[0].Id] =
+                    checked((nuint)0x00400000 + AccessibilityRuntimeTests.TestHookCatalog[0].Rva),
+            };
     }
 }

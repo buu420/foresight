@@ -8,6 +8,24 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Bootstrap;
 
 public sealed class AccessibilityRuntimeTests
 {
+    public static IReadOnlyList<HookContract> TestHookCatalog { get; } =
+    [
+        new(
+            HookId.TextManagerGetMsg,
+            "first",
+            0x10,
+            [0x90],
+            typeof(Action),
+            X86CallingConvention.MicrosoftThiscall),
+        new(
+            HookId.SceneManagerCreate,
+            "second",
+            0x20,
+            [0x90],
+            typeof(Action),
+            X86CallingConvention.MicrosoftFastcall),
+    ];
+
     [Fact]
     public void InitializeUsesStrictFailClosedCompositionOrder()
     {
@@ -28,6 +46,122 @@ public sealed class AccessibilityRuntimeTests
         Assert.All(scenario.Hooks, hook => Assert.True(hook.IsActive));
         Assert.Contains(scenario.Log.Infos, message => message.Contains("Test backend", StringComparison.Ordinal));
         Assert.Equal(AccessibilityRuntimeState.Active, scenario.Runtime.State);
+    }
+
+    [Fact]
+    public void SuccessfulInitializationLogsEveryVerifiedPreparedAndActivatedRequiredHookInPhaseOrder()
+    {
+        var scenario = new RuntimeScenario(useCatalogHooks: true);
+
+        scenario.Runtime.Initialize();
+
+        var identityLog = Assert.Single(
+            scenario.Log.Infos,
+            message => message.StartsWith("Supported executable verified:", StringComparison.Ordinal));
+        Assert.Contains(GameVersionCatalog.Executable.Sha256, identityLog, StringComparison.Ordinal);
+        Assert.Contains(GameVersionCatalog.Executable.Machine.ToString(), identityLog, StringComparison.Ordinal);
+        Assert.Contains("0x00400000", identityLog, StringComparison.Ordinal);
+        Assert.Contains("21 required hook byte contracts", identityLog, StringComparison.Ordinal);
+
+        var verifiedLogs = scenario.Log.Infos
+            .Where(message => message.StartsWith("Hook byte verification passed:", StringComparison.Ordinal))
+            .ToArray();
+        var preparedLogs = scenario.Log.Infos
+            .Where(message => message.StartsWith("Hook preparation verified:", StringComparison.Ordinal))
+            .ToArray();
+        var activatedLogs = scenario.Log.Infos
+            .Where(message => message.StartsWith("Hook activation verified:", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(GameVersionCatalog.Hooks.Count, verifiedLogs.Length);
+        Assert.Equal(GameVersionCatalog.Hooks.Count, preparedLogs.Length);
+        Assert.Equal(GameVersionCatalog.Hooks.Count, activatedLogs.Length);
+        foreach (var contract in GameVersionCatalog.Hooks)
+        {
+            var address = checked((nuint)0x00400000 + contract.Rva);
+            var expectedIdentity = $"'{contract.Symbol}' at 0x{address:X8}";
+            Assert.Contains(verifiedLogs, message => message.Contains(expectedIdentity, StringComparison.Ordinal));
+            Assert.Contains(preparedLogs, message => message.Contains(expectedIdentity, StringComparison.Ordinal));
+            Assert.Contains(activatedLogs, message => message.Contains(expectedIdentity, StringComparison.Ordinal));
+        }
+
+        var lastVerifyLog = scenario.Timeline.FindLastIndex(
+            item => item.StartsWith("log:Hook byte verification passed:", StringComparison.Ordinal));
+        var identityLogIndex = scenario.Timeline.FindIndex(
+            item => item.StartsWith("log:Supported executable verified:", StringComparison.Ordinal));
+        var firstPrepare = scenario.Timeline.FindIndex(
+            item => item.StartsWith("prepare:", StringComparison.Ordinal));
+        var lastPrepare = scenario.Timeline.FindLastIndex(
+            item => item.StartsWith("prepare:", StringComparison.Ordinal));
+        var firstPreparationLog = scenario.Timeline.FindIndex(
+            item => item.StartsWith("log:Hook preparation verified:", StringComparison.Ordinal));
+        var lastPreparationLog = scenario.Timeline.FindLastIndex(
+            item => item.StartsWith("log:Hook preparation verified:", StringComparison.Ordinal));
+        var firstActivation = scenario.Timeline.FindIndex(
+            item => item.StartsWith("activate:", StringComparison.Ordinal));
+        var lastActivation = scenario.Timeline.FindLastIndex(
+            item => item.StartsWith("activate:", StringComparison.Ordinal));
+        var firstActivationLog = scenario.Timeline.FindIndex(
+            item => item.StartsWith("log:Hook activation verified:", StringComparison.Ordinal));
+
+        Assert.InRange(identityLogIndex, 1, firstPrepare - 1);
+        Assert.InRange(lastVerifyLog, identityLogIndex + 1, firstPrepare - 1);
+        Assert.InRange(firstPreparationLog, lastPrepare + 1, firstActivation - 1);
+        Assert.InRange(lastPreparationLog, firstPreparationLog, firstActivation - 1);
+        Assert.True(firstActivationLog > lastActivation);
+    }
+
+    [Fact]
+    public void ActivationFailureNeverLogsAnActiveHookClaim()
+    {
+        var scenario = new RuntimeScenario(FailureStage.ActivateSecond, useCatalogHooks: true);
+
+        scenario.Runtime.Initialize();
+
+        Assert.DoesNotContain(
+            scenario.Log.Infos,
+            message => message.StartsWith("Hook activation verified:", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            scenario.Log.Infos,
+            message => message.Equals("Accessibility runtime active.", StringComparison.Ordinal));
+        Assert.Equal(AccessibilityRuntimeState.Faulted, scenario.Runtime.State);
+    }
+
+    [Fact]
+    public void InactiveHookAfterActivationNeverLogsAnActiveHookClaim()
+    {
+        var scenario = new RuntimeScenario(
+            useCatalogHooks: true,
+            leaveLastHookInactive: true);
+
+        scenario.Runtime.Initialize();
+
+        Assert.DoesNotContain(
+            scenario.Log.Infos,
+            message => message.StartsWith("Hook activation verified:", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            scenario.Log.Infos,
+            message => message.Equals("Accessibility runtime active.", StringComparison.Ordinal));
+        Assert.Equal(AccessibilityRuntimeState.Faulted, scenario.Runtime.State);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void MissingRequiredResolvedAddressesFaultsBeforeWindowOrHookPreparation(int addressCount)
+    {
+        var scenario = new RuntimeScenario(
+            useCatalogHooks: true,
+            exposedAddressCount: addressCount);
+
+        scenario.Runtime.Initialize();
+
+        Assert.Equal(["verify-executable"], scenario.Events);
+        Assert.All(scenario.Hooks, hook => Assert.False(hook.IsActive));
+        Assert.Equal(AccessibilityRuntimeState.Faulted, scenario.Runtime.State);
+        Assert.Single(scenario.Log.Errors);
+        Assert.Single(scenario.Fatal.Messages);
+        Assert.Contains("hook addresses", scenario.Log.Errors[0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -80,7 +214,8 @@ public sealed class AccessibilityRuntimeTests
             new OriginalAndRollbackFailingInstaller(),
             log,
             fatal,
-            processId: 1234);
+            processId: 1234,
+            requiredHookContracts: TestHookCatalog);
 
         var exception = Record.Exception(runtime.Initialize);
 
@@ -97,11 +232,20 @@ public sealed class AccessibilityRuntimeTests
     {
         private readonly FailureStage failureStage;
 
-        public RuntimeScenario(FailureStage failureStage = FailureStage.None)
+        public RuntimeScenario(
+            FailureStage failureStage = FailureStage.None,
+            bool useCatalogHooks = false,
+            int? exposedAddressCount = null,
+            bool leaveLastHookInactive = false)
         {
             this.failureStage = failureStage;
-            Hooks = [new FakePreparedHook("first"), new FakePreparedHook("second")];
-            Log = new RecordingLog();
+            LeaveLastHookInactive = leaveLastHookInactive;
+            var hookCatalog = useCatalogHooks ? GameVersionCatalog.Hooks : TestHookCatalog;
+            Hooks = hookCatalog
+                .Select(contract => new FakePreparedHook(contract.Symbol))
+                .ToArray();
+            Build = new FakeVerifiedGameBuild(hookCatalog, exposedAddressCount);
+            Log = new RecordingLog(message => Timeline.Add($"log:{message}"));
             Fatal = new RecordingFatalError();
             Runtime = new AccessibilityRuntime(
                 new FakeVerifier(this),
@@ -110,19 +254,24 @@ public sealed class AccessibilityRuntimeTests
                 new FakeHookInstaller(this),
                 Log,
                 Fatal,
-                processId: 1234);
+                processId: 1234,
+                requiredHookContracts: hookCatalog);
         }
 
         public List<string> Events { get; } = [];
+        public List<string> Timeline { get; } = [];
         public FakePreparedHook[] Hooks { get; }
+        public FakeVerifiedGameBuild Build { get; }
         public RecordingLog Log { get; }
         public RecordingFatalError Fatal { get; }
         public AccessibilityRuntime Runtime { get; }
         public int VerifierThreadId { get; private set; }
+        public bool LeaveLastHookInactive { get; }
 
         private void Stage(FailureStage stage, string description)
         {
             Events.Add(description);
+            Timeline.Add(description);
             if (failureStage == stage)
             {
                 throw new InvalidOperationException($"{stage} failed");
@@ -135,7 +284,7 @@ public sealed class AccessibilityRuntimeTests
             {
                 scenario.VerifierThreadId = Environment.CurrentManagedThreadId;
                 scenario.Stage(FailureStage.Verify, "verify-executable");
-                return new FakeVerifiedGameBuild();
+                return scenario.Build;
             }
         }
 
@@ -164,9 +313,10 @@ public sealed class AccessibilityRuntimeTests
 
             public void PrepareAll(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary)
             {
-                foreach (var hook in scenario.Hooks)
+                for (var index = 0; index < scenario.Hooks.Length; index++)
                 {
-                    var stage = hook.Name == "first" ? FailureStage.PrepareFirst : FailureStage.PrepareSecond;
+                    var hook = scenario.Hooks[index];
+                    var stage = index == 0 ? FailureStage.PrepareFirst : FailureStage.PrepareSecond;
                     scenario.Stage(stage, $"prepare:{hook.Name}");
                     hook.Prepare();
                 }
@@ -174,11 +324,16 @@ public sealed class AccessibilityRuntimeTests
 
             public void ActivateAll()
             {
-                foreach (var hook in scenario.Hooks)
+                for (var index = 0; index < scenario.Hooks.Length; index++)
                 {
-                    var stage = hook.Name == "first" ? FailureStage.ActivateFirst : FailureStage.ActivateSecond;
+                    var hook = scenario.Hooks[index];
+                    var stage = index == 0 ? FailureStage.ActivateFirst : FailureStage.ActivateSecond;
                     scenario.Stage(stage, $"activate:{hook.Name}");
                     hook.Activate();
+                    if (scenario.LeaveLastHookInactive && index == scenario.Hooks.Length - 1)
+                    {
+                        hook.Disable();
+                    }
                 }
             }
 
@@ -206,7 +361,21 @@ public sealed class AccessibilityRuntimeTests
 
     private sealed class FakeVerifiedGameBuild : IVerifiedGameBuild
     {
-        public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; } = new Dictionary<HookId, nuint>();
+        public FakeVerifiedGameBuild(
+            IReadOnlyList<HookContract>? hookCatalog = null,
+            int? exposedAddressCount = null)
+        {
+            hookCatalog ??= TestHookCatalog;
+            ImageBaseAddress = 0x00400000;
+            HookAddresses = hookCatalog
+                .Take(exposedAddressCount ?? hookCatalog.Count)
+                .ToDictionary(
+                    contract => contract.Id,
+                    contract => checked(ImageBaseAddress + contract.Rva));
+        }
+
+        public nuint ImageBaseAddress { get; }
+        public IReadOnlyDictionary<HookId, nuint> HookAddresses { get; }
     }
 
     private sealed class FakePrismSession : IRuntimePrismSession
@@ -257,11 +426,15 @@ public sealed class AccessibilityRuntimeTests
         public void Disable() => IsActive = false;
     }
 
-    public sealed class RecordingLog : IModLog
+    public sealed class RecordingLog(Action<string>? onInfo = null) : IModLog
     {
         public List<string> Infos { get; } = [];
         public List<string> Errors { get; } = [];
-        public void Info(string message) => Infos.Add(message);
+        public void Info(string message)
+        {
+            Infos.Add(message);
+            onInfo?.Invoke(message);
+        }
         public void Error(string message) => Errors.Add(message);
     }
 
