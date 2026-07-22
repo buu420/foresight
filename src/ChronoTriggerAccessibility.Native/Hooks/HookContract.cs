@@ -71,13 +71,13 @@ public delegate nint TextManagerGetMsgDelegate(nint textManager, nint result, in
 
 public delegate nint SceneManagerCreateDelegate(int sceneId, int argument);
 
-public delegate nint ModeSelectSteamInitDelegate(nint scene);
+public delegate byte ModeSelectSteamInitDelegate(nint scene);
 
-public delegate nint OpeManualSceneInitDelegate(nint scene);
+public delegate byte OpeManualSceneInitDelegate(nint scene);
 
 public delegate void NameInputSceneUpdateDelegate(nint scene, float deltaSeconds);
 
-public delegate nint TitleMenuModeEnterDelegate(nint mode);
+public delegate void TitleMenuModeEnterDelegate(nint mode);
 
 public delegate void TitleSceneUpdateDelegate(nint scene, float deltaSeconds);
 

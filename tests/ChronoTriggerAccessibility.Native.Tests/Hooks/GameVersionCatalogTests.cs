@@ -59,6 +59,14 @@ public sealed class GameVersionCatalogTests
         AssertSignature<NameActionCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
     }
 
+    [Fact]
+    public void EntryDelegates_PreserveReviewedNativeReturnTypes()
+    {
+        AssertReturnType<ModeSelectSteamInitDelegate>(typeof(byte));
+        AssertReturnType<OpeManualSceneInitDelegate>(typeof(byte));
+        AssertReturnType<TitleMenuModeEnterDelegate>(typeof(void));
+    }
+
     private static void AssertSignature<TDelegate>(params Type[] parameterTypes)
         where TDelegate : Delegate
     {
@@ -67,5 +75,14 @@ public sealed class GameVersionCatalogTests
 
         Assert.Equal(typeof(void), invoke.ReturnType);
         Assert.Equal(parameterTypes, invoke.GetParameters().Select(parameter => parameter.ParameterType));
+    }
+
+    private static void AssertReturnType<TDelegate>(Type returnType)
+        where TDelegate : Delegate
+    {
+        var invoke = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException($"{typeof(TDelegate).Name} has no Invoke method.");
+
+        Assert.Equal(returnType, invoke.ReturnType);
     }
 }
