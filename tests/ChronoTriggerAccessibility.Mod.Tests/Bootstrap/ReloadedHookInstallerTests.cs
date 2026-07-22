@@ -134,6 +134,113 @@ public sealed class ReloadedHookInstallerTests
         Assert.False(prepared.IsActive);
     }
 
+    [Fact]
+    public void ReloadedPreparedAsmHookRootsEveryBridgeObjectAndUsesReloaded432EnableFallbackOnce()
+    {
+        MsgWindowChoiceConfirmProbeDelegate callback = _ => { };
+        var reverseWrapper = new object();
+        IReadOnlyList<string> code = new[] { "use32", "pushfd", "popfd" };
+        var nativeHook = new FakeReloadedAsmHook();
+        var prepared = new ReloadedPreparedAsmHook(
+            "choice confirm",
+            nativeHook,
+            [callback, reverseWrapper, code]);
+
+        Assert.False(prepared.IsActive);
+        Assert.Contains(callback, prepared.LifetimeRoots);
+        Assert.Contains(reverseWrapper, prepared.LifetimeRoots);
+        Assert.Contains(code, prepared.LifetimeRoots);
+
+        prepared.Activate();
+        prepared.Activate();
+        Assert.True(prepared.IsActive);
+        Assert.Equal(1, nativeHook.ActivateCount);
+        Assert.Equal(1, nativeHook.EnableCount);
+
+        prepared.Disable();
+        prepared.Disable();
+        Assert.False(prepared.IsActive);
+        Assert.Equal(1, nativeHook.DisableCount);
+    }
+
+    [Fact]
+    public void ReloadedPreparedAsmHookTreatsThrownActivationAsPotentiallyActiveUntilDisableSucceeds()
+    {
+        var nativeHook = new FakeReloadedAsmHook { FailActivateAfterPatch = true };
+        var prepared = new ReloadedPreparedAsmHook("choice confirm", nativeHook, [new object()]);
+
+        Assert.Throws<InvalidOperationException>(prepared.Activate);
+
+        Assert.True(prepared.IsActive);
+        Assert.Equal(1, nativeHook.ActivateCount);
+        Assert.Equal(0, nativeHook.EnableCount);
+
+        prepared.Disable();
+
+        Assert.False(prepared.IsActive);
+        Assert.Equal(1, nativeHook.DisableCount);
+    }
+
+    [Fact]
+    public void ReloadedPreparedAsmHookTreatsThrownEnableAsPotentiallyActiveUntilDisableSucceeds()
+    {
+        var nativeHook = new FakeReloadedAsmHook { FailEnable = true };
+        var prepared = new ReloadedPreparedAsmHook("choice confirm", nativeHook, [new object()]);
+
+        Assert.Throws<InvalidOperationException>(prepared.Activate);
+
+        Assert.True(prepared.IsActive);
+        Assert.Equal(1, nativeHook.ActivateCount);
+        Assert.Equal(1, nativeHook.EnableCount);
+
+        prepared.Disable();
+
+        Assert.False(prepared.IsActive);
+        Assert.Equal(1, nativeHook.DisableCount);
+    }
+
+    [Fact]
+    public void ReloadedPreparedAsmHookRemainsPotentiallyActiveWhenDisableThrows()
+    {
+        var nativeHook = new FakeReloadedAsmHook { FailDisable = true };
+        var prepared = new ReloadedPreparedAsmHook("choice confirm", nativeHook, [new object()]);
+        prepared.Activate();
+
+        Assert.Throws<InvalidOperationException>(prepared.Disable);
+
+        Assert.True(prepared.IsActive);
+        Assert.Equal(1, nativeHook.DisableCount);
+
+        nativeHook.FailDisable = false;
+        prepared.Disable();
+
+        Assert.False(prepared.IsActive);
+        Assert.Equal(2, nativeHook.DisableCount);
+    }
+
+    [Fact]
+    public void AssemblyHookParticipatesInTransactionalReverseRollback()
+    {
+        var events = new List<string>();
+        var nativeHook = new FakeReloadedAsmHook(events);
+        MsgWindowChoiceConfirmProbeDelegate callback = _ => { };
+        var preparedAsm = new ReloadedPreparedAsmHook(
+            "asm",
+            nativeHook,
+            [callback, new object(), new[] { "use32" }]);
+        var first = new StaticRegistration(preparedAsm, events);
+        var second = new FakeRegistration("failure", events) { FailActivate = true };
+        var installer = CreateInstaller(first, second);
+        installer.PrepareAll(new FakeVerifiedGameBuild(), CreateBoundary());
+
+        Assert.Throws<InvalidOperationException>(installer.ActivateAll);
+
+        Assert.False(preparedAsm.IsActive);
+        Assert.Equal(1, nativeHook.ActivateCount);
+        Assert.Equal(1, nativeHook.DisableCount);
+        Assert.True(events.IndexOf("disable:failure") < events.IndexOf("disable:asm"));
+    }
+
     private static ReloadedHookInstaller CreateInstaller(params IHookRegistration[] registrations) =>
         new(registrations);
 
@@ -207,6 +314,62 @@ public sealed class ReloadedHookInstallerTests
 
     [Function(CallingConventions.MicrosoftThiscall)]
     private delegate void TestHookDelegate(nint instance);
+
+    private sealed class StaticRegistration(
+        IPreparedHook prepared,
+        List<string> events) : IHookRegistration
+    {
+        public string Name => prepared.Name;
+
+        public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary)
+        {
+            events.Add($"prepare:{Name}");
+            return prepared;
+        }
+    }
+
+    private sealed class FakeReloadedAsmHook(List<string>? events = null) : IAsmHook
+    {
+        public bool FailActivateAfterPatch { get; init; }
+        public bool FailEnable { get; init; }
+        public bool FailDisable { get; set; }
+        public bool IsEnabled { get; private set; }
+        public int ActivateCount { get; private set; }
+        public int EnableCount { get; private set; }
+        public int DisableCount { get; private set; }
+
+        public IAsmHook Activate()
+        {
+            events?.Add("activate:asm");
+            ActivateCount++;
+            if (FailActivateAfterPatch)
+            {
+                throw new InvalidOperationException("activate failed after applying a patch");
+            }
+            return this;
+        }
+
+        public void Enable()
+        {
+            EnableCount++;
+            if (FailEnable)
+            {
+                throw new InvalidOperationException("enable failed after activation");
+            }
+            IsEnabled = true;
+        }
+
+        public void Disable()
+        {
+            events?.Add("disable:asm");
+            DisableCount++;
+            if (FailDisable)
+            {
+                throw new InvalidOperationException("disable failed");
+            }
+            IsEnabled = false;
+        }
+    }
 
     private sealed class FakeReloadedHook<TDelegate>(TDelegate original) : IHook<TDelegate>
     {

@@ -89,6 +89,56 @@ public sealed class ReloadedPreparedHook<TDelegate> : IPreparedHook
     }
 }
 
+public sealed class ReloadedPreparedAsmHook : IPreparedHook
+{
+    private readonly IAsmHook hook;
+    private bool activationInvoked;
+    private bool potentiallyActive;
+
+    public ReloadedPreparedAsmHook(
+        string name,
+        IAsmHook hook,
+        IEnumerable<object?> lifetimeRoots)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(hook);
+        ArgumentNullException.ThrowIfNull(lifetimeRoots);
+        Name = name;
+        this.hook = hook;
+        LifetimeRoots = new ReadOnlyCollection<object>(
+            lifetimeRoots.Where(root => root is not null).Cast<object>().ToArray());
+    }
+
+    public string Name { get; }
+    public bool IsActive => potentiallyActive || hook.IsEnabled;
+    public IReadOnlyCollection<object> LifetimeRoots { get; }
+
+    public void Activate()
+    {
+        if (activationInvoked)
+        {
+            return;
+        }
+
+        activationInvoked = true;
+        potentiallyActive = true;
+        hook.Activate();
+        if (!hook.IsEnabled)
+        {
+            hook.Enable();
+        }
+    }
+
+    public void Disable()
+    {
+        if (potentiallyActive || hook.IsEnabled)
+        {
+            hook.Disable();
+            potentiallyActive = false;
+        }
+    }
+}
+
 public sealed class ReloadedHookInstaller : IRuntimeHookInstaller
 {
     private readonly IReadOnlyList<IHookRegistration> registrations;

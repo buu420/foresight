@@ -37,6 +37,7 @@ public enum HookId
     MsgWindowOpen,
     MsgWindowUpdate,
     MsgWindowClose,
+    MsgWindowChoiceConfirmCallSite,
     ClassicTopMenuBuilder,
     TouchTopMenuBuilder,
     MenuTextLabelFactory,
@@ -53,6 +54,12 @@ public enum X86CallingConvention
     MicrosoftFastcall,
 }
 
+public enum NativeHookKind
+{
+    FunctionEntry,
+    AssemblyCallSite,
+}
+
 public sealed class HookContract
 {
     public HookContract(
@@ -62,23 +69,59 @@ public sealed class HookContract
         ReadOnlySpan<byte> expectedBytes,
         Type delegateType,
         X86CallingConvention callingConvention)
+        : this(
+            id,
+            symbol,
+            rva,
+            expectedBytes,
+            NativeHookKind.FunctionEntry,
+            delegateType,
+            callingConvention)
+    {
+    }
+
+    public HookContract(
+        HookId id,
+        string symbol,
+        uint rva,
+        ReadOnlySpan<byte> expectedBytes,
+        NativeHookKind kind,
+        Type? delegateType,
+        X86CallingConvention? callingConvention)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
-        ArgumentNullException.ThrowIfNull(delegateType);
-        if (!typeof(Delegate).IsAssignableFrom(delegateType))
+        if (!Enum.IsDefined(kind))
         {
-            throw new ArgumentException("Hook delegate type must derive from System.Delegate.", nameof(delegateType));
+            throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported native hook kind.");
         }
-
         if (expectedBytes.IsEmpty)
         {
             throw new ArgumentException("A hook contract must include at least one expected byte.", nameof(expectedBytes));
+        }
+
+        if (kind == NativeHookKind.FunctionEntry)
+        {
+            if (delegateType is null || callingConvention is null || !Enum.IsDefined(callingConvention.Value))
+            {
+                throw new ArgumentException(
+                    "A function-entry hook requires both a delegate type and one supported x86 calling convention.");
+            }
+            if (!typeof(Delegate).IsAssignableFrom(delegateType))
+            {
+                throw new ArgumentException("Hook delegate type must derive from System.Delegate.", nameof(delegateType));
+            }
+        }
+        else if (delegateType is not null || callingConvention is not null)
+        {
+            throw new ArgumentException(
+                "An assembly call-site contract is not callable and cannot declare a delegate or function convention.");
         }
 
         Id = id;
         Symbol = symbol;
         Rva = rva;
         ExpectedBytes = ImmutableArray.Create(expectedBytes.ToArray());
+        Kind = kind;
         DelegateType = delegateType;
         CallingConvention = callingConvention;
     }
@@ -91,9 +134,11 @@ public sealed class HookContract
 
     public ImmutableArray<byte> ExpectedBytes { get; }
 
-    public Type DelegateType { get; }
+    public NativeHookKind Kind { get; }
 
-    public X86CallingConvention CallingConvention { get; }
+    public Type? DelegateType { get; }
+
+    public X86CallingConvention? CallingConvention { get; }
 }
 
 [Function(CallingConventions.MicrosoftThiscall)]
@@ -200,6 +245,9 @@ public delegate void MsgWindowUpdateDelegate(nint msgWindow, uint deltaSecondsBi
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void MsgWindowCloseDelegate(nint msgWindow, uint dummyStackWord);
+
+[Function(CallingConventions.Cdecl)]
+public delegate void MsgWindowChoiceConfirmProbeDelegate(nint msgWindow);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ClassicTopMenuBuilderDelegate(nint topMenu, uint rawStackWord);

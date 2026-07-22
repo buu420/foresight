@@ -112,6 +112,11 @@ public static class GameVersionCatalog
         Create(HookId.MsgWindowClose, "MsgWindow close", 0x195C70,
             "55 8B EC 6A FF 68 17 9D 76 00 64 A1 00 00 00 00 50 83 EC 48 A1 D0 A0 7F 00 33 C5 89 45 EC 53 56",
             typeof(MsgWindowCloseDelegate), X86CallingConvention.MicrosoftThiscall),
+        CreateAssemblyCallSite(
+            HookId.MsgWindowChoiceConfirmCallSite,
+            "MsgWindow choice-confirm close call site",
+            MsgWindowChoiceConfirmCallRva,
+            "E8 E1 E5 FF FF"),
         Create(HookId.ClassicTopMenuBuilder, "Classic top-menu builder", 0x1D0560,
             "55 8B EC 6A FF 68 3E CE 76 00 64 A1 00 00 00 00 50 81 EC 94 01 00 00 A1 D0 A0 7F 00 33 C5 89 45",
             typeof(ClassicTopMenuBuilderDelegate), X86CallingConvention.MicrosoftThiscall),
@@ -149,4 +154,18 @@ public static class GameVersionCatalog
         X86CallingConvention callingConvention) =>
         new(id, symbol, rva, Convert.FromHexString(expectedBytes.Replace(" ", string.Empty, StringComparison.Ordinal)),
             delegateType, callingConvention);
+
+    private static HookContract CreateAssemblyCallSite(
+        HookId id,
+        string symbol,
+        uint rva,
+        string expectedBytes) =>
+        new(
+            id,
+            symbol,
+            rva,
+            Convert.FromHexString(expectedBytes.Replace(" ", string.Empty, StringComparison.Ordinal)),
+            NativeHookKind.AssemblyCallSite,
+            delegateType: null,
+            callingConvention: null);
 }

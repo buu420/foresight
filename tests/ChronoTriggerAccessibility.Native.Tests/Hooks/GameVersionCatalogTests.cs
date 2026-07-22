@@ -65,27 +65,28 @@ public sealed class GameVersionCatalogTests
         Assert.Equal(symbol, contract.Symbol);
         Assert.Equal(rva, contract.Rva);
         Assert.Equal(expectedHex, Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.FunctionEntry, contract.Kind);
         Assert.Equal(delegateType, contract.DelegateType);
         Assert.Equal(callingConvention, contract.CallingConvention);
-        Assert.True(typeof(Delegate).IsAssignableFrom(contract.DelegateType));
+        Assert.True(typeof(Delegate).IsAssignableFrom(contract.DelegateType!));
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyFortyUniqueContracts()
+    public void HookCatalog_HasExactlyFortyOneUniqueContracts()
     {
-        Assert.Equal(40, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(40, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(41, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(41, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(41, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(41, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
     public void EveryCatalogDelegateCarriesOfficialReloadedX86FunctionMetadata()
     {
-        foreach (var contract in GameVersionCatalog.Hooks)
+        foreach (var contract in GameVersionCatalog.Hooks.Where(contract => contract.Kind == NativeHookKind.FunctionEntry))
         {
             var functionAttribute = Assert.Single(
-                contract.DelegateType.GetCustomAttributesData(),
+                contract.DelegateType!.GetCustomAttributesData(),
                 attribute => attribute.AttributeType.FullName ==
                     "Reloaded.Hooks.Definitions.X86.FunctionAttribute");
 
@@ -95,6 +96,49 @@ public sealed class GameVersionCatalogTests
                 : CallingConventions.MicrosoftThiscall;
             Assert.Equal((int)expectedConvention, conventionValue);
         }
+    }
+
+    [Fact]
+    public void ChoiceConfirmCallSite_IsAnExactNonCallableAssemblyContract()
+    {
+        var contract = GameVersionCatalog.Get(HookId.MsgWindowChoiceConfirmCallSite);
+
+        Assert.Equal("MsgWindow choice-confirm close call site", contract.Symbol);
+        Assert.Equal(GameVersionCatalog.MsgWindowChoiceConfirmCallRva, contract.Rva);
+        Assert.Equal("E8E1E5FFFF", Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.AssemblyCallSite, contract.Kind);
+        Assert.Null(contract.DelegateType);
+        Assert.Null(contract.CallingConvention);
+        Assert.Equal(GameVersionCatalog.MsgWindowChoiceConfirmReturnRva, contract.Rva + contract.ExpectedBytes.Length);
+    }
+
+    [Fact]
+    public void HookContract_RejectsContradictoryFunctionAndCallSiteAbiMetadata()
+    {
+        Assert.Throws<ArgumentException>(() => new HookContract(
+            HookId.MsgWindowChoiceConfirmCallSite,
+            "function without ABI",
+            1,
+            [0x90],
+            NativeHookKind.FunctionEntry,
+            delegateType: null,
+            callingConvention: null));
+        Assert.Throws<ArgumentException>(() => new HookContract(
+            HookId.MsgWindowChoiceConfirmCallSite,
+            "callsite with delegate",
+            1,
+            [0x90],
+            NativeHookKind.AssemblyCallSite,
+            typeof(MsgWindowCloseDelegate),
+            callingConvention: null));
+        Assert.Throws<ArgumentException>(() => new HookContract(
+            HookId.MsgWindowChoiceConfirmCallSite,
+            "callsite with convention",
+            1,
+            [0x90],
+            NativeHookKind.AssemblyCallSite,
+            delegateType: null,
+            callingConvention: X86CallingConvention.MicrosoftThiscall));
     }
 
     [Fact]
@@ -145,6 +189,7 @@ public sealed class GameVersionCatalogTests
         AssertSignature<MsgWindowOpenDelegate>(typeof(nint), typeof(uint));
         AssertSignature<MsgWindowUpdateDelegate>(typeof(nint), typeof(uint));
         AssertSignature<MsgWindowCloseDelegate>(typeof(nint), typeof(uint));
+        AssertSignature<MsgWindowChoiceConfirmProbeDelegate>(typeof(nint));
         AssertSignature<ClassicTopMenuBuilderDelegate>(typeof(nint), typeof(uint));
         AssertSignature<TouchTopMenuBuilderDelegate>(typeof(nint), typeof(uint));
         AssertSignatureWithReturn<MenuTextLabelFactoryDelegate>(typeof(nint), typeof(nint), typeof(nint), typeof(nint), typeof(int));
@@ -159,6 +204,18 @@ public sealed class GameVersionCatalogTests
     public void MsgWindowChoiceConfirmReturnFollowsItsExactCallInstruction()
     {
         Assert.Equal(GameVersionCatalog.MsgWindowChoiceConfirmCallRva + 5, GameVersionCatalog.MsgWindowChoiceConfirmReturnRva);
+    }
+
+    [Fact]
+    public void ChoiceConfirmProbeCallbackUsesOfficialReloadedCdeclMetadata()
+    {
+        var functionAttribute = Assert.Single(
+            typeof(MsgWindowChoiceConfirmProbeDelegate).GetCustomAttributesData(),
+            attribute => attribute.AttributeType.FullName ==
+                "Reloaded.Hooks.Definitions.X86.FunctionAttribute");
+        Assert.Equal(
+            (int)CallingConventions.Cdecl,
+            Convert.ToInt32(functionAttribute.ConstructorArguments.Single().Value));
     }
 
     [Fact]

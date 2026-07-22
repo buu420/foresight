@@ -29,12 +29,16 @@ public sealed class ExecutableVerifierTests
             Assert.Equal(hook.ExpectedBytes.ToArray(), image.ReadBytesAtRva(hook.Rva, hook.ExpectedBytes.Length));
         }
 
+        var choiceConfirm = GameVersionCatalog.Get(HookId.MsgWindowChoiceConfirmCallSite);
+        Assert.Equal(NativeHookKind.AssemblyCallSite, choiceConfirm.Kind);
+        var choiceSection = image.GetSectionContaining(choiceConfirm.Rva, choiceConfirm.ExpectedBytes.Length);
+        Assert.Equal(".text", choiceSection.Name);
+        Assert.True(choiceSection.IsExecutable);
+        Assert.Equal(Convert.FromHexString("E8E1E5FFFF"), choiceConfirm.ExpectedBytes.ToArray());
+        Assert.Equal(choiceConfirm.ExpectedBytes.ToArray(), image.ReadBytesAtRva(choiceConfirm.Rva, 5));
         Assert.Equal(
-            Convert.FromHexString("E8E1E5FFFF"),
-            image.ReadBytesAtRva(GameVersionCatalog.MsgWindowChoiceConfirmCallRva, 5));
-        Assert.Equal(
-            GameVersionCatalog.MsgWindowChoiceConfirmCallRva + 5,
-            GameVersionCatalog.MsgWindowChoiceConfirmReturnRva);
+            GameVersionCatalog.MsgWindowChoiceConfirmReturnRva,
+            choiceConfirm.Rva + choiceConfirm.ExpectedBytes.Length);
     }
 
     [Fact]
