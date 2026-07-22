@@ -55,11 +55,25 @@ public sealed class EndingLogSnapshot
 
 public sealed record EndingDetailControlInput(int Key, string Label, bool NativeAvailable, bool Visible);
 
-public sealed record EndingDetailInput(
-    string VisibleTitle,
-    string VisibleRequirementsLabel,
-    string VisibleRequirementText,
-    IReadOnlyList<EndingDetailControlInput> Controls);
+public sealed class EndingDetailInput
+{
+    public EndingDetailInput(
+        string? visibleTitle,
+        string? visibleRequirementsLabel,
+        string? visibleRequirementText,
+        IEnumerable<EndingDetailControlInput>? controls)
+    {
+        VisibleTitle = visibleTitle is null ? string.Empty : new string(visibleTitle.AsSpan());
+        VisibleRequirementsLabel = visibleRequirementsLabel is null ? string.Empty : new string(visibleRequirementsLabel.AsSpan());
+        VisibleRequirementText = visibleRequirementText is null ? string.Empty : new string(visibleRequirementText.AsSpan());
+        Controls = new ReadOnlyCollection<EndingDetailControlInput>((controls ?? []).ToArray());
+    }
+
+    public string VisibleTitle { get; }
+    public string VisibleRequirementsLabel { get; }
+    public string VisibleRequirementText { get; }
+    public IReadOnlyList<EndingDetailControlInput> Controls { get; }
+}
 
 public sealed class EndingDetailSnapshot
 {
@@ -126,6 +140,11 @@ public static class ExtrasCapture
                 diagnostic = "Extras Hub positions 0..3 require localized help and a captured native availability state.";
                 return false;
             }
+            if (position == 4 && !control.NativeAvailable)
+            {
+                diagnostic = "Extras Hub Back must be captured as available and visible.";
+                return false;
+            }
         }
 
         snapshot = new ExtrasHubSnapshot(ordered.Select((control, position) => new MenuControlSnapshot(
@@ -133,7 +152,7 @@ public static class ExtrasCapture
             null,
             control.Help is null ? null : new string(control.Help.AsSpan()),
             control.Key,
-            position,
+            position + 1,
             ordered.Length,
             control.NativeAvailable,
             control.Visible)));
@@ -169,13 +188,14 @@ public static class ExtrasCapture
         for (var position = 0; position < orderedRows.Length; position++)
         {
             var row = orderedRows[position];
-            if (row.Position != position || string.IsNullOrWhiteSpace(row.VisibleLabel) || (row.Locked && row.VisibleLabel != "?"))
+            if (row.Position != position || string.IsNullOrWhiteSpace(row.VisibleLabel) ||
+                (row.Locked && row.VisibleLabel != "???") || (!row.Locked && row.VisibleLabel == "???"))
             {
-                diagnostic = "Ending Log rows must be ordered 0..18 with nonblank visible labels; locked rows retain their visible question-mark label.";
+                diagnostic = "Ending Log rows must be ordered 0..18 with nonblank visible labels; only locked rows retain the visible ??? label.";
                 return false;
             }
         }
-        if (back is null || (back.Key >= 0 && back.Key <= 18) || string.IsNullOrWhiteSpace(back.Label) || !back.NativeAvailable || !back.Visible)
+        if (back is null || back.Key < 0 || back.Key <= 18 || string.IsNullOrWhiteSpace(back.Label) || !back.NativeAvailable || !back.Visible)
         {
             diagnostic = "Ending Log requires a separately captured available visible Back control with a non-colliding manager key.";
             return false;
@@ -183,7 +203,7 @@ public static class ExtrasCapture
 
         snapshot = new EndingLogSnapshot(
             orderedRows.Select(row => new EndingLogRowSnapshot(row.Position, new string(row.VisibleLabel.AsSpan()), row.Locked)),
-            new MenuControlSnapshot(new string(back.Label.AsSpan()), null, null, back.Key, 19, 20, back.NativeAvailable, back.Visible));
+            new MenuControlSnapshot(new string(back.Label.AsSpan()), null, null, back.Key, 20, 20, back.NativeAvailable, back.Visible));
         diagnostic = string.Empty;
         return true;
     }
@@ -234,7 +254,7 @@ public static class ExtrasCapture
                 null,
                 null,
                 control.Key,
-                position,
+                position + 1,
                 controls.Length,
                 control.NativeAvailable,
                 control.Visible)));
@@ -244,7 +264,7 @@ public static class ExtrasCapture
 
     private static bool TryValidateVtable(nuint imageBase, nuint observedVtable, uint expectedRva, out string diagnostic)
     {
-        if ((ulong)imageBase > uint.MaxValue || (ulong)observedVtable > uint.MaxValue)
+        if (imageBase == 0 || (ulong)imageBase > uint.MaxValue || (ulong)observedVtable > uint.MaxValue)
         {
             diagnostic = "The observed vtable or image base is outside the audited x86 address range.";
             return false;

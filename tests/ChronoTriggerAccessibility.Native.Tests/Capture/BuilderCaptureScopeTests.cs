@@ -24,7 +24,7 @@ public sealed class BuilderCaptureScopeTests
         Assert.Equal("3 entries", control.Value);
         Assert.Equal("Browse records", control.Help);
         Assert.Equal(7, control.Key);
-        Assert.Equal(0, control.Position);
+        Assert.Equal(1, control.Position);
         Assert.Equal(1, control.Count);
         Assert.True(control.Enabled);
         Assert.True(control.Visible);
@@ -115,6 +115,77 @@ public sealed class BuilderCaptureScopeTests
         Assert.False(scope.TryCreateSnapshot(null, out var result));
         Assert.Null(result.Snapshot);
         Assert.Contains("ambiguous", result.Diagnostic, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectsSameCountButMismatchedConstructedAndBoundControlSetsWithoutThrowing()
+    {
+        using var scope = new BuilderCaptureScope();
+        Assert.True(scope.TryRecordLocalizedText(0x1000, BuilderTextPart.Label, "First", out _));
+        Assert.True(scope.TryRecordLocalizedText(0x1001, BuilderTextPart.Label, "Second", out _));
+        Assert.True(scope.TryRecordConstructedControl(0x1000, 0, true, true, out _));
+        Assert.True(scope.TryRecordConstructedControl(0x1001, 1, true, true, out _));
+        Assert.True(scope.TryRecordManagerKeyBinding(0x2000, 0x1000, 0, out _));
+        Assert.True(scope.TryRecordManagerKeyBinding(0x2000, 0x1002, 1, out _));
+
+        Assert.False(scope.TryCreateSnapshot(null, out var result));
+        Assert.Null(result.Snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(result.Diagnostic));
+    }
+
+    [Fact]
+    public void RejectsTextObservedForAnUnknownControlWithoutPartialSnapshot()
+    {
+        using var scope = new BuilderCaptureScope();
+        Assert.True(scope.TryRecordLocalizedText(0x1001, BuilderTextPart.Label, "Stale", out _));
+        Assert.True(scope.TryRecordLocalizedText(0x1000, BuilderTextPart.Label, "Known", out _));
+        Assert.True(scope.TryRecordConstructedControl(0x1000, 0, true, true, out _));
+        Assert.True(scope.TryRecordManagerKeyBinding(0x2000, 0x1000, 0, out _));
+
+        Assert.False(scope.TryCreateSnapshot(null, out var result));
+        Assert.Null(result.Snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(result.Diagnostic));
+    }
+
+    [Fact]
+    public void RejectsMultipleBindingManagersAndDuplicateKeysAcrossManagers()
+    {
+        using var scope = new BuilderCaptureScope();
+        Assert.True(scope.TryRecordManagerKeyBinding(0x2000, 0x1000, 0, out _));
+        Assert.False(scope.TryRecordManagerKeyBinding(0x3000, 0x1001, 0, out var error));
+        Assert.Contains("manager", error, StringComparison.OrdinalIgnoreCase);
+
+        Assert.False(scope.TryCreateSnapshot(null, out var result));
+        Assert.Null(result.Snapshot);
+        Assert.False(string.IsNullOrWhiteSpace(result.Diagnostic));
+    }
+
+    [Fact]
+    public void WrongThreadDisposeAbandonsStaleScopeAndAllowsOwnerThreadReuse()
+    {
+        using var ownerReady = new ManualResetEventSlim();
+        using var crossThreadDone = new ManualResetEventSlim();
+        BuilderCaptureScope? stale = null;
+        string? ownerResult = null;
+        var owner = new Thread(() =>
+        {
+            stale = new BuilderCaptureScope();
+            ownerReady.Set();
+            crossThreadDone.Wait();
+            var staleRejected = !stale.TryRecordConstructedControl(0x1000, 0, true, true, out var staleError);
+            using var replacement = new BuilderCaptureScope();
+            ownerResult = $"{staleRejected}:{staleError}:{replacement is not null}";
+        });
+        owner.Start();
+        ownerReady.Wait();
+
+        var disposeError = RecordDisposeError(stale!);
+        crossThreadDone.Set();
+        owner.Join();
+
+        Assert.Contains("thread", disposeError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("True", ownerResult, StringComparison.Ordinal);
+        Assert.Contains("abandoned", ownerResult, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

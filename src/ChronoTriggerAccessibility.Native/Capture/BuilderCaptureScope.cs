@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace ChronoTriggerAccessibility.Native.Capture;
 
 public enum BuilderTextPart
@@ -23,17 +21,24 @@ public sealed class BuilderCaptureScope : IDisposable
     private readonly Dictionary<(nuint Control, BuilderTextPart Part), string> textByControlPart = [];
     private readonly Dictionary<nuint, ConstructedControl> controls = [];
     private readonly Dictionary<nuint, Binding> bindingByControl = [];
-    private readonly HashSet<(nuint Manager, int Key)> managerKeys = [];
+    private readonly HashSet<int> boundKeys = [];
     private readonly HashSet<int> positions = [];
     private readonly List<string> errors = [];
     private Focus? focus;
+    private nuint? bindingManager;
     private bool disposed;
+    private int abandoned;
 
     public BuilderCaptureScope()
     {
-        if (Current.Value is not null)
+        if (Current.Value is { } existing)
         {
-            throw new InvalidOperationException("A builder capture scope is already active on this thread.");
+            if (!existing.IsAbandoned)
+            {
+                throw new InvalidOperationException("A builder capture scope is already active on this thread.");
+            }
+
+            Current.Value = null;
         }
 
         Current.Value = this;
@@ -91,19 +96,26 @@ public sealed class BuilderCaptureScope : IDisposable
             errors.Add(diagnostic);
             return false;
         }
-        if (!managerKeys.Add((manager, key)))
-        {
-            diagnostic = "A duplicate manager/key binding was observed.";
-            errors.Add(diagnostic);
-            return false;
-        }
         if (bindingByControl.ContainsKey(control))
         {
             diagnostic = "A control was bound more than once.";
             errors.Add(diagnostic);
             return false;
         }
+        if (bindingManager is not null && bindingManager != manager)
+        {
+            diagnostic = "Multiple managers cannot be correlated into one menu snapshot.";
+            errors.Add(diagnostic);
+            return false;
+        }
+        if (!boundKeys.Add(key))
+        {
+            diagnostic = "A duplicate integer manager key was observed.";
+            errors.Add(diagnostic);
+            return false;
+        }
 
+        bindingManager ??= manager;
         bindingByControl.Add(control, new Binding(manager, key));
         diagnostic = string.Empty;
         return true;
@@ -156,37 +168,54 @@ public sealed class BuilderCaptureScope : IDisposable
             result = MenuCaptureResult.Failure(string.Join(" ", errors));
             return false;
         }
-        if (controls.Count == 0 || controls.Count != bindingByControl.Count ||
-            controls.Keys.Any(control => !textByControlPart.ContainsKey((control, BuilderTextPart.Label))))
+        var controlPointers = controls.Keys.ToHashSet();
+        if (controlPointers.Count == 0 || !controlPointers.SetEquals(bindingByControl.Keys))
         {
-            result = MenuCaptureResult.Failure("Builder observations cannot be correlated to exactly one labeled constructed control and binding.");
+            result = MenuCaptureResult.Failure("Constructed controls and manager bindings do not have the same pointer set.");
             return false;
         }
-        if (focus is not null && !managerKeys.Contains((focus.Manager, focus.Key)))
+        if (textByControlPart.Keys.Any(observation => !controlPointers.Contains(observation.Control)))
+        {
+            result = MenuCaptureResult.Failure("A localized or rendered observation belongs to an unknown constructed control.");
+            return false;
+        }
+        if (focus is not null && (bindingManager != focus.Manager || !boundKeys.Contains(focus.Key)))
         {
             result = MenuCaptureResult.Failure("The captured focus does not match an observed manager/key binding.");
             return false;
         }
 
-        var ordered = controls
-            .OrderBy(pair => pair.Value.Position)
-            .Select((pair, index) => new MenuControlSnapshot(
-                textByControlPart[(pair.Key, BuilderTextPart.Label)],
-                TryGetText(pair.Key, BuilderTextPart.Value),
-                TryGetText(pair.Key, BuilderTextPart.Help),
-                bindingByControl[pair.Key].Key,
-                pair.Value.Position,
+        var ordered = new List<MenuControlSnapshot>(controls.Count);
+        foreach (var (control, constructed) in controls.OrderBy(pair => pair.Value.Position))
+        {
+            if (!bindingByControl.TryGetValue(control, out var binding) ||
+                !textByControlPart.TryGetValue((control, BuilderTextPart.Label), out var label))
+            {
+                result = MenuCaptureResult.Failure("A constructed control has no unambiguous binding or localized label.");
+                return false;
+            }
+
+            ordered.Add(new MenuControlSnapshot(
+                label,
+                TryGetText(control, BuilderTextPart.Value),
+                TryGetText(control, BuilderTextPart.Help),
+                binding.Key,
+                constructed.Position + 1,
                 controls.Count,
-                pair.Value.Enabled,
-                pair.Value.Visible))
-            .ToArray();
+                constructed.Enabled,
+                constructed.Visible));
+        }
         result = MenuCaptureResult.Success(new MenuStatusSnapshot(status, ordered, focus?.Key));
         return true;
     }
 
     public void Dispose()
     {
-        EnsureOwningThread();
+        if (Environment.CurrentManagedThreadId != owningThreadId)
+        {
+            Interlocked.Exchange(ref abandoned, 1);
+            throw new InvalidOperationException("Builder capture scope disposal was attempted from a different thread.");
+        }
         if (disposed)
         {
             return;
@@ -215,6 +244,8 @@ public sealed class BuilderCaptureScope : IDisposable
     private string? TryGetText(nuint control, BuilderTextPart part) =>
         textByControlPart.TryGetValue((control, part), out var text) ? text : null;
 
+    private bool IsAbandoned => Volatile.Read(ref abandoned) != 0;
+
     private bool TryUse(out string diagnostic)
     {
         if (Environment.CurrentManagedThreadId != owningThreadId)
@@ -227,17 +258,14 @@ public sealed class BuilderCaptureScope : IDisposable
             diagnostic = "Builder capture scope has been disposed.";
             return false;
         }
+        if (IsAbandoned)
+        {
+            diagnostic = "Builder capture scope was abandoned after a cross-thread disposal attempt.";
+            return false;
+        }
 
         diagnostic = string.Empty;
         return true;
-    }
-
-    private void EnsureOwningThread()
-    {
-        if (Environment.CurrentManagedThreadId != owningThreadId)
-        {
-            throw new InvalidOperationException("Builder capture scope disposal was attempted from a different thread.");
-        }
     }
 
     private sealed record ConstructedControl(int Position, bool Enabled, bool Visible);
