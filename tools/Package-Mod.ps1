@@ -28,6 +28,14 @@ function Assert-FileExists {
     }
 }
 
+function Assert-DirectoryExists {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath)
+
+    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Container)) {
+        throw "Required directory is missing: $LiteralPath"
+    }
+}
+
 function Get-PeMachine {
     param([Parameter(Mandatory = $true)][string]$LiteralPath)
 
@@ -103,6 +111,7 @@ $modConfigPath = Join-Path $BuildDirectory 'ModConfig.json'
 $prismSourcePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\win-x86\prism.dll'
 $prismLicensePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\LICENSE'
 $prismNoticePath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\NOTICE'
+$prismLicensesPath = Join-Path $RepositoryRoot 'native\prism\v0.17.3\LICENSES'
 $readmePath = Join-Path $RepositoryRoot 'README.md'
 $thirdPartyNoticePath = Join-Path $RepositoryRoot 'THIRD-PARTY-NOTICES.md'
 $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
@@ -130,6 +139,7 @@ foreach ($requiredPath in @(
 )) {
     Assert-FileExists $requiredPath
 }
+Assert-DirectoryExists $prismLicensesPath
 
 $actualPrismHash = Get-Sha256 $prismSourcePath
 if ($actualPrismHash -ne $SupportedPrismSha256) {
@@ -186,8 +196,8 @@ Copy-Item -LiteralPath $prismLicensePath -Destination (Join-Path $OutputDirector
 Copy-Item -LiteralPath $prismNoticePath -Destination (Join-Path $OutputDirectory 'NOTICE')
 Copy-Item -LiteralPath $readmePath -Destination (Join-Path $OutputDirectory 'README.md')
 Copy-Item -LiteralPath $thirdPartyNoticePath -Destination (Join-Path $OutputDirectory 'THIRD-PARTY-NOTICES.md')
+Copy-Item -LiteralPath $prismLicensesPath -Destination $OutputDirectory -Recurse
 $licenseOutputDirectory = Join-Path $OutputDirectory 'LICENSES'
-[void][System.IO.Directory]::CreateDirectory($licenseOutputDirectory)
 Copy-Item -LiteralPath $gplLicensePath -Destination (Join-Path $licenseOutputDirectory 'GNU-GPL-3.0.txt')
 Copy-Item -LiteralPath $hooksDefinitionsLicensePath -Destination (Join-Path $licenseOutputDirectory 'Reloaded.Hooks.Definitions-LGPL-3.0.txt')
 Copy-Item -LiteralPath $sharedHooksLicensePath -Destination (Join-Path $licenseOutputDirectory 'Reloaded.SharedLib.Hooks-LGPL-3.0.txt')

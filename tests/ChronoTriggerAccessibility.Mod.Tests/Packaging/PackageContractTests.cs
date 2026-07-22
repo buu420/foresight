@@ -45,6 +45,16 @@ public sealed class PackageContractTests
                 Path.Combine("LICENSES", "GNU-GPL-3.0.txt"),
                 Path.Combine("LICENSES", "Reloaded.Hooks.Definitions-LGPL-3.0.txt"),
                 Path.Combine("LICENSES", "Reloaded.SharedLib.Hooks-LGPL-3.0.txt"),
+                Path.Combine("LICENSES", "concurrentqueue", "LICENSE.md"),
+                Path.Combine("LICENSES", "djinni", "LICENSE"),
+                Path.Combine("LICENSES", "dr_wav", "LICENSE"),
+                Path.Combine("LICENSES", "fmt", "LICENSE"),
+                Path.Combine("LICENSES", "moderncom", "AUTHORS.md"),
+                Path.Combine("LICENSES", "moderncom", "LICENSE"),
+                Path.Combine("LICENSES", "nvdaController", "lgpl-2.1.txt"),
+                Path.Combine("LICENSES", "nvgt", "LICENSE.md"),
+                Path.Combine("LICENSES", "prism", "mpl-2.0.txt"),
+                Path.Combine("LICENSES", "simdutf", "apache-2.0.txt"),
                 "README.md",
                 "THIRD-PARTY-NOTICES.md",
                 "SHA256SUMS.txt"
@@ -58,6 +68,7 @@ public sealed class PackageContractTests
             Assert.DoesNotContain(packagedFiles, path => path.Contains("x64", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(0x014c, ReadPeMachine(Path.Combine(packageRoot, "prism.dll")));
 
+            AssertPrismLicenseTreeMatchesPinnedSource(repositoryRoot, packageRoot);
             AssertDepsRuntimeFilesArePresent(packageRoot);
             AssertExactSha256Manifest(packageRoot, packagedFiles);
         }
@@ -199,6 +210,39 @@ public sealed class PackageContractTests
                 var fileName = Path.GetFileName(asset.Name);
                 Assert.True(File.Exists(Path.Combine(packageRoot, fileName)), $"Runtime dependency is missing: {fileName}");
             }
+        }
+    }
+
+    private static void AssertPrismLicenseTreeMatchesPinnedSource(string repositoryRoot, string packageRoot)
+    {
+        var sourceRoot = Path.Combine(repositoryRoot, "native", "prism", "v0.17.3", "LICENSES");
+        var packageLicenseRoot = Path.Combine(packageRoot, "LICENSES");
+        var sourceFiles = Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(sourceRoot, path))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                Path.Combine("concurrentqueue", "LICENSE.md"),
+                Path.Combine("djinni", "LICENSE"),
+                Path.Combine("dr_wav", "LICENSE"),
+                Path.Combine("fmt", "LICENSE"),
+                Path.Combine("moderncom", "AUTHORS.md"),
+                Path.Combine("moderncom", "LICENSE"),
+                Path.Combine("nvdaController", "lgpl-2.1.txt"),
+                Path.Combine("nvgt", "LICENSE.md"),
+                Path.Combine("prism", "mpl-2.0.txt"),
+                Path.Combine("simdutf", "apache-2.0.txt")
+            }.Order(StringComparer.Ordinal),
+            sourceFiles);
+
+        foreach (var relativePath in sourceFiles)
+        {
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(sourceRoot, relativePath)),
+                File.ReadAllBytes(Path.Combine(packageLicenseRoot, relativePath)));
         }
     }
 

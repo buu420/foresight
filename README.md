@@ -39,7 +39,7 @@ From this repository in PowerShell:
 & '.\tools\Verify-Deployment.ps1'
 ```
 
-Packaging creates `artifacts\package\chrono.trigger.accessibility` and writes `SHA256SUMS.txt` over every packaged payload file. Deployment replaces only that named Reloaded mod directory, updates the Chrono Trigger Reloaded application profile while preserving unrelated properties and mod entries, and copies the accessible launcher to the game directory. It never overwrites a game executable or other original game binary.
+Packaging creates `artifacts\package\chrono.trigger.accessibility` and writes `SHA256SUMS.txt` over every packaged payload file. Deployment stages and verifies every replacement before committing it. If the mod swap, profile update, launcher update, or final verification fails, it restores the preceding mod directory, profile, and launcher byte-for-byte (or removes newly created targets from a first install). It never overwrites a game executable or other original game binary.
 
 ## Launch
 
@@ -77,4 +77,4 @@ Close Chrono Trigger and Reloaded-II first. Then:
 
 The deployer does not alter original game files. Keep the shared-hooks mod and the per-user x86 .NET runtime if another accessibility mod uses them.
 
-Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`, Prism's `LICENSE` and `NOTICE`, and the Reloaded license texts under `LICENSES` in the packaged mod.
+Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. The package includes Prism's root `LICENSE` and `NOTICE`, the exact `LICENSES` subtree from pinned Prism source commit `9911156998b52fee91fb2cb4f71ac793d4e546c7`, and the Reloaded license texts under `LICENSES`.

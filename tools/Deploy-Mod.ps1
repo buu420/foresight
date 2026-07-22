@@ -8,7 +8,10 @@ param(
 
     [string]$RuntimeRoot = 'C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86',
 
-    [string]$LauncherDestinationDirectory = 'G:\SteamLibrary\steamapps\common\Chrono Trigger'
+    [string]$LauncherDestinationDirectory = 'G:\SteamLibrary\steamapps\common\Chrono Trigger',
+
+    [ValidateSet('None', 'AfterModSwap', 'AfterProfileCommit', 'AfterLauncherCommit', 'FinalVerification')]
+    [string]$FailureInjectionPoint = 'None'
 )
 
 Set-StrictMode -Version Latest
@@ -174,6 +177,85 @@ function Add-ModIdOnce {
     return ,$result.ToArray()
 }
 
+function Invoke-FailureInjection {
+    param([Parameter(Mandatory = $true)][string]$Point)
+
+    if ($FailureInjectionPoint -eq $Point) {
+        throw "Injected deployment failure at $Point"
+    }
+}
+
+function Remove-ExactPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [Parameter(Mandatory = $true)][string]$ParentPath
+    )
+
+    Assert-ChildPath $LiteralPath $ParentPath
+    if (-not (Test-Path -LiteralPath $LiteralPath)) {
+        return
+    }
+
+    $item = Get-Item -LiteralPath $LiteralPath -Force
+    if ($item.PSIsContainer) {
+        Remove-Item -LiteralPath $LiteralPath -Recurse -Force
+    }
+    else {
+        Remove-Item -LiteralPath $LiteralPath -Force
+    }
+}
+
+function Restore-TransactionArtifact {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$TargetPath,
+        [Parameter(Mandatory = $true)][string]$BackupPath,
+        [Parameter(Mandatory = $true)][string]$ParentPath,
+        [Parameter(Mandatory = $true)][bool]$HadOriginal,
+        [Parameter(Mandatory = $true)][bool]$OriginalMoved,
+        [Parameter(Mandatory = $true)][bool]$NewInstalled
+    )
+
+    if (-not $OriginalMoved -and -not $NewInstalled) {
+        return
+    }
+
+    if ($NewInstalled -and (Test-Path -LiteralPath $TargetPath)) {
+        Remove-ExactPath $TargetPath $ParentPath
+    }
+
+    if ($OriginalMoved) {
+        if (-not $HadOriginal -or -not (Test-Path -LiteralPath $BackupPath)) {
+            throw "Cannot restore $Name because its transaction backup is missing: $BackupPath"
+        }
+        if (Test-Path -LiteralPath $TargetPath) {
+            Remove-ExactPath $TargetPath $ParentPath
+        }
+        Move-Item -LiteralPath $BackupPath -Destination $TargetPath
+        if (-not (Test-Path -LiteralPath $TargetPath)) {
+            throw "Rollback did not restore ${Name}: $TargetPath"
+        }
+    }
+    elseif (-not $HadOriginal -and (Test-Path -LiteralPath $TargetPath)) {
+        Remove-ExactPath $TargetPath $ParentPath
+    }
+}
+
+function Assert-ProfileRegistration {
+    param([Parameter(Mandatory = $true)][object]$Profile)
+
+    $expectedWorkingDirectory = [System.IO.Path]::GetDirectoryName($GameExecutable)
+    if ($Profile.AppId -ne $AppId -or $Profile.AppLocation -ne $GameExecutable -or $Profile.WorkingDirectory -ne $expectedWorkingDirectory) {
+        throw 'Staged Reloaded profile does not contain the exact Chrono Trigger app ID, executable, and working directory.'
+    }
+    if (@(@($Profile.EnabledMods) | Where-Object { $_ -eq $ModId }).Count -ne 1) {
+        throw "$ModId must appear exactly once in the staged EnabledMods list."
+    }
+    if (@(@($Profile.SortedMods) | Where-Object { $_ -eq $ModId }).Count -ne 1) {
+        throw "$ModId must appear exactly once in the staged SortedMods list."
+    }
+}
+
 Assert-DirectoryExists $PackageDirectory
 Assert-DirectoryExists $ReloadedRoot
 Assert-FileExists (Join-Path $ReloadedRoot 'Reloaded-II.exe')
@@ -181,6 +263,36 @@ Assert-FileExists $GameExecutable
 Assert-FileExists $LauncherSource
 Assert-FileExists $VerifyScript
 Assert-PackageManifest $PackageDirectory
+
+$requiredPackageFiles = @(
+    'ChronoTriggerAccessibility.Mod.deps.json',
+    'ChronoTriggerAccessibility.Mod.dll',
+    'ChronoTriggerAccessibility.Native.dll',
+    'ChronoTriggerAccessibility.Prism.dll',
+    'ModConfig.json',
+    'prism.dll',
+    'LICENSE',
+    'NOTICE',
+    'LICENSES\GNU-GPL-3.0.txt',
+    'LICENSES\Reloaded.Hooks.Definitions-LGPL-3.0.txt',
+    'LICENSES\Reloaded.SharedLib.Hooks-LGPL-3.0.txt',
+    'LICENSES\concurrentqueue\LICENSE.md',
+    'LICENSES\djinni\LICENSE',
+    'LICENSES\dr_wav\LICENSE',
+    'LICENSES\fmt\LICENSE',
+    'LICENSES\moderncom\AUTHORS.md',
+    'LICENSES\moderncom\LICENSE',
+    'LICENSES\nvdaController\lgpl-2.1.txt',
+    'LICENSES\nvgt\LICENSE.md',
+    'LICENSES\prism\mpl-2.0.txt',
+    'LICENSES\simdutf\apache-2.0.txt',
+    'README.md',
+    'THIRD-PARTY-NOTICES.md',
+    'SHA256SUMS.txt'
+)
+foreach ($relativePath in $requiredPackageFiles) {
+    Assert-FileExists (Join-Path $PackageDirectory $relativePath)
+}
 
 $forbiddenPayload = Get-ChildItem -LiteralPath $PackageDirectory -Recurse -File | Where-Object {
     $_.Extension -ieq '.exe' -or $_.FullName.IndexOf('x64', [StringComparison]::OrdinalIgnoreCase) -ge 0
@@ -244,30 +356,14 @@ if ([string]::Equals($launcherDestination, $GameExecutable, [StringComparison]::
     throw 'Accessible launcher destination could overwrite a game binary.'
 }
 
-if (-not $PSCmdlet.ShouldProcess($ReloadedRoot, "Deploy $ModId and register Chrono Trigger")) {
-    Write-Output 'Deployment preflight passed; no files were changed because WhatIf/confirmation declined the operation.'
-    return
+if ((Test-Path -LiteralPath $modDestination) -and -not (Test-Path -LiteralPath $modDestination -PathType Container)) {
+    throw "Reloaded mod destination exists but is not a directory: $modDestination"
 }
-
-[void][System.IO.Directory]::CreateDirectory($modsRoot)
-[void][System.IO.Directory]::CreateDirectory($appsRoot)
-[void][System.IO.Directory]::CreateDirectory($LauncherDestinationDirectory)
-
-$stagingDirectory = Join-Path $modsRoot ('.{0}.staging.{1}' -f $ModId, [Guid]::NewGuid().ToString('N'))
-Assert-ChildPath $stagingDirectory $modsRoot
-try {
-    Copy-Item -LiteralPath $PackageDirectory -Destination $stagingDirectory -Recurse
-    Assert-PackageManifest $stagingDirectory
-
-    if (Test-Path -LiteralPath $modDestination) {
-        Remove-Item -LiteralPath $modDestination -Recurse -Force
-    }
-    Move-Item -LiteralPath $stagingDirectory -Destination $modDestination
+if ((Test-Path -LiteralPath $profilePath) -and -not (Test-Path -LiteralPath $profilePath -PathType Leaf)) {
+    throw "Reloaded profile destination exists but is not a file: $profilePath"
 }
-finally {
-    if (Test-Path -LiteralPath $stagingDirectory) {
-        Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
-    }
+if ((Test-Path -LiteralPath $launcherDestination) -and -not (Test-Path -LiteralPath $launcherDestination -PathType Leaf)) {
+    throw "Accessible launcher destination exists but is not a file: $launcherDestination"
 }
 
 if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
@@ -298,16 +394,149 @@ $existingEnabledMods = if ($null -eq $profile.PSObject.Properties['EnabledMods']
 $existingSortedMods = if ($null -eq $profile.PSObject.Properties['SortedMods']) { @() } else { @($profile.SortedMods) }
 Set-JsonProperty $profile 'EnabledMods' (Add-ModIdOnce $existingEnabledMods $ModId)
 Set-JsonProperty $profile 'SortedMods' (Add-ModIdOnce $existingSortedMods $ModId)
-
-[void][System.IO.Directory]::CreateDirectory($profileDirectory)
 $profileJson = $profile | ConvertTo-Json -Depth 100
-$profileTemporaryPath = Join-Path $profileDirectory ('.AppConfig.{0}.tmp' -f [Guid]::NewGuid().ToString('N'))
-[System.IO.File]::WriteAllText($profileTemporaryPath, $profileJson + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-Move-Item -LiteralPath $profileTemporaryPath -Destination $profilePath -Force
 
-Copy-Item -LiteralPath $LauncherSource -Destination $launcherDestination -Force
+if (-not $PSCmdlet.ShouldProcess($ReloadedRoot, "Deploy $ModId and register Chrono Trigger")) {
+    Write-Output 'Deployment preflight passed; no files were changed because WhatIf/confirmation declined the operation.'
+    return
+}
 
-& $VerifyScript -ReloadedRoot $ReloadedRoot -GameExecutable $GameExecutable -RuntimeRoot $RuntimeRoot -LauncherPath $launcherDestination
+[void][System.IO.Directory]::CreateDirectory($modsRoot)
+[void][System.IO.Directory]::CreateDirectory($appsRoot)
+[void][System.IO.Directory]::CreateDirectory($profileDirectory)
+[void][System.IO.Directory]::CreateDirectory($LauncherDestinationDirectory)
+
+$transactionId = [Guid]::NewGuid().ToString('N')
+$stagingDirectory = Join-Path $modsRoot ('.{0}.staging.{1}' -f $ModId, $transactionId)
+$modBackup = Join-Path $modsRoot ('.{0}.backup.{1}' -f $ModId, $transactionId)
+$profileTemporaryPath = Join-Path $profileDirectory ('.AppConfig.transaction.{0}.tmp' -f $transactionId)
+$profileBackup = Join-Path $profileDirectory ('.AppConfig.backup.{0}.json' -f $transactionId)
+$launcherTemporaryPath = Join-Path $LauncherDestinationDirectory ('.Launch Chrono Trigger Accessible.transaction.{0}.ps1' -f $transactionId)
+$launcherBackup = Join-Path $LauncherDestinationDirectory ('.Launch Chrono Trigger Accessible.backup.{0}.ps1' -f $transactionId)
+Assert-ChildPath $stagingDirectory $modsRoot
+Assert-ChildPath $modBackup $modsRoot
+Assert-ChildPath $profileTemporaryPath $profileDirectory
+Assert-ChildPath $profileBackup $profileDirectory
+Assert-ChildPath $launcherTemporaryPath $LauncherDestinationDirectory
+Assert-ChildPath $launcherBackup $LauncherDestinationDirectory
+
+$hadMod = Test-Path -LiteralPath $modDestination -PathType Container
+$hadProfile = Test-Path -LiteralPath $profilePath -PathType Leaf
+$hadLauncher = Test-Path -LiteralPath $launcherDestination -PathType Leaf
+$modOriginalMoved = $false
+$modNewInstalled = $false
+$profileOriginalMoved = $false
+$profileNewInstalled = $false
+$launcherOriginalMoved = $false
+$launcherNewInstalled = $false
+$transactionSucceeded = $false
+
+try {
+    Copy-Item -LiteralPath $PackageDirectory -Destination $stagingDirectory -Recurse
+    Assert-PackageManifest $stagingDirectory
+
+    [System.IO.File]::WriteAllText($profileTemporaryPath, $profileJson + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    $stagedProfile = Get-Content -LiteralPath $profileTemporaryPath -Raw | ConvertFrom-Json
+    Assert-ProfileRegistration $stagedProfile
+
+    Copy-Item -LiteralPath $LauncherSource -Destination $launcherTemporaryPath
+    if ((Get-Sha256 $launcherTemporaryPath) -ne (Get-Sha256 $LauncherSource)) {
+        throw 'Staged accessible launcher does not match the reviewed repository launcher.'
+    }
+
+    if ($hadMod) {
+        Move-Item -LiteralPath $modDestination -Destination $modBackup
+        $modOriginalMoved = $true
+    }
+    Move-Item -LiteralPath $stagingDirectory -Destination $modDestination
+    $modNewInstalled = $true
+    Invoke-FailureInjection 'AfterModSwap'
+
+    if ($hadProfile) {
+        Move-Item -LiteralPath $profilePath -Destination $profileBackup
+        $profileOriginalMoved = $true
+    }
+    Move-Item -LiteralPath $profileTemporaryPath -Destination $profilePath
+    $profileNewInstalled = $true
+    Invoke-FailureInjection 'AfterProfileCommit'
+
+    if ($hadLauncher) {
+        Move-Item -LiteralPath $launcherDestination -Destination $launcherBackup
+        $launcherOriginalMoved = $true
+    }
+    Move-Item -LiteralPath $launcherTemporaryPath -Destination $launcherDestination
+    $launcherNewInstalled = $true
+    Invoke-FailureInjection 'AfterLauncherCommit'
+    Invoke-FailureInjection 'FinalVerification'
+
+    & $VerifyScript -ReloadedRoot $ReloadedRoot -GameExecutable $GameExecutable -RuntimeRoot $RuntimeRoot -LauncherPath $launcherDestination
+    $transactionSucceeded = $true
+}
+catch {
+    $deploymentException = $_.Exception
+    $rollbackExceptions = [System.Collections.Generic.List[System.Exception]]::new()
+
+    try {
+        Restore-TransactionArtifact 'accessible launcher' $launcherDestination $launcherBackup $LauncherDestinationDirectory $hadLauncher $launcherOriginalMoved $launcherNewInstalled
+    }
+    catch {
+        $rollbackExceptions.Add($_.Exception)
+    }
+    try {
+        Restore-TransactionArtifact 'Reloaded profile' $profilePath $profileBackup $profileDirectory $hadProfile $profileOriginalMoved $profileNewInstalled
+    }
+    catch {
+        $rollbackExceptions.Add($_.Exception)
+    }
+    try {
+        Restore-TransactionArtifact 'Reloaded mod directory' $modDestination $modBackup $modsRoot $hadMod $modOriginalMoved $modNewInstalled
+    }
+    catch {
+        $rollbackExceptions.Add($_.Exception)
+    }
+
+    if ($rollbackExceptions.Count -gt 0) {
+        $allExceptions = [System.Exception[]]::new($rollbackExceptions.Count + 1)
+        $allExceptions[0] = $deploymentException
+        for ($index = 0; $index -lt $rollbackExceptions.Count; $index++) {
+            $allExceptions[$index + 1] = $rollbackExceptions[$index]
+        }
+        throw [System.AggregateException]::new('Deployment failed and one or more exact targets could not be rolled back. Transaction backups were preserved where possible.', $allExceptions)
+    }
+
+    throw $deploymentException
+}
+finally {
+    foreach ($temporaryArtifact in @(
+        [PSCustomObject]@{ Path = $stagingDirectory; Parent = $modsRoot },
+        [PSCustomObject]@{ Path = $profileTemporaryPath; Parent = $profileDirectory },
+        [PSCustomObject]@{ Path = $launcherTemporaryPath; Parent = $LauncherDestinationDirectory }
+    )) {
+        try {
+            Remove-ExactPath $temporaryArtifact.Path $temporaryArtifact.Parent
+        }
+        catch {
+            Write-Warning "Could not remove transaction staging artifact $($temporaryArtifact.Path): $($_.Exception.Message)"
+        }
+    }
+}
+
+if (-not $transactionSucceeded) {
+    throw 'Deployment transaction ended without success or a reported failure.'
+}
+
+foreach ($backupArtifact in @(
+    [PSCustomObject]@{ Path = $modBackup; Parent = $modsRoot },
+    [PSCustomObject]@{ Path = $profileBackup; Parent = $profileDirectory },
+    [PSCustomObject]@{ Path = $launcherBackup; Parent = $LauncherDestinationDirectory }
+)) {
+    try {
+        Remove-ExactPath $backupArtifact.Path $backupArtifact.Parent
+    }
+    catch {
+        Write-Warning "Deployment verified successfully, but its obsolete transaction backup could not be removed: $($backupArtifact.Path). $($_.Exception.Message)"
+    }
+}
 
 Write-Output "Deployed mod: $modDestination"
 Write-Output "Updated Reloaded profile: $profilePath"

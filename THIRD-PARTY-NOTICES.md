@@ -11,7 +11,7 @@ Prism, the Platform-agnostic Reader Interface for Speech and Messages, is distri
 - Pinned source commit: `9911156998b52fee91fb2cb4f71ac793d4e546c7`
 - Packaged `prism.dll` SHA-256: `6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178A`
 
-Prism's upstream `NOTICE` identifies bundled or incorporated work including simdutf, NVDA controller RPC definitions, Moderncom, dr_wav, Djinni, concurrentqueue, and fmt. That notice is reproduced unmodified in the package.
+Prism's upstream `NOTICE` identifies bundled or incorporated work including simdutf, NVDA controller RPC definitions, Moderncom, dr_wav, Djinni, concurrentqueue, and fmt. The notice and exact upstream `LICENSES` subtree from the pinned source commit are reproduced unmodified in the package, including each bundled component's license and the Moderncom authors file.
 
 ## Reloaded-II interfaces and hooks
 
