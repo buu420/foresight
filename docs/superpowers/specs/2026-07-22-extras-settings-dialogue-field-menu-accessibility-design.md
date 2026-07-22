@@ -59,6 +59,8 @@ The verified title surface contains Display Settings, Controller Settings, Licen
 
 The shared configuration builder obtains row labels, values, and help from `TextManager`, including battle mode/speed, message speed, movement, graphics, interface, screen mode, controller settings, defaults, and back controls as enabled by context. Official patch notes independently confirm title and game-menu Settings, movement behavior, controller/keyboard settings, default confirmation, screen mode, and menu-adjustable battle speed.
 
+A follow-up data-flow pass resolved the runtime row structure. Each `0x98`-byte row stores its UI type at `+0x00`, localized label at `+0x04`, localized help at `+0x1C`, localized value-string vector at `+0x34/+0x38/+0x3C` with `0x18`-byte strings, and the committed displayed-value index at `+0x90`. The page descriptor vector remains `+0x2C8/+0x2CC/+0x2D0` with `0x0C` descriptors. The authoritative common mutation is RVA `0x1E3980`; it clamps and writes the index, invokes the native setter, refreshes the rendered row, and returns true only when the value changed. This one post-original boundary replaces setting-specific Screen Mode/Screen Size mutation hooks.
+
 ### Dialogue
 
 Field dialogue is a dedicated `MsgWindow`, not a global text-loading side effect:
@@ -100,6 +102,8 @@ The game intentionally has separate controller/keyboard and touch/mouse menu imp
 
 The classic builder creates exactly seven localized top rows. Two can be conditionally disabled. Its status block contains localized visible play time, currency, a conditional status/location-like label whose semantic category must not be guessed, and party values. The deeper Item, Tech, Equipment, Formation, Settings, and Save/Load nodes use distinct managers, pagers, and grids. This milestone validates the top node and its visible status block only; it does not pretend that generic focus alone makes each deep grid accessible.
 
+The follow-up renderer trace establishes how those strings reach the screen. UTF-8 menu Labels are created at RVA `0x2400B0`; exact return-address whitelists inside the validated classic/touch builder scopes identify seven row captions, renamed party-member names, localized LV/HP/MP rows and values, play time, and currency. Party stat formatter RVA `0x239580` emits level plus current/maximum HP and MP without a stable Label string field. The conditional status/help text instead enters the glyph renderer RVA `0x22E080` as a UTF-16 MSVC string, only from return RVA `0x22F3BD` inside validated `StatusBar` scope RVA `0x22F160`. Capturing these immediate string arguments is authoritative; retaining Cocos child pointers would be stale after rebuild.
+
 ## Chosen architecture
 
 ### Semantic event families
@@ -123,8 +127,8 @@ Add pure readers in the Native project:
 
 - a bounded MSVC string-vector reader with pointer, stride, count, UTF-8, and maximum-length validation;
 - `DialogueCapture`, which snapshots only active committed line/choice state from the audited `MsgWindow` layout;
-- `MenuCapture`, which correlates localized text, constructed controls, manager keys, row descriptors, and supported value getters during an exact builder scope;
-- a top-menu status reader that validates each pointer and all numeric ranges before producing visible party/status text.
+- `MenuCapture`, which correlates constructed controls, manager keys, exact row descriptors, their committed value index, and localized strings during an exact builder scope;
+- a top-menu render capture that accepts copied UTF-8/UTF-16 strings only from audited return addresses under a validated classic/touch builder or owned `StatusBar` scope, then validates the complete ordered party/time/currency/status snapshot.
 
 No reader dereferences a pointer until its containing object vtable and owner chain match the exact supported build. Vector differences must be non-negative, aligned to the audited stride, and bounded. Counts, focus keys, phases, and party values have explicit maximums. A malformed required snapshot reports a coverage failure instead of returning partial narration.
 
@@ -137,9 +141,9 @@ The existing startup/title and New Game hook sets retain ownership of their curr
 The new class-specific hooks are:
 
 - Extras hub/submenu construction or on-enter boundaries needed to bracket dynamic capture;
-- `MenuNodeConfigSteam` constructor, builder, and destructor for context, complete dynamic construction, and lifetime, plus audited post-change setters where a generic focus event cannot expose a changed value;
+- `MenuNodeConfigSteam` constructor, builder, and destructor for context, complete dynamic construction, and lifetime, plus common value mutation RVA `0x1E3980` for post-refresh changes;
 - `MsgWindow` open, update, and close boundaries for visible line/page/choice transitions and exact choice activation classification;
-- both controller/keyboard and touch/mouse top-menu builders for field-menu construction and visible status capture.
+- both controller/keyboard and touch/mouse top-menu builders for field-menu construction, the menu Label factory RVA `0x2400B0` for scoped UTF-8 row/status strings, and `StatusBar` scope/UTF-16 render RVAs `0x22F160`/`0x22E080` for the conditional visible text.
 
 Every hook receives a `GameVersionCatalog` entry with exact calling convention, RVA, and at least a stable prologue byte contract. All contracts are verified against the installed PE before any hook activates. Preparation remains atomic and fail-closed.
 
