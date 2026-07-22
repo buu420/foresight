@@ -73,7 +73,12 @@ public sealed class MsvcStringReader
         error = string.Empty;
 
         Span<byte> layout = stackalloc byte[LayoutSize];
-        if (stringAddress == 0 || !memory.TryRead(stringAddress, layout))
+        if (!FitsX86Range(stringAddress, LayoutSize))
+        {
+            error = $"MSVC string layout at 0x{stringAddress:X} is outside the readable x86 address space.";
+            return false;
+        }
+        if (!memory.TryRead(stringAddress, layout))
         {
             error = $"MSVC string layout at 0x{stringAddress:X} is unreadable.";
             return false;
@@ -106,8 +111,14 @@ public sealed class MsvcStringReader
             }
 
             var dataAddress = BinaryPrimitives.ReadUInt32LittleEndian(layout);
-            encoded = new byte[checked((int)length)];
-            if (dataAddress == 0 || !memory.TryRead(dataAddress, encoded))
+            var dataLength = checked((int)length);
+            if (!FitsX86Range(dataAddress, dataLength))
+            {
+                error = $"MSVC string data range at 0x{dataAddress:X8} crosses the x86 address space.";
+                return false;
+            }
+            encoded = new byte[dataLength];
+            if (!memory.TryRead(dataAddress, encoded))
             {
                 error = $"MSVC string data at 0x{dataAddress:X8} is unreadable.";
                 return false;
@@ -125,6 +136,10 @@ public sealed class MsvcStringReader
             return false;
         }
     }
+
+    private static bool FitsX86Range(nuint address, int byteLength) =>
+        address != 0 && byteLength > 0 && address <= uint.MaxValue &&
+        (ulong)address + (uint)byteLength - 1 <= uint.MaxValue;
 
     public bool TryReadName(nuint stringAddress, out string value, out string error)
     {

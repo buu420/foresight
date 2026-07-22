@@ -50,6 +50,32 @@ public sealed class MsvcStringReaderTests
     }
 
     [Fact]
+    public void TryRead_LayoutCrossingX86AddressSpace_IsRejectedBeforeMemoryRead()
+    {
+        const nuint crossingAddress = uint.MaxValue - 15u;
+        var memory = new SegmentedMemory().Add(crossingAddress, CreateInlineLayout("Crono"));
+
+        var succeeded = new MsvcStringReader(memory).TryRead(crossingAddress, out var value, out var error);
+
+        Assert.False(succeeded);
+        Assert.Equal(string.Empty, value);
+        Assert.Contains("x86", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(memory.Reads);
+    }
+
+    [Fact]
+    public void TryRead_LayoutEndingAtX86MaximumAddress_RemainsValid()
+    {
+        const nuint exactEndAddress = uint.MaxValue - MsvcStringReader.LayoutSize + 1u;
+        var memory = new SegmentedMemory().Add(exactEndAddress, CreateInlineLayout("Crono"));
+
+        var succeeded = new MsvcStringReader(memory).TryRead(exactEndAddress, out var value, out var error);
+
+        Assert.True(succeeded, error);
+        Assert.Equal("Crono", value);
+    }
+
+    [Fact]
     public void TryRead_UnreadableHeapPointer_IsRejected()
     {
         var memory = new SegmentedMemory().Add(StringAddress, CreateHeapLayout(0xDEADBEEF, 16, 16));
@@ -58,6 +84,49 @@ public sealed class MsvcStringReaderTests
 
         Assert.False(succeeded);
         Assert.Contains("data", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryRead_HeapDataCrossingX86AddressSpace_IsRejectedBeforeDataRead()
+    {
+        const nuint crossingDataAddress = uint.MaxValue - 7u;
+        var memory = new SegmentedMemory()
+            .Add(StringAddress, CreateHeapLayout(crossingDataAddress, 16, 16))
+            .Add(crossingDataAddress, Enumerable.Repeat((byte)'A', 16).ToArray());
+
+        var succeeded = new MsvcStringReader(memory).TryRead(StringAddress, out var value, out var error);
+
+        Assert.False(succeeded);
+        Assert.Equal(string.Empty, value);
+        Assert.Contains("x86", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([(StringAddress, MsvcStringReader.LayoutSize)], memory.Reads);
+    }
+
+    [Fact]
+    public void TryRead_HeapDataEndingAtX86MaximumAddress_RemainsValid()
+    {
+        const nuint exactEndDataAddress = uint.MaxValue - 15u;
+        var encoded = Enumerable.Repeat((byte)'A', 16).ToArray();
+        var memory = new SegmentedMemory()
+            .Add(StringAddress, CreateHeapLayout(exactEndDataAddress, encoded.Length, encoded.Length))
+            .Add(exactEndDataAddress, encoded);
+
+        var succeeded = new MsvcStringReader(memory).TryRead(StringAddress, out var value, out var error);
+
+        Assert.True(succeeded, error);
+        Assert.Equal(new string('A', 16), value);
+    }
+
+    [Fact]
+    public void TryRead_ZeroLengthHeapString_DoesNotRequireNonzeroDataRange()
+    {
+        var memory = new SegmentedMemory().Add(StringAddress, CreateHeapLayout(0, 0, 16));
+
+        var succeeded = new MsvcStringReader(memory).TryRead(StringAddress, out var value, out var error);
+
+        Assert.True(succeeded, error);
+        Assert.Equal(string.Empty, value);
+        Assert.Equal([(StringAddress, MsvcStringReader.LayoutSize)], memory.Reads);
     }
 
     [Fact]
@@ -159,6 +228,8 @@ public sealed class MsvcStringReaderTests
     {
         private readonly Dictionary<nuint, byte[]> segments = [];
 
+        public List<(nuint Address, int Length)> Reads { get; } = [];
+
         public SegmentedMemory Add(nuint address, byte[] bytes)
         {
             segments.Add(address, bytes);
@@ -167,6 +238,7 @@ public sealed class MsvcStringReaderTests
 
         public bool TryRead(nuint address, Span<byte> destination)
         {
+            Reads.Add((address, destination.Length));
             foreach (var (segmentAddress, segment) in segments)
             {
                 if (address < segmentAddress)

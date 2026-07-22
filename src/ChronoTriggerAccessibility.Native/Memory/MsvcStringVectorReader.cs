@@ -53,6 +53,11 @@ public sealed class MsvcStringVectorReader
         var begin = BinaryPrimitives.ReadUInt32LittleEndian(header);
         var end = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
         var capacity = BinaryPrimitives.ReadUInt32LittleEndian(header[8..]);
+        if (begin == 0 && (end != 0 || capacity != 0))
+        {
+            error = "MSVC string vector with a null begin pointer must also have null end and capacity pointers.";
+            return false;
+        }
         if (end < begin)
         {
             error = "MSVC string vector end pointer is reversed before its begin pointer.";

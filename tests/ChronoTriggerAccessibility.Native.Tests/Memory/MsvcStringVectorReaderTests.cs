@@ -58,6 +58,21 @@ public sealed class MsvcStringVectorReaderTests
         Assert.Empty(values);
     }
 
+    [Fact]
+    public void TryRead_NullEmptyBeginAndEndRequireNullCapacity()
+    {
+        var memory = new SegmentedMemory().Add(
+            VectorAddress,
+            CreateVectorHeader((nuint)0, (nuint)0, (nuint)MsvcStringReader.LayoutSize));
+
+        var succeeded = new MsvcStringVectorReader(memory).TryRead(VectorAddress, out var values, out var error);
+
+        Assert.False(succeeded);
+        Assert.Empty(values);
+        Assert.Contains("null", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(memory.Reads);
+    }
+
     [Theory]
     [MemberData(nameof(InvalidBounds))]
     public void TryRead_InvalidBoundsFailClosed(uint begin, uint end, uint capacity, string diagnostic)
@@ -206,6 +221,24 @@ public sealed class MsvcStringVectorReaderTests
         Assert.False(succeeded);
         Assert.Empty(values);
         Assert.Contains("4,096", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_HeapElementCrossingX86AddressSpaceFailsWithoutPartialSnapshot()
+    {
+        const nuint crossingDataAddress = uint.MaxValue - 7u;
+        var element = CreateHeapLayout(crossingDataAddress, 16, 16);
+        var memory = new SegmentedMemory()
+            .Add(VectorAddress, CreateVectorHeader(ElementsAddress, element.Length, element.Length))
+            .Add(ElementsAddress, element)
+            .Add(crossingDataAddress, Enumerable.Repeat((byte)'A', 16).ToArray());
+
+        var succeeded = new MsvcStringVectorReader(memory).TryRead(VectorAddress, out var values, out var error);
+
+        Assert.False(succeeded);
+        Assert.Empty(values);
+        Assert.Contains("x86", error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(memory.Reads, read => read.Address == crossingDataAddress);
     }
 
     [Fact]
