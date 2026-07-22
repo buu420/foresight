@@ -251,7 +251,6 @@ public sealed class TopMenuCaptureScope : IDisposable
             }
 
             statusState = new StatusCaptureState(checked((uint)statusBar), expectedStatusVtable);
-            renderObservations.Add(RenderObservation.ForStatus(statusState));
             statusScope = new TopMenuStatusCaptureScope(this, statusState, owningThreadId);
             diagnostic = string.Empty;
             return true;
@@ -424,6 +423,7 @@ public sealed class TopMenuCaptureScope : IDisposable
             return RecordFailure("The StatusBar formatting scope cannot be completed from its current state.", out diagnostic);
         }
         state.Completed = true;
+        renderObservations.Add(RenderObservation.ForStatus(state));
         diagnostic = string.Empty;
         return true;
     }

@@ -135,6 +135,7 @@ public sealed class TopMenuCaptureTests
 
     [Theory]
     [InlineData(TopMenuStyle.Classic, 0x23AE3Au)]
+    [InlineData(TopMenuStyle.Touch, 0x23AE3Au)]
     [InlineData(TopMenuStyle.Classic, 0x23A9E6u)]
     [InlineData(TopMenuStyle.Touch, 0x23B1D0u)]
     [InlineData(TopMenuStyle.Touch, 0x123456u)]
@@ -306,16 +307,25 @@ public sealed class TopMenuCaptureTests
     [Theory]
     [InlineData(MutationTarget.GlobalPointer)]
     [InlineData(MutationTarget.Gate)]
+    [InlineData(MutationTarget.GateThreshold)]
     [InlineData(MutationTarget.Owner)]
     [InlineData(MutationTarget.Slots)]
     [InlineData(MutationTarget.NameHeader)]
+    [InlineData(MutationTarget.InlineNameHeader)]
     [InlineData(MutationTarget.NameHeapPayload)]
+    [InlineData(MutationTarget.Focus)]
     [InlineData(MutationTarget.StatusVtable)]
     [InlineData(MutationTarget.RootVtable)]
+    [InlineData(MutationTarget.ManagerStackOwner)]
     [InlineData(MutationTarget.ManagerVector)]
+    [InlineData(MutationTarget.StatusOwner)]
     public void Capture_RejectsEveryRelevantConcurrentMutation(MutationTarget target)
     {
-        var fixture = new Fixture(TopMenuStyle.Classic, activeCount: 1, reserveCount: 1, heapReserveName: true);
+        var fixture = new Fixture(
+            TopMenuStyle.Classic,
+            activeCount: 1,
+            reserveCount: 1,
+            heapReserveName: target != MutationTarget.InlineNameHeader);
         using var scope = fixture.Begin(target);
         fixture.RecordComplete(scope);
 
@@ -345,6 +355,24 @@ public sealed class TopMenuCaptureTests
         Assert.True(fullScope.TryCreateSnapshot(out var full, out var fullError), fullError);
         Assert.Equal(64, full.ConditionalLines.Count);
         Assert.All(full.ConditionalLines, line => Assert.Equal("same", line));
+    }
+
+    [Fact]
+    public void ClassicCapture_RejectsTimeAndCurrencyBeforeStatusScopeNormallyCompletes()
+    {
+        var fixture = new Fixture(TopMenuStyle.Classic, activeCount: 1, reserveCount: 0);
+        using var scope = fixture.Begin();
+        fixture.RecordClassicActive(scope, "Crono", usePlaceholder: false);
+        fixture.RecordRowsAndControls(scope);
+        Assert.True(scope.TryBeginStatusBar(Fixture.Status, out var status, out var beginError), beginError);
+        using (status)
+        {
+            fixture.RecordStatusLine(status, "Low HP");
+            fixture.RecordTimeAndCurrency(scope);
+            Assert.True(status.TryComplete(out var completeError), completeError);
+        }
+
+        AssertFailure(scope);
     }
 
     [Fact]
@@ -493,13 +521,18 @@ public sealed class TopMenuCaptureTests
     {
         GlobalPointer,
         Gate,
+        GateThreshold,
         Owner,
         Slots,
         NameHeader,
+        InlineNameHeader,
         NameHeapPayload,
+        Focus,
         StatusVtable,
         RootVtable,
+        ManagerStackOwner,
         ManagerVector,
+        StatusOwner,
     }
 
     private sealed class Fixture
@@ -579,13 +612,17 @@ public sealed class TopMenuCaptureTests
                 {
                     MutationTarget.GlobalPointer => (GlobalPointerAddress, 4),
                     MutationTarget.Gate => (Global + 0x10F84, 1),
+                    MutationTarget.GateThreshold => (Global + 0x110B0, 4),
                     MutationTarget.Owner => (Global + 0x28, 4),
                     MutationTarget.Slots => (Roster + 0x219C, 36),
-                    MutationTarget.NameHeader => (Global + 0x1908, 24),
+                    MutationTarget.NameHeader or MutationTarget.InlineNameHeader => (Global + 0x1908, 24),
                     MutationTarget.NameHeapPayload => (NameHeap, Encoding.UTF8.GetByteCount("Marle")),
+                    MutationTarget.Focus => (Manager + 0x2C4, 4),
                     MutationTarget.StatusVtable => (Status, 4),
                     MutationTarget.RootVtable => (Root, 4),
+                    MutationTarget.ManagerStackOwner => (Root + 0x2C0, 4),
                     MutationTarget.ManagerVector => (ManagerStack + 4, 12),
+                    MutationTarget.StatusOwner => (Root + 0x2CC, 4),
                     _ => throw new ArgumentOutOfRangeException(nameof(mutation)),
                 };
                 Memory = new MutatingMemory(backing, address, length);
