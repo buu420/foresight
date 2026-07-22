@@ -89,4 +89,4 @@ public delegate void ModeSelectCallbackDelegate(nint closure, int eventType, int
 
 public delegate void ControlNextCallbackDelegate(nint closure, nint eventTypePointer);
 
-public delegate void NameActionCallbackDelegate(nint closure, nint eventTypePointer, nint actionIdPointer);
+public delegate void NameActionCallbackDelegate(nint closure, int eventType, int actionId);

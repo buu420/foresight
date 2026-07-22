@@ -49,4 +49,23 @@ public sealed class GameVersionCatalogTests
         Assert.Equal(12, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
         Assert.Equal(12, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
+
+    [Fact]
+    public void CallbackDelegates_PreserveReviewedPointerAndValueParameters()
+    {
+        AssertSignature<TitleMenuCallbackDelegate>(typeof(nint), typeof(nint), typeof(nint));
+        AssertSignature<ModeSelectCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+        AssertSignature<ControlNextCallbackDelegate>(typeof(nint), typeof(nint));
+        AssertSignature<NameActionCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
+    }
+
+    private static void AssertSignature<TDelegate>(params Type[] parameterTypes)
+        where TDelegate : Delegate
+    {
+        var invoke = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException($"{typeof(TDelegate).Name} has no Invoke method.");
+
+        Assert.Equal(typeof(void), invoke.ReturnType);
+        Assert.Equal(parameterTypes, invoke.GetParameters().Select(parameter => parameter.ParameterType));
+    }
 }
