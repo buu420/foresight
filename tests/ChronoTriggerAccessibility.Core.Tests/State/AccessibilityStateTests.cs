@@ -1,5 +1,7 @@
 using ChronoTriggerAccessibility.Core.Announcements;
+using ChronoTriggerAccessibility.Core.Dialogue;
 using ChronoTriggerAccessibility.Core.Events;
+using ChronoTriggerAccessibility.Core.Menus;
 using ChronoTriggerAccessibility.Core.State;
 using Xunit;
 
@@ -7,6 +9,20 @@ namespace ChronoTriggerAccessibility.Core.Tests.State;
 
 public sealed class AccessibilityStateTests
 {
+    [Fact]
+    public void ProductionAccessibilityStateRoutesIndependentMenuAndDialogueFamilies()
+    {
+        var state = new AccessibilityState();
+
+        var menu = state.Apply(new MenuPresented(
+            "Settings", new MenuFocus("Battle", "Active", 1, 6, "Choose battle timing.", false), []));
+        state.Apply(new DialogueOpened());
+        var dialogue = state.Apply(new DialogueLinePresented(0, 0, "The fair has begun."));
+
+        Assert.Equal(["Settings.", "Battle: Active, 1 of 6. Choose battle timing."], menu.Select(item => item.Text));
+        Assert.Equal("The fair has begun.", Assert.Single(dialogue).Text);
+    }
+
     [Fact]
     public void ScreenEntered_TitlePrompt_EmitsInterruptingPrompt()
     {

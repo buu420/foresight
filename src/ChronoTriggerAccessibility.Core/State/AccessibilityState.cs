@@ -1,5 +1,7 @@
 using ChronoTriggerAccessibility.Core.Announcements;
+using ChronoTriggerAccessibility.Core.Dialogue;
 using ChronoTriggerAccessibility.Core.Events;
+using ChronoTriggerAccessibility.Core.Menus;
 using ChronoTriggerAccessibility.Core.NewGame;
 
 namespace ChronoTriggerAccessibility.Core.State;
@@ -13,6 +15,8 @@ public sealed class AccessibilityState
     private bool _titleAnnouncedForCurrentScene;
     private AccessibilityEvent? _lastSemanticIdentity;
     private readonly NewGameNarrator newGameNarrator = new();
+    private readonly MenuNarrator menuNarrator = new();
+    private readonly DialogueNarrator dialogueNarrator = new();
 
     public int Generation { get; private set; }
 
@@ -20,6 +24,8 @@ public sealed class AccessibilityState
     {
         return accessibilityEvent switch
         {
+            MenuAccessibilityEvent menuEvent => menuNarrator.Apply(menuEvent),
+            DialogueAccessibilityEvent dialogueEvent => dialogueNarrator.Apply(dialogueEvent),
             NewGameAccessibilityEvent newGameEvent => newGameNarrator.Apply(newGameEvent),
             StartupSceneEntered startupSceneEntered => ApplyStartupSceneEntered(startupSceneEntered),
             ScreenEntered screenEntered => ApplyScreenEntered(screenEntered),
