@@ -251,6 +251,7 @@ public sealed class TopMenuCaptureScope : IDisposable
             }
 
             statusState = new StatusCaptureState(checked((uint)statusBar), expectedStatusVtable);
+            renderObservations.Add(RenderObservation.StatusBegin(statusState));
             statusScope = new TopMenuStatusCaptureScope(this, statusState, owningThreadId);
             diagnostic = string.Empty;
             return true;
@@ -423,7 +424,7 @@ public sealed class TopMenuCaptureScope : IDisposable
             return RecordFailure("The StatusBar formatting scope cannot be completed from its current state.", out diagnostic);
         }
         state.Completed = true;
-        renderObservations.Add(RenderObservation.ForStatus(state));
+        renderObservations.Add(RenderObservation.StatusComplete(state));
         diagnostic = string.Empty;
         return true;
     }
@@ -1145,11 +1146,13 @@ public sealed class TopMenuCaptureScope : IDisposable
 
     private bool TryTakeStatus(ref int cursor)
     {
-        if (cursor < renderObservations.Count &&
-            renderObservations[cursor].Kind == RenderObservationKind.Status &&
-            ReferenceEquals(renderObservations[cursor].Status, statusState))
+        if (cursor + 1 < renderObservations.Count &&
+            renderObservations[cursor].Kind == RenderObservationKind.StatusBegin &&
+            renderObservations[cursor + 1].Kind == RenderObservationKind.StatusComplete &&
+            ReferenceEquals(renderObservations[cursor].Status, statusState) &&
+            ReferenceEquals(renderObservations[cursor + 1].Status, statusState))
         {
-            cursor++;
+            cursor += 2;
             return true;
         }
         return false;
@@ -1263,14 +1266,18 @@ public sealed class TopMenuCaptureScope : IDisposable
         public static RenderObservation Utf8(uint rva, string text) =>
             new(RenderObservationKind.Utf8, rva, text, null);
 
-        public static RenderObservation ForStatus(StatusCaptureState state) =>
-            new(RenderObservationKind.Status, 0, null, state);
+        public static RenderObservation StatusBegin(StatusCaptureState state) =>
+            new(RenderObservationKind.StatusBegin, 0, null, state);
+
+        public static RenderObservation StatusComplete(StatusCaptureState state) =>
+            new(RenderObservationKind.StatusComplete, 0, null, state);
     }
 
     private enum RenderObservationKind
     {
         Utf8,
-        Status,
+        StatusBegin,
+        StatusComplete,
     }
 
     private sealed record ConstructedControl(nuint Pointer, int Position, bool Enabled, bool Visible);

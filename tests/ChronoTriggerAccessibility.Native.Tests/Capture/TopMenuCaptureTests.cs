@@ -376,6 +376,24 @@ public sealed class TopMenuCaptureTests
     }
 
     [Fact]
+    public void TouchCapture_RejectsStatusScopeThatBeginsBeforeTimeAndCurrency()
+    {
+        var fixture = new Fixture(TopMenuStyle.Touch, activeCount: 1, reserveCount: 0);
+        using var scope = fixture.Begin();
+        fixture.RecordTouchActive(scope, "Crono");
+        fixture.RecordRowsAndControls(scope);
+        Assert.True(scope.TryBeginStatusBar(Fixture.Status, out var status, out var beginError), beginError);
+        using (status)
+        {
+            fixture.RecordTimeAndCurrency(scope);
+            fixture.RecordStatusLine(status, "Low HP");
+            Assert.True(status.TryComplete(out var completeError), completeError);
+        }
+
+        AssertFailure(scope);
+    }
+
+    [Fact]
     public void StatusScope_RejectsCountAggregateWrongCallerAndNoncompletion()
     {
         foreach (var scenario in new[] { "count", "aggregate", "caller", "incomplete" })
