@@ -332,6 +332,44 @@ public sealed class SharedNativeHookFanoutFactoryTests
     }
 
     [Fact]
+    public void DeferredConfigurationSupportsCompositionCycleAndFreezesObserversExactlyOnce()
+    {
+        var calls = new List<string>();
+        var inner = new RecordingFactory();
+        var factory = new SharedNativeHookFanoutFactory(inner, message => calls.Add($"report:{message}"));
+        NsMenuFocusSetterDelegate root = (_, _) => calls.Add("root");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            factory.CreateHook(HookId.NsMenuFocusSetter, root, 0x5DD3E0));
+        Assert.Empty(inner.Created);
+
+        var first = new MarkerObserver("first", calls);
+        var duplicate = new MarkerObserver("duplicate", calls);
+        var source = new List<ISharedNativeHookObserver> { first, duplicate, duplicate };
+        factory.ConfigureObservers(source);
+        source.Clear();
+
+        _ = factory.CreateHook(HookId.NsMenuFocusSetter, root, 0x5DD3E0);
+        inner.GetDetour<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter)(0x10, 3);
+
+        Assert.Equal(["root", "first-focus", "duplicate-focus", "duplicate-focus"], calls);
+        Assert.Throws<InvalidOperationException>(() =>
+            factory.ConfigureObservers([new MarkerObserver("late", calls)]));
+    }
+
+    [Fact]
+    public void DeferredConfigurationRejectsNullSequenceAndElements()
+    {
+        var inner = new RecordingFactory();
+        var nullSequence = new SharedNativeHookFanoutFactory(inner, _ => { });
+        var nullElement = new SharedNativeHookFanoutFactory(inner, _ => { });
+
+        Assert.Throws<ArgumentNullException>(() => nullSequence.ConfigureObservers(null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            nullElement.ConfigureObservers(new ISharedNativeHookObserver[] { null! }));
+    }
+
+    [Fact]
     public void ReturnedWrapperRootsFanoutAndDelegatesOriginalReverseWrapperMetadataAndLifecycle()
     {
         var inner = new RecordingFactory(retainDetours: false);

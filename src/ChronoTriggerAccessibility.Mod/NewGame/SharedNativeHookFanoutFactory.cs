@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Native.Hooks;
 using Reloaded.Hooks.Definitions;
@@ -21,37 +20,63 @@ public interface ISharedNativeHookObserver
 public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
 {
     private readonly IRuntimeNativeHookFactory inner;
-    private readonly ImmutableArray<ISharedNativeHookObserver> observers;
+    private readonly object observerGate = new();
     private readonly Action<string> reportFailure;
+    private ISharedNativeHookObserver[] observers = [];
+    private bool observersConfigured;
+
+    public SharedNativeHookFanoutFactory(
+        IRuntimeNativeHookFactory inner,
+        Action<string> reportFailure)
+    {
+        this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        this.reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
+    }
 
     public SharedNativeHookFanoutFactory(
         IRuntimeNativeHookFactory inner,
         ISharedNativeHookObserver observer,
         Action<string> reportFailure)
-        : this(inner, new[] { observer ?? throw new ArgumentNullException(nameof(observer)) }, reportFailure)
+        : this(inner, reportFailure)
     {
+        ConfigureObservers([observer ?? throw new ArgumentNullException(nameof(observer))]);
     }
 
     public SharedNativeHookFanoutFactory(
         IRuntimeNativeHookFactory inner,
         IEnumerable<ISharedNativeHookObserver> observers,
         Action<string> reportFailure)
+        : this(inner, reportFailure)
     {
-        this.inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        ConfigureObservers(observers);
+    }
+
+    public void ConfigureObservers(IEnumerable<ISharedNativeHookObserver> observers)
+    {
         ArgumentNullException.ThrowIfNull(observers);
-        this.observers = observers.ToImmutableArray();
-        if (this.observers.Any(observer => observer is null))
+        var captured = observers.ToArray();
+        if (captured.Any(observer => observer is null))
         {
             throw new ArgumentNullException(nameof(observers), "Shared hook observers cannot contain null elements.");
         }
 
-        this.reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
+        lock (observerGate)
+        {
+            if (observersConfigured)
+            {
+                throw new InvalidOperationException("Shared hook observers were already configured.");
+            }
+
+            this.observers = captured;
+            observersConfigured = true;
+        }
     }
 
     public IHook<TDelegate> CreateHook<TDelegate>(HookId id, TDelegate detour, nuint address)
         where TDelegate : Delegate
     {
         ArgumentNullException.ThrowIfNull(detour);
+        EnsureObserversConfigured();
         return id switch
         {
             HookId.TextManagerGetMsg when typeof(TDelegate) == typeof(TextManagerGetMsgDelegate) =>
@@ -133,7 +158,8 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
 
     private void ObserveAll(string hookName, Action<ISharedNativeHookObserver> observe)
     {
-        foreach (var observer in observers)
+        var captured = observers;
+        foreach (var observer in captured)
         {
             try
             {
@@ -149,6 +175,18 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
                 {
                     // Diagnostics must not escape into a successfully completed native detour.
                 }
+            }
+        }
+    }
+
+    private void EnsureObserversConfigured()
+    {
+        lock (observerGate)
+        {
+            if (!observersConfigured)
+            {
+                throw new InvalidOperationException(
+                    "Shared hook observers must be configured before native hooks are created.");
             }
         }
     }
