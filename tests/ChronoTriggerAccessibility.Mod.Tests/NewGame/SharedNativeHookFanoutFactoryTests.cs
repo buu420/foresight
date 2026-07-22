@@ -138,6 +138,39 @@ public sealed class SharedNativeHookFanoutFactoryTests
         Assert.Equal(expected, Assert.Single(second.BinderPayloads));
     }
 
+    [Fact]
+    public void TouchDeletingDestructorNotifiesEveryObserverBeforeRootAndPreservesReturn()
+    {
+        var calls = new List<string>();
+        var first = new PayloadObserver("first", calls);
+        var second = new PayloadObserver("second", calls);
+        var inner = new RecordingFactory();
+        var factory = CreateFactory(inner, calls, first, second);
+        nint node = 0xD8D8;
+        const uint deletingFlags = 0xAABBCCDD;
+        nint returned = 0xE9E9;
+        var rootCalls = 0;
+        TouchTopMenuDeletingDestructorDelegate root = (actualNode, actualFlags) =>
+        {
+            rootCalls++;
+            calls.Add("root-touch-delete");
+            Assert.Equal(node, actualNode);
+            Assert.Equal(deletingFlags, actualFlags);
+            return returned;
+        };
+
+        _ = factory.CreateHook(HookId.TouchTopMenuDeletingDestructor, root, 0x5D2690);
+        var actualReturned = inner.GetDetour<TouchTopMenuDeletingDestructorDelegate>(
+            HookId.TouchTopMenuDeletingDestructor)(node, deletingFlags);
+
+        Assert.Equal(returned, actualReturned);
+        Assert.Equal(1, rootCalls);
+        Assert.Equal(["first-touch-delete", "second-touch-delete", "root-touch-delete"], calls);
+        var expected = new DeletingDestructorPayload(node, deletingFlags);
+        Assert.Equal(expected, Assert.Single(first.DeletingDestructorPayloads));
+        Assert.Equal(expected, Assert.Single(second.DeletingDestructorPayloads));
+    }
+
     [Theory]
     [InlineData(HookId.TextManagerGetMsg)]
     [InlineData(HookId.NsMenuFocusSetter)]
@@ -193,6 +226,48 @@ public sealed class SharedNativeHookFanoutFactoryTests
     }
 
     [Fact]
+    public void TouchDeleteObserversAndReporterFaultsAreContainedBeforeThrowingRoot()
+    {
+        var calls = new List<string>();
+        var inner = new RecordingFactory();
+        var factory = new SharedNativeHookFanoutFactory(
+            inner,
+            new ISharedNativeHookObserver[]
+            {
+                new ThrowingObserver("first", calls),
+                new MarkerObserver("middle", calls),
+                new ThrowingObserver("second", calls),
+            },
+            message =>
+            {
+                calls.Add($"report:{message}");
+                throw new ApplicationException("reporter fault");
+            });
+        var expected = new InvalidOperationException("root-touch-delete");
+        TouchTopMenuDeletingDestructorDelegate root = (_, _) =>
+        {
+            calls.Add("root");
+            throw expected;
+        };
+
+        _ = factory.CreateHook(HookId.TouchTopMenuDeletingDestructor, root, 1);
+        var actual = Assert.Throws<InvalidOperationException>(() =>
+            inner.GetDetour<TouchTopMenuDeletingDestructorDelegate>(
+                HookId.TouchTopMenuDeletingDestructor)(1, 2));
+
+        Assert.Same(expected, actual);
+        Assert.Collection(
+            calls,
+            item => Assert.Equal("first-touch-delete", item),
+            item => Assert.Contains("InvalidOperationException: first-touch-delete-fault", item),
+            item => Assert.Equal("middle-touch-delete", item),
+            item => Assert.Equal("second-touch-delete", item),
+            item => Assert.Contains("InvalidOperationException: second-touch-delete-fault", item),
+            item => Assert.Equal("root", item));
+        Assert.Equal(2, calls.Count(item => item.StartsWith("report:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void SequenceConstructorEnumeratesExactlyOnceAndKeepsImmutableOrderedDuplicates()
     {
         var calls = new List<string>();
@@ -235,6 +310,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuFocusSetter, wrong, 1));
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuCustomButtonConstructor, wrong, 1));
         Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.NsMenuControlBinder, wrong, 1));
+        Assert.Throws<InvalidOperationException>(() => factory.CreateHook(HookId.TouchTopMenuDeletingDestructor, wrong, 1));
         Assert.Empty(inner.Created);
 
         _ = factory.CreateHook(HookId.ModeSelectSteamInit, wrong, 0x6A9C60);
@@ -308,6 +384,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
             HookId.NsMenuFocusSetter => InvokeThrowingFocus(factory, inner, expected),
             HookId.NsMenuCustomButtonConstructor => InvokeThrowingCustom(factory, inner, expected),
             HookId.NsMenuControlBinder => InvokeThrowingBinder(factory, inner, expected),
+            HookId.TouchTopMenuDeletingDestructor => InvokeThrowingTouchDelete(factory, inner, expected),
             _ => throw new ArgumentOutOfRangeException(nameof(id)),
         };
     }
@@ -348,6 +425,15 @@ public sealed class SharedNativeHookFanoutFactoryTests
             inner.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder)(1, 2, 3));
     }
 
+    private static InvalidOperationException InvokeThrowingTouchDelete(
+        SharedNativeHookFanoutFactory factory, RecordingFactory inner, InvalidOperationException expected)
+    {
+        TouchTopMenuDeletingDestructorDelegate root = (_, _) => throw expected;
+        _ = factory.CreateHook(HookId.TouchTopMenuDeletingDestructor, root, 1);
+        return Assert.Throws<InvalidOperationException>(() =>
+            inner.GetDetour<TouchTopMenuDeletingDestructorDelegate>(HookId.TouchTopMenuDeletingDestructor)(1, 2));
+    }
+
     private static void CreateAndInvokeSuccessfulRoot(
         HookId id,
         SharedNativeHookFanoutFactory factory,
@@ -376,6 +462,15 @@ public sealed class SharedNativeHookFanoutFactoryTests
                 _ = factory.CreateHook(id, binder, 1);
                 inner.GetDetour<NsMenuControlBinderDelegate>(id)(1, 2, 3);
                 break;
+            case HookId.TouchTopMenuDeletingDestructor:
+                TouchTopMenuDeletingDestructorDelegate touchDelete = (_, _) =>
+                {
+                    calls.Add("root");
+                    return 0x77;
+                };
+                _ = factory.CreateHook(id, touchDelete, 1);
+                Assert.Equal((nint)0x77, inner.GetDetour<TouchTopMenuDeletingDestructorDelegate>(id)(1, 2));
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(id));
         }
@@ -395,6 +490,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
     private sealed record FocusPayload(nint Manager, int ManagerKey);
     private sealed record CustomButtonPayload(nint Storage, nint Returned);
     private sealed record BinderPayload(nint Manager, nint FocusableState, int ManagerKey);
+    private sealed record DeletingDestructorPayload(nint Node, uint DeletingFlags);
 
     private sealed class PayloadObserver(string name, List<string> calls) : ISharedNativeHookObserver
     {
@@ -402,6 +498,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         public List<FocusPayload> FocusPayloads { get; } = [];
         public List<CustomButtonPayload> CustomButtonPayloads { get; } = [];
         public List<BinderPayload> BinderPayloads { get; } = [];
+        public List<DeletingDestructorPayload> DeletingDestructorPayloads { get; } = [];
 
         public void AfterTextManagerGetMsg(nint textManager, nint result, int fileId, int messageId, nint returned)
         {
@@ -426,6 +523,12 @@ public sealed class SharedNativeHookFanoutFactoryTests
             calls.Add($"{name}-binder");
             BinderPayloads.Add(new(manager, focusableState, managerKey));
         }
+
+        public void BeforeTouchTopMenuDeletingDestructor(nint node, uint deletingFlags)
+        {
+            calls.Add($"{name}-touch-delete");
+            DeletingDestructorPayloads.Add(new(node, deletingFlags));
+        }
     }
 
     private sealed class MarkerObserver(string name, List<string> calls) : ISharedNativeHookObserver
@@ -435,6 +538,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         public void AfterFocusSet(nint manager, int managerKey) => calls.Add($"{name}-focus");
         public void AfterCustomButtonConstructed(nint storage, nint returned) => calls.Add($"{name}-custom");
         public void AfterControlBound(nint manager, nint focusableState, int managerKey) => calls.Add($"{name}-binder");
+        public void BeforeTouchTopMenuDeletingDestructor(nint node, uint deletingFlags) => calls.Add($"{name}-touch-delete");
     }
 
     private sealed class ThrowingObserver(string name, List<string> calls) : ISharedNativeHookObserver
@@ -444,6 +548,7 @@ public sealed class SharedNativeHookFanoutFactoryTests
         public void AfterFocusSet(nint manager, int managerKey) => Throw("focus");
         public void AfterCustomButtonConstructed(nint storage, nint returned) => Throw("custom");
         public void AfterControlBound(nint manager, nint focusableState, int managerKey) => Throw("binder");
+        public void BeforeTouchTopMenuDeletingDestructor(nint node, uint deletingFlags) => Throw("touch-delete");
 
         private void Throw(string shape)
         {
@@ -473,6 +578,8 @@ public sealed class SharedNativeHookFanoutFactoryTests
             [HookId.NsMenuFocusSetter] = (NsMenuFocusSetterDelegate)((_, _) => { }),
             [HookId.NsMenuCustomButtonConstructor] = (NsMenuCustomButtonConstructorDelegate)(storage => storage),
             [HookId.NsMenuControlBinder] = (NsMenuControlBinderDelegate)((_, _, _) => { }),
+            [HookId.TouchTopMenuDeletingDestructor] =
+                (TouchTopMenuDeletingDestructorDelegate)((node, _) => node),
             [HookId.ModeSelectSteamInit] = (ModeSelectSteamInitDelegate)(_ => 1),
         };
         private readonly Dictionary<HookId, Delegate> detours = [];

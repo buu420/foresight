@@ -11,6 +11,7 @@ public interface ISharedNativeHookObserver
     void AfterFocusSet(nint manager, int managerKey) { }
     void AfterCustomButtonConstructed(nint storage, nint returned) { }
     void AfterControlBound(nint manager, nint focusableState, int managerKey) { }
+    void BeforeTouchTopMenuDeletingDestructor(nint node, uint deletingFlags) { }
 }
 
 /// <summary>
@@ -61,7 +62,11 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
                 CastHook<TDelegate, NsMenuCustomButtonConstructorDelegate>(CreateCustomButtonHook((NsMenuCustomButtonConstructorDelegate)(Delegate)detour, address)),
             HookId.NsMenuControlBinder when typeof(TDelegate) == typeof(NsMenuControlBinderDelegate) =>
                 CastHook<TDelegate, NsMenuControlBinderDelegate>(CreateControlBinderHook((NsMenuControlBinderDelegate)(Delegate)detour, address)),
-            HookId.TextManagerGetMsg or HookId.NsMenuFocusSetter or HookId.NsMenuCustomButtonConstructor or HookId.NsMenuControlBinder =>
+            HookId.TouchTopMenuDeletingDestructor when typeof(TDelegate) == typeof(TouchTopMenuDeletingDestructorDelegate) =>
+                CastHook<TDelegate, TouchTopMenuDeletingDestructorDelegate>(CreateTouchDeletingDestructorHook(
+                    (TouchTopMenuDeletingDestructorDelegate)(Delegate)detour, address)),
+            HookId.TextManagerGetMsg or HookId.NsMenuFocusSetter or HookId.NsMenuCustomButtonConstructor or
+                HookId.NsMenuControlBinder or HookId.TouchTopMenuDeletingDestructor =>
                 throw new InvalidOperationException($"Shared hook {id} was requested with incompatible delegate {typeof(TDelegate).FullName}."),
             _ => inner.CreateHook(id, detour, address),
         };
@@ -107,6 +112,20 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
             ObserveAll("nsMenu control binder", observer => observer.AfterControlBound(manager, focusableState, managerKey));
         };
         return Root(HookId.NsMenuControlBinder, fanout, address);
+    }
+
+    private IHook<TouchTopMenuDeletingDestructorDelegate> CreateTouchDeletingDestructorHook(
+        TouchTopMenuDeletingDestructorDelegate root,
+        nuint address)
+    {
+        TouchTopMenuDeletingDestructorDelegate fanout = (node, deletingFlags) =>
+        {
+            ObserveAll(
+                "Touch top/Ending Detail deleting destructor",
+                observer => observer.BeforeTouchTopMenuDeletingDestructor(node, deletingFlags));
+            return root(node, deletingFlags);
+        };
+        return Root(HookId.TouchTopMenuDeletingDestructor, fanout, address);
     }
 
     private IHook<TDelegate> Root<TDelegate>(HookId id, TDelegate fanout, nuint address)
