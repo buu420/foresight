@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This Reloaded-II mod adds screen-reader output to the Windows Steam release of Chrono Trigger from startup through the title menu, Control Descriptions, New Game settings, and the initial character-name confirmation. It does not yet make gameplay, dialogue, combat, inventory, shops, or maps accessible.
+This Reloaded-II mod adds screen-reader output to the Windows Steam release of Chrono Trigger for startup and the title menu, Control Descriptions, New Game settings and naming, the Extras hub and Ending Log, both Options interfaces, the ordinary in-game menu, and field dialogue with choices. Combat, movement, inventory subpages, shops, and maps are not yet accessible; unsupported menu subpages are announced explicitly instead of failing silently.
 
 ## Supported game build
 
@@ -18,6 +18,8 @@ An exact hash mismatch stops the mod before any hook is activated. Do not replac
 The included 32-bit Prism 0.17.3 build supports these backends: NVDA, UI Automation, Windows OneCore speech, PC Talker, ZDSR, and Boy PC Reader. Prism selects the best available backend and sends each announcement to its speech and braille-capable output path.
 
 With a normal launch, the first expected announcement is “Square Enix.” If Reloaded injects after that brief scene, the first announcement can instead describe the opening movie or the current title screen.
+
+In the field, opening the main menu announces its seven visible commands, current selection, time, currency, and party status. Options announces the localized heading, categories or rows, current values, help text, and confirmation choices for either the classic gamepad/keyboard interface or the touch/mouse interface. NPC and story text is announced when the game presents it, including visible dialogue choices and the selected choice.
 
 ## Prerequisites
 

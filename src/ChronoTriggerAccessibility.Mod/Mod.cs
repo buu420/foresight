@@ -1,11 +1,15 @@
 using System.Diagnostics;
 using ChronoTriggerAccessibility.Core.Startup;
+using ChronoTriggerAccessibility.Mod.Dialogue;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.Extras;
 using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
+using ChronoTriggerAccessibility.Mod.Settings;
 using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Mod.Template;
+using ChronoTriggerAccessibility.Mod.TopMenu;
 using ChronoTriggerAccessibility.Native.Memory;
 using Reloaded.Hooks.ReloadedII.Interfaces;
 
@@ -16,6 +20,7 @@ public sealed class Mod : ModBase
     private readonly IReloadedHooks? hooks;
     private readonly StartupTitleHookSet? startupTitleHookSet;
     private readonly NewGameHookSet? newGameHookSet;
+    private readonly CompleteAccessibilityComposition? completeComposition;
     private readonly AccessibilityRuntime? runtime;
     private readonly Task? initializationTask;
 
@@ -29,12 +34,14 @@ public sealed class Mod : ModBase
         var dispatcher = new SemanticEventDispatcher(log, fatalError);
         var nativeFactory = new ReloadedNativeHookFactory(hooks ?? throw new InvalidOperationException(
             "Reloaded shared hooks controller is unavailable."));
-        var composition = CreateAccessibilityComposition(
+        var composition = CreateCompleteAccessibilityComposition(
+            nativeFactory,
             nativeFactory,
             nativeFactory,
             new CurrentProcessReadableMemory(),
             dispatcher,
             new OpeningMovieTimeline());
+        completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
         runtime = new AccessibilityRuntime(
@@ -95,6 +102,70 @@ public sealed class Mod : ModBase
         return new AccessibilityComposition(startupTitle, newGame, installer);
     }
 
+    public static CompleteAccessibilityComposition CreateCompleteAccessibilityComposition(
+        IRuntimeNativeHookFactory hookFactory,
+        IRuntimeNativeAsmHookFactory asmHookFactory,
+        IRuntimeNativeFunctionWrapperFactory wrapperFactory,
+        IReadableMemory memory,
+        ISemanticEventDispatcher dispatcher,
+        OpeningMovieTimeline movieTimeline)
+    {
+        ArgumentNullException.ThrowIfNull(hookFactory);
+        ArgumentNullException.ThrowIfNull(asmHookFactory);
+        ArgumentNullException.ThrowIfNull(wrapperFactory);
+        ArgumentNullException.ThrowIfNull(memory);
+        ArgumentNullException.ThrowIfNull(dispatcher);
+        ArgumentNullException.ThrowIfNull(movieTimeline);
+
+        var sharedFanout = new SharedNativeHookFanoutFactory(
+            hookFactory,
+            dispatcher.ReportCoverageFailure);
+        var newGame = new NewGameHookSet(sharedFanout, wrapperFactory, memory, dispatcher);
+        var extras = new ExtrasHookSet(sharedFanout, memory, dispatcher);
+        var steamSettings = new SteamSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+        var touchSettings = new TouchSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+        var topMenu = new TopMenuHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+
+        // Root shared-hook owners are constructed only after the complete, ordered observer
+        // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
+        sharedFanout.ConfigureObservers([newGame, extras, steamSettings, touchSettings, topMenu]);
+
+        var startupTitle = new StartupTitleHookSet(
+            sharedFanout,
+            memory,
+            dispatcher,
+            movieTimeline);
+        var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+        var registrations = startupTitle.Registrations
+            .Concat(newGame.Registrations)
+            .Concat(extras.Registrations)
+            .Concat(steamSettings.Registrations)
+            .Concat(touchSettings.Registrations)
+            .Concat(topMenu.Registrations)
+            .Concat(dialogue.Registrations)
+            .ToArray();
+        var participants = new IHookActivationObserver[]
+        {
+            startupTitle,
+            newGame,
+            extras,
+            steamSettings,
+            touchSettings,
+            topMenu,
+            dialogue,
+        };
+        var installer = new ReloadedHookInstaller(registrations, participants);
+        return new CompleteAccessibilityComposition(
+            startupTitle,
+            newGame,
+            extras,
+            steamSettings,
+            touchSettings,
+            topMenu,
+            dialogue,
+            installer);
+    }
+
     public Mod() { }
 }
 
@@ -105,4 +176,14 @@ public sealed record StartupTitleComposition(
 public sealed record AccessibilityComposition(
     StartupTitleHookSet StartupTitleHookSet,
     NewGameHookSet NewGameHookSet,
+    ReloadedHookInstaller Installer);
+
+public sealed record CompleteAccessibilityComposition(
+    StartupTitleHookSet StartupTitleHookSet,
+    NewGameHookSet NewGameHookSet,
+    ExtrasHookSet ExtrasHookSet,
+    SteamSettingsHookSet SteamSettingsHookSet,
+    TouchSettingsHookSet TouchSettingsHookSet,
+    TopMenuHookSet TopMenuHookSet,
+    DialogueHookSet DialogueHookSet,
     ReloadedHookInstaller Installer);
