@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $dll = Join-Path $PSScriptRoot '..\native\prism\v0.17.3\win-x86\prism.dll'
-$vsWhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+$vsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $vsInstall = (& $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
 $vsDevCmd = Join-Path $vsInstall 'Common7\Tools\VsDevCmd.bat'
 if (-not (Test-Path -LiteralPath $vsDevCmd)) { throw 'Visual Studio 2022 C++ x86 tools are not installed.' }

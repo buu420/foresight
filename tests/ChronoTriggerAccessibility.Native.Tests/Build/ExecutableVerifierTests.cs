@@ -8,7 +8,23 @@ namespace ChronoTriggerAccessibility.Native.Tests.Build;
 
 public sealed class ExecutableVerifierTests
 {
-    private const string InstalledExecutable = @"G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe";
+    // Derived, never hardcoded: the repository lives inside the game folder as
+    // <game>\accessibility-mod, so the executable sits one level up. A literal
+    // drive path here broke these tests whenever the game moved.
+    private static readonly string InstalledExecutable =
+        Path.Combine(FindGameRoot(), "Chrono Trigger.exe");
+
+    private static string FindGameRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "ChronoTriggerAccessibility.slnx")))
+                return directory.Parent?.FullName ?? directory.FullName;
+            directory = directory.Parent;
+        }
+        throw new InvalidOperationException("Could not locate the repository root.");
+    }
 
     [Fact]
     public void InstalledExecutable_HasExactSupportedIdentityAndHookBytesInExecutableText()

@@ -13,20 +13,46 @@ Prism, the Platform-agnostic Reader Interface for Speech and Messages, is distri
 
 Prism's upstream `NOTICE` identifies bundled or incorporated work including simdutf, NVDA controller RPC definitions, Moderncom, dr_wav, Djinni, concurrentqueue, and fmt. The notice and exact upstream `LICENSES` subtree from the pinned source commit are reproduced unmodified in the package, including each bundled component's license and the Moderncom authors file.
 
-## Reloaded-II interfaces and hooks
+## Reloaded-II 1.30.3 (redistributed)
 
-The mod is loaded by an existing Reloaded-II installation; Reloaded-II itself is not redistributed in this package.
+This mod no longer depends on a separately installed Reloaded-II. It vendors and deploys a trimmed, **loader-only** portion of Reloaded-II — no launcher GUI, no updater, no NuGet client — as a portable tree inside the game folder.
 
-- Reloaded-II 1.30.2: GNU General Public License version 3; <https://github.com/Reloaded-Project/Reloaded-II>
-- Reloaded.Mod.Interfaces 2.5.0: GNU General Public License version 3. This dependency is used as a loader-provided interface and its assembly is not copied into the mod package.
+- Upstream: <https://github.com/Reloaded-Project/Reloaded-II>
+- Version: 1.30.3
+- License: GNU General Public License version 3
+- Copyright: Sewer56
+- Vendored at: `native/reloaded-ii/v1.30.3/Loader/X86/`
+- Provenance and per-file SHA-256: `native/reloaded-ii/v1.30.3/SOURCE.md`
+- Deployed package license copy: `LICENSES/GNU-GPL-3.0.txt`
+
+The vendored binaries are **unmodified upstream builds**. Nothing was patched, recompiled, or converted between architectures. Only the 32-bit (`x86`) loader is redistributed, because Chrono Trigger is a 32-bit process. Corresponding source remains available from the upstream repository.
+
+## Reloaded II Shared Lib: Reloaded.Hooks 1.16.3 (redistributed)
+
+The hook implementation the mod depends on at runtime, redistributed as a Reloaded mod because there is no launcher to resolve mod dependencies.
+
+- Upstream: <https://github.com/Sewer56/Reloaded.SharedLib.Hooks.ReloadedII>
+- Version: 1.16.3
+- License: GNU Lesser General Public License version 3
+- Copyright: Sewer56
+- Vendored at: `native/reloaded-ii/v1.30.3/mods/reloaded.sharedlib.hooks/`
+- Deployed package license copy: `LICENSES/Reloaded.SharedLib.Hooks-LGPL-3.0.txt`
+
+This is a *universal* Reloaded mod and legitimately ships both `x86` and `x64` payloads. Its x64 files are expected and are not stripped, even though only the x86 payload is loaded here.
+
+## Reloaded-II interfaces and hooks (compile-time)
+
+- Reloaded.Mod.Interfaces 2.5.0: GNU General Public License version 3. Used as a loader-provided interface; its assembly is not copied into the mod package.
 - Reloaded.Hooks.Definitions 1.15.0: GNU Lesser General Public License version 3; <https://github.com/Reloaded-Project/Reloaded.Hooks>
-- Reloaded.SharedLib.Hooks 1.9.0 compile-time interfaces: GNU Lesser General Public License version 3. The package includes `Reloaded.Hooks.ReloadedII.Interfaces.dll`; the working hook implementation is supplied by the separately installed `reloaded.sharedlib.hooks` Reloaded mod.
+- Reloaded.SharedLib.Hooks 1.9.0 compile-time interfaces: GNU Lesser General Public License version 3. The package includes `Reloaded.Hooks.ReloadedII.Interfaces.dll`; the working implementation comes from the vendored `reloaded.sharedlib.hooks` mod described above.
 
-The package's `LICENSES` directory includes the GPL 3.0 text and the exact LGPL 3.0 license files shipped by the pinned Reloaded NuGet packages. Corresponding sources remain available from the upstream repositories and NuGet packages. No Reloaded binary has been modified by this project.
+The package's `LICENSES` directory includes the GPL 3.0 text and the exact LGPL 3.0 license files shipped by the pinned Reloaded NuGet packages. No Reloaded binary has been modified by this project.
 
-## Ultimate ASI Loader
+## Ultimate ASI Loader — no longer deployed
 
-The deployment repository includes the 32-bit Ultimate ASI Loader 6.9.0 binary embedded by Reloaded-II 1.30.2. It is deployed as `winmm.dll` so a normal Chrono Trigger Steam launch loads Reloaded without a separate launcher.
+Earlier versions deployed 32-bit Ultimate ASI Loader 6.9.0 as `winmm.dll` next to the game so a normal Steam launch would load Reloaded. That is **superseded**: the native launcher in `src/ChronoTriggerAccessibility.Launcher` now injects the Reloaded bootstrapper directly, and deployment removes the proxy DLL.
+
+The reviewed binary and its licence are retained in the repository for provenance and for anyone auditing an older installation.
 
 - Upstream: <https://github.com/ThirteenAG/Ultimate-ASI-Loader>
 - License: MIT
@@ -37,4 +63,6 @@ The deployment repository includes the 32-bit Ultimate ASI Loader 6.9.0 binary e
 
 ## Microsoft .NET
 
-The 32-bit Microsoft .NET 9.0.18 runtime and Windows Desktop runtime are external prerequisites and are not included in the mod package. Their licensing remains governed by Microsoft. The user-level `DOTNET_ROOT_X86` value points normally launched x86 processes to this existing per-user runtime without changing machine-wide runtime configuration; the recovery launcher also scopes the same value to its own process.
+A 32-bit Microsoft .NET 9 runtime is an external prerequisite and is not included in the mod package. Its licensing remains governed by Microsoft.
+
+No patch version is pinned. The Reloaded loader's `runtimeconfig.json` requests framework `9.0.0` with `rollForward: LatestMinor`, so any installed 9.0.x revision satisfies it. The mod no longer sets a machine-wide `DOTNET_ROOT_X86`; if a private runtime is deployed to `<game>\Accessibility\Runtime\dotnet\x86`, the launcher points at it for the game process only.

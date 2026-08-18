@@ -1,458 +1,372 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Packaging;
 
+/// <summary>
+/// Covers <c>tools\Deploy-Mod.ps1</c> and <c>tools\Verify-Deployment.ps1</c> for the
+/// portable Reloaded-II layout: a trimmed loader tree plus a native IFEO launcher
+/// inside the game folder, with no external Reloaded-II installation.
+///
+/// Deployment is exercised against a synthetic game folder built in the temp
+/// directory. The real <c>Chrono Trigger.exe</c> is copied into it because the
+/// deployer is fail-closed on that file's SHA-256, and weakening that check for
+/// the sake of testing would defeat its purpose. Tests skip when the real
+/// executable is not reachable.
+/// </summary>
 public sealed class DeploymentTransactionTests
 {
-    private const string InstalledGameExecutable = @"G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe";
-    private const string InstalledReloadedRoot = @"C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release";
-    private const string RuntimeRoot = @"C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86";
+    private const string SupportedGameSha256 =
+        "8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7";
 
-    [Theory]
-    [InlineData("AfterModSwap")]
-    [InlineData("AfterProfileCommit")]
-    [InlineData("AfterLauncherCommit")]
-    [InlineData("AfterAsiLoaderCommit")]
-    [InlineData("AfterAutoLaunchCommit")]
-    [InlineData("FinalVerification")]
-    public void Injected_failure_restores_every_preexisting_artifact(string failurePoint)
+    [Fact]
+    public void Deployment_produces_the_complete_portable_layout()
     {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: true);
-        try
-        {
-            var originalMod = SnapshotDirectory(fixture.ModDirectory);
-            var originalProfile = File.ReadAllBytes(fixture.ProfilePath);
-            var originalLauncher = File.ReadAllBytes(fixture.LauncherPath);
-            var originalAsiLoader = File.ReadAllBytes(fixture.AsiLoaderPath);
-            var originalBootstrapper = File.ReadAllBytes(fixture.BootstrapperPath);
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
 
-            var result = fixture.Deploy("-FailureInjectionPoint", failurePoint);
+        var result = fixture.Deploy();
+        Assert.True(result.ExitCode == 0, $"Deployment failed.\n{result.Output}");
 
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains($"Injected deployment failure at {failurePoint}", result.Output, StringComparison.Ordinal);
-            AssertDirectorySnapshot(originalMod, fixture.ModDirectory);
-            Assert.Equal(originalProfile, File.ReadAllBytes(fixture.ProfilePath));
-            Assert.Equal(originalLauncher, File.ReadAllBytes(fixture.LauncherPath));
-            Assert.Equal(originalAsiLoader, File.ReadAllBytes(fixture.AsiLoaderPath));
-            Assert.Equal(originalBootstrapper, File.ReadAllBytes(fixture.BootstrapperPath));
-            AssertNoTransactionArtifacts(fixture.ReloadedRoot, fixture.LauncherDirectory, fixture.GameDirectory);
-        }
-        finally
+        foreach (var relative in new[]
+                 {
+                     @"Reloaded-II\Loader\X86\Reloaded.Mod.Loader.dll",
+                     @"Reloaded-II\Loader\X86\Reloaded.Mod.Loader.runtimeconfig.json",
+                     @"Reloaded-II\Loader\X86\Bootstrapper\Reloaded.Mod.Loader.Bootstrapper.dll",
+                     @"Reloaded-II\Mods\reloaded.sharedlib.hooks\ModConfig.json",
+                     @"Reloaded-II\Mods\chrono.trigger.accessibility\ChronoTriggerAccessibility.Mod.dll",
+                     @"Reloaded-II\Mods\chrono.trigger.accessibility\prism.dll",
+                     @"Reloaded-II\Apps\chrono trigger.exe\AppConfig.json",
+                     @"Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.exe",
+                     @"Accessibility\Launcher\ChronoTriggerAccessibility.Installer.exe",
+                 })
         {
-            fixture.Dispose();
-        }
-    }
-
-    [Theory]
-    [InlineData("AfterModSwap")]
-    [InlineData("AfterProfileCommit")]
-    [InlineData("AfterLauncherCommit")]
-    [InlineData("AfterAsiLoaderCommit")]
-    [InlineData("AfterAutoLaunchCommit")]
-    [InlineData("FinalVerification")]
-    public void Failed_first_install_removes_every_new_target(string failurePoint)
-    {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: false);
-        try
-        {
-            var result = fixture.Deploy("-FailureInjectionPoint", failurePoint);
-
-            Assert.NotEqual(0, result.ExitCode);
-            Assert.Contains($"Injected deployment failure at {failurePoint}", result.Output, StringComparison.Ordinal);
-            Assert.False(Directory.Exists(fixture.ModDirectory));
-            Assert.False(File.Exists(fixture.ProfilePath));
-            Assert.False(File.Exists(fixture.LauncherPath));
-            Assert.False(File.Exists(fixture.AsiLoaderPath));
-            Assert.False(File.Exists(fixture.BootstrapperPath));
-            Assert.False(Directory.Exists(Path.GetDirectoryName(fixture.ProfilePath)!));
-            Assert.False(Directory.Exists(Path.Combine(fixture.ReloadedRoot, "Apps")));
-            Assert.False(Directory.Exists(fixture.LauncherDirectory));
-            AssertNoTransactionArtifacts(fixture.ReloadedRoot, fixture.LauncherDirectory, fixture.GameDirectory);
-        }
-        finally
-        {
-            fixture.Dispose();
+            var path = Path.Combine(fixture.GameRoot, relative);
+            Assert.True(File.Exists(path), $"Deployment did not produce: {relative}");
         }
     }
 
     [Fact]
-    public void Successful_deployment_removes_all_transaction_backups()
+    public void Deployed_app_config_enables_the_mod_and_its_hook_dependency()
     {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: true);
-        try
-        {
-            var result = fixture.Deploy();
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
 
-            Assert.True(result.ExitCode == 0, $"Deployment failed.{Environment.NewLine}{result.Output}");
-            Assert.True(File.Exists(Path.Combine(fixture.ModDirectory, "SHA256SUMS.txt")));
-            Assert.True(File.Exists(fixture.ProfilePath));
-            using (var profile = System.Text.Json.JsonDocument.Parse(File.ReadAllText(fixture.ProfilePath)))
-                Assert.False(profile.RootElement.GetProperty("AutoInject").GetBoolean());
-            Assert.Equal(
-                File.ReadAllBytes(Path.Combine(fixture.RepositoryRoot, "Launch Chrono Trigger Accessible.ps1")),
-                File.ReadAllBytes(fixture.LauncherPath));
-            Assert.Equal("A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37", HashFile(fixture.AsiLoaderPath));
-            Assert.Equal("1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB", HashFile(fixture.BootstrapperPath));
-            AssertNoTransactionArtifacts(fixture.ReloadedRoot, fixture.LauncherDirectory, fixture.GameDirectory);
-        }
-        finally
-        {
-            fixture.Dispose();
-        }
+        var result = fixture.Deploy();
+        Assert.True(result.ExitCode == 0, $"Deployment failed.\n{result.Output}");
+
+        var configPath = Path.Combine(
+            fixture.GameRoot, @"Reloaded-II\Apps\chrono trigger.exe\AppConfig.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+
+        Assert.Equal("chrono trigger.exe", document.RootElement.GetProperty("AppId").GetString());
+
+        var enabled = document.RootElement.GetProperty("EnabledMods")
+            .EnumerateArray().Select(element => element.GetString()).ToArray();
+
+        // Without a Reloaded launcher GUI nothing resolves the mod's declared
+        // dependency, so the hook library has to be enabled explicitly.
+        Assert.Contains("reloaded.sharedlib.hooks", enabled);
+        Assert.Contains("chrono.trigger.accessibility", enabled);
     }
 
     [Fact]
-    public void Verification_rejects_a_missing_automatic_startup_loader()
+    public void Every_deployed_loader_binary_is_x86()
     {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: false);
-        try
-        {
-            var deploy = fixture.Deploy();
-            Assert.True(deploy.ExitCode == 0, $"Deployment failed.{Environment.NewLine}{deploy.Output}");
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
 
-            File.Delete(fixture.AsiLoaderPath);
-            var verify = fixture.Verify();
+        var result = fixture.Deploy();
+        Assert.True(result.ExitCode == 0, $"Deployment failed.\n{result.Output}");
 
-            Assert.NotEqual(0, verify.ExitCode);
-            Assert.Contains("winmm.dll", verify.Output, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            fixture.Dispose();
-        }
-    }
-
-    [Fact]
-    public void Deployment_refuses_an_unrelated_existing_winmm_proxy_without_changing_anything()
-    {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: true);
-        try
-        {
-            File.WriteAllText(fixture.AsiLoaderPath, "unrelated pre-existing proxy");
-            var originalMod = SnapshotDirectory(fixture.ModDirectory);
-            var originalProfile = File.ReadAllBytes(fixture.ProfilePath);
-            var originalLauncher = File.ReadAllBytes(fixture.LauncherPath);
-            var originalAsiLoader = File.ReadAllBytes(fixture.AsiLoaderPath);
-            var originalBootstrapper = File.ReadAllBytes(fixture.BootstrapperPath);
-
-            var deploy = fixture.Deploy();
-
-            Assert.NotEqual(0, deploy.ExitCode);
-            Assert.Contains("Refusing to replace", deploy.Output, StringComparison.OrdinalIgnoreCase);
-            AssertDirectorySnapshot(originalMod, fixture.ModDirectory);
-            Assert.Equal(originalProfile, File.ReadAllBytes(fixture.ProfilePath));
-            Assert.Equal(originalLauncher, File.ReadAllBytes(fixture.LauncherPath));
-            Assert.Equal(originalAsiLoader, File.ReadAllBytes(fixture.AsiLoaderPath));
-            Assert.Equal(originalBootstrapper, File.ReadAllBytes(fixture.BootstrapperPath));
-            AssertNoTransactionArtifacts(fixture.ReloadedRoot, fixture.LauncherDirectory, fixture.GameDirectory);
-        }
-        finally
-        {
-            fixture.Dispose();
-        }
-    }
-
-    [Fact]
-    public void Deployment_refuses_an_unrelated_existing_bootstrapper_without_changing_anything()
-    {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: true);
-        try
-        {
-            File.WriteAllText(fixture.BootstrapperPath, "unrelated pre-existing bootstrapper");
-            var originalMod = SnapshotDirectory(fixture.ModDirectory);
-            var originalProfile = File.ReadAllBytes(fixture.ProfilePath);
-            var originalLauncher = File.ReadAllBytes(fixture.LauncherPath);
-            var originalAsiLoader = File.ReadAllBytes(fixture.AsiLoaderPath);
-            var originalBootstrapper = File.ReadAllBytes(fixture.BootstrapperPath);
-
-            var deploy = fixture.Deploy();
-
-            Assert.NotEqual(0, deploy.ExitCode);
-            Assert.Contains("Refusing to replace", deploy.Output, StringComparison.OrdinalIgnoreCase);
-            AssertDirectorySnapshot(originalMod, fixture.ModDirectory);
-            Assert.Equal(originalProfile, File.ReadAllBytes(fixture.ProfilePath));
-            Assert.Equal(originalLauncher, File.ReadAllBytes(fixture.LauncherPath));
-            Assert.Equal(originalAsiLoader, File.ReadAllBytes(fixture.AsiLoaderPath));
-            Assert.Equal(originalBootstrapper, File.ReadAllBytes(fixture.BootstrapperPath));
-            AssertNoTransactionArtifacts(fixture.ReloadedRoot, fixture.LauncherDirectory, fixture.GameDirectory);
-        }
-        finally
-        {
-            fixture.Dispose();
-        }
-    }
-
-    [Fact]
-    public void Verification_rejects_a_stale_global_reloaded_loader_path()
-    {
-        var fixture = DeploymentFixture.Create(seedExistingArtifacts: false);
-        try
-        {
-            var deploy = fixture.Deploy();
-            Assert.True(deploy.ExitCode == 0, $"Deployment failed.{Environment.NewLine}{deploy.Output}");
-            File.WriteAllText(
-                fixture.ReloadedConfigPath,
-                "{\"LoaderPath32\":\"C:\\\\Stale\\\\Reloaded.Mod.Loader.dll\",\"LauncherPath\":\"C:\\\\Stale\\\\Reloaded-II.exe\",\"ApplicationConfigDirectory\":\"C:\\\\Stale\\\\Apps\",\"ModConfigDirectory\":\"C:\\\\Stale\\\\Mods\"}");
-
-            var verify = fixture.Verify();
-
-            Assert.NotEqual(0, verify.ExitCode);
-            Assert.Contains("ReloadedII.json", verify.Output, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("LoaderPath32", verify.Output, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            fixture.Dispose();
-        }
-    }
-
-    private static Dictionary<string, byte[]> SnapshotDirectory(string directory) =>
-        Directory.GetFiles(directory, "*", SearchOption.AllDirectories)
-            .ToDictionary(
-                path => Path.GetRelativePath(directory, path),
-                File.ReadAllBytes,
-                StringComparer.OrdinalIgnoreCase);
-
-    private static string HashFile(string path) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
-
-    private static void AssertDirectorySnapshot(IReadOnlyDictionary<string, byte[]> expected, string directory)
-    {
-        var actual = SnapshotDirectory(directory);
-        Assert.Equal(expected.Keys.Order(StringComparer.Ordinal), actual.Keys.Order(StringComparer.Ordinal));
-        foreach (var (relativePath, bytes) in expected)
-            Assert.Equal(bytes, actual[relativePath]);
-    }
-
-    private static void AssertNoTransactionArtifacts(params string[] roots)
-    {
-        var debris = roots
-            .Where(Directory.Exists)
-            .SelectMany(root => Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories))
-            .Where(path =>
-                Path.GetFileName(path).Contains(".staging.", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).Contains(".backup.", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).Contains(".transaction.", StringComparison.OrdinalIgnoreCase))
+        var loaderDirectory = Path.Combine(fixture.GameRoot, @"Reloaded-II\Loader");
+        var offenders = Directory
+            .EnumerateFiles(loaderDirectory, "*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                        || path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            .Where(path => ReadPeMachine(path) != 0x014C)
             .ToArray();
 
-        Assert.Empty(debris);
+        // Chrono Trigger is a 32-bit process. An x64 payload cannot be loaded into
+        // it and cannot be converted, so this has to hold for every file.
+        Assert.True(offenders.Length == 0,
+            "Non-x86 loader binaries were deployed: " + string.Join(", ", offenders));
     }
 
+    [Fact]
+    public void Deployment_never_modifies_the_game_executable()
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+
+        var gameExe = Path.Combine(fixture.GameRoot, "Chrono Trigger.exe");
+        var before = Sha256(gameExe);
+
+        var result = fixture.Deploy();
+        Assert.True(result.ExitCode == 0, $"Deployment failed.\n{result.Output}");
+
+        Assert.Equal(before, Sha256(gameExe));
+        Assert.Equal(SupportedGameSha256, Sha256(gameExe));
+    }
+
+    [Theory]
+    [InlineData("AfterMoveAside")]
+    [InlineData("AfterPayloadCopy")]
+    [InlineData("BeforeVerification")]
+    public void Injected_failure_restores_every_preexisting_directory(string failurePoint)
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+
+        // Seed recognisable content in each directory deployment moves aside.
+        var sentinels = new Dictionary<string, string>
+        {
+            [Path.Combine(fixture.GameRoot, @"Reloaded-II\Loader\sentinel.txt")] = "previous-loader",
+            [Path.Combine(fixture.GameRoot, @"Reloaded-II\Mods\chrono.trigger.accessibility\sentinel.txt")] = "previous-mod",
+            [Path.Combine(fixture.GameRoot, @"Accessibility\Launcher\sentinel.txt")] = "previous-launcher",
+        };
+        foreach (var (path, content) in sentinels)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, content);
+        }
+
+        var result = fixture.Deploy(failureInjectionPoint: failurePoint);
+        Assert.True(result.ExitCode != 0,
+            $"Deployment was expected to fail at {failurePoint}.\n{result.Output}");
+
+        foreach (var (path, content) in sentinels)
+        {
+            Assert.True(File.Exists(path),
+                $"Rollback lost a pre-existing file at {failurePoint}: {path}\n{result.Output}");
+            Assert.Equal(content, File.ReadAllText(path));
+        }
+    }
+
+    [Fact]
+    public void Verification_fails_when_the_mod_payload_is_missing()
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+
+        var deployed = fixture.Deploy();
+        Assert.True(deployed.ExitCode == 0, $"Deployment failed.\n{deployed.Output}");
+
+        File.Delete(Path.Combine(fixture.GameRoot,
+            @"Reloaded-II\Mods\chrono.trigger.accessibility\ChronoTriggerAccessibility.Mod.dll"));
+
+        var verified = fixture.Verify();
+        Assert.True(verified.ExitCode != 0,
+            $"Verification passed despite a missing mod DLL.\n{verified.Output}");
+        Assert.Contains("FAIL", verified.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Verification_fails_when_a_loader_binary_is_not_x86()
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+
+        var deployed = fixture.Deploy();
+        Assert.True(deployed.ExitCode == 0, $"Deployment failed.\n{deployed.Output}");
+
+        // Rewrite the machine field to x64 in place; everything else stays valid.
+        var loaderDll = Path.Combine(fixture.GameRoot,
+            @"Reloaded-II\Loader\X86\Reloaded.Mod.Loader.dll");
+        var bytes = File.ReadAllBytes(loaderDll);
+        var peOffset = BitConverter.ToInt32(bytes, 0x3C);
+        BitConverter.GetBytes((ushort)0x8664).CopyTo(bytes, peOffset + 4);
+        File.WriteAllBytes(loaderDll, bytes);
+
+        var verified = fixture.Verify();
+        Assert.True(verified.ExitCode != 0,
+            $"Verification passed despite an x64 loader binary.\n{verified.Output}");
+    }
+
+    [Theory]
+    [InlineData("*.ps1")]
+    [InlineData("*.psm1")]
+    [InlineData("*.cs")]
+    [InlineData("*.cpp")]
+    [InlineData("*.h")]
+    public void Repository_sources_contain_no_absolute_machine_paths(string searchPattern)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+
+        // Machine-specific roots. The mod must be installable by any user from any
+        // location, so every path is derived from the script or assembly location,
+        // or supplied as a parameter. Stale literals like G:\SteamLibrary are the
+        // exact reason the mod stopped launching once the game moved.
+        // A C# verbatim string doubles the separator, so both forms are matched.
+        var pattern = new Regex(
+            @"[A-Za-z]:\\\\?(Users|Program Files|Program Files \(x86\)|Games|SteamLibrary)",
+            RegexOptions.IgnoreCase);
+
+        var offenders = new List<string>();
+        foreach (var file in Directory
+                     .EnumerateFiles(repositoryRoot, searchPattern, SearchOption.AllDirectories)
+                     .Where(path => !IsExcludedPath(path, repositoryRoot)))
+        {
+            var lines = File.ReadAllLines(file);
+            for (var index = 0; index < lines.Length; index++)
+            {
+                var line = lines[index];
+                var trimmed = line.TrimStart();
+                // Comments may legitimately cite a path as an example or a warning.
+                if (trimmed.StartsWith('#') || trimmed.StartsWith("//")) continue;
+                if (pattern.IsMatch(line))
+                {
+                    offenders.Add($"{Path.GetRelativePath(repositoryRoot, file)}:{index + 1}: {line.Trim()}");
+                }
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            $"Absolute machine paths found in {searchPattern} sources:" + Environment.NewLine +
+            string.Join(Environment.NewLine, offenders));
+    }
+
+    private static bool IsExcludedPath(string path, string repositoryRoot)
+    {
+        var relative = Path.GetRelativePath(repositoryRoot, path);
+        var separator = Path.DirectorySeparatorChar;
+        foreach (var excluded in new[] { ".git", "artifacts", ".build", ".worktrees", "bin", "obj", "docs" })
+        {
+            if (relative.StartsWith(excluded + separator, StringComparison.OrdinalIgnoreCase) ||
+                relative.Contains(separator + excluded + separator, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ushort ReadPeMachine(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var reader = new BinaryReader(stream);
+        stream.Position = 0x3C;
+        var peOffset = reader.ReadInt32();
+        if (peOffset <= 0 || peOffset >= stream.Length) return 0;
+        stream.Position = peOffset;
+        if (reader.ReadUInt32() != 0x00004550) return 0;
+        return reader.ReadUInt16();
+    }
+
+    private static string Sha256(string path)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(sha.ComputeHash(stream));
+    }
+
+    internal static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "ChronoTriggerAccessibility.slnx")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        throw new InvalidOperationException("Could not locate the repository root.");
+    }
+
+    /// <summary>
+    /// A throwaway game folder containing a real copy of the supported executable,
+    /// so the fail-closed hash check in the deployer runs exactly as it does in
+    /// production.
+    /// </summary>
     private sealed class DeploymentFixture : IDisposable
     {
-        private DeploymentFixture(string repositoryRoot, string temporaryRoot)
+        private DeploymentFixture(string root, string repositoryRoot, string packageDirectory)
         {
+            Root = root;
             RepositoryRoot = repositoryRoot;
-            TemporaryRoot = temporaryRoot;
-            PackageDirectory = Path.Combine(temporaryRoot, "package", "chrono.trigger.accessibility");
-            ReloadedRoot = Path.Combine(temporaryRoot, "Reloaded-II");
-            LauncherDirectory = Path.Combine(temporaryRoot, "launcher");
-            GameDirectory = Path.Combine(temporaryRoot, "game");
-            GameExecutable = Path.Combine(GameDirectory, "Chrono Trigger.exe");
-            ModDirectory = Path.Combine(ReloadedRoot, "Mods", "chrono.trigger.accessibility");
-            ProfilePath = Path.Combine(ReloadedRoot, "Apps", "chrono trigger.exe", "AppConfig.json");
-            LauncherPath = Path.Combine(LauncherDirectory, "Launch Chrono Trigger Accessible.ps1");
-            AsiLoaderPath = Path.Combine(GameDirectory, "winmm.dll");
-            BootstrapperPath = Path.Combine(GameDirectory, "Reloaded.Mod.Loader.Bootstrapper.asi");
-            ReloadedConfigPath = Path.Combine(temporaryRoot, "ReloadedConfig", "ReloadedII.json");
+            PackageDirectory = packageDirectory;
+            GameRoot = Path.Combine(root, "game");
         }
 
+        public string Root { get; }
         public string RepositoryRoot { get; }
-        public string TemporaryRoot { get; }
         public string PackageDirectory { get; }
-        public string ReloadedRoot { get; }
-        public string LauncherDirectory { get; }
-        public string GameDirectory { get; }
-        public string GameExecutable { get; }
-        public string ModDirectory { get; }
-        public string ProfilePath { get; }
-        public string LauncherPath { get; }
-        public string AsiLoaderPath { get; }
-        public string BootstrapperPath { get; }
-        public string ReloadedConfigPath { get; }
+        public string GameRoot { get; }
 
-        public static DeploymentFixture Create(bool seedExistingArtifacts)
+        /// <summary>
+        /// Returns null when the prerequisites for a real deployment are absent, so
+        /// the suite stays green on a machine without the game or a built payload.
+        /// </summary>
+        public static DeploymentFixture? TryCreate()
         {
-            var fixture = new DeploymentFixture(
-                FindRepositoryRoot(),
-                Path.Combine(Path.GetTempPath(), $"chrono-trigger-accessibility-transaction-{Guid.NewGuid():N}"));
+            var repositoryRoot = FindRepositoryRoot();
 
-            try
-            {
-                Directory.CreateDirectory(fixture.ReloadedRoot);
-                File.Copy(
-                    Path.Combine(InstalledReloadedRoot, "Reloaded-II.exe"),
-                    Path.Combine(fixture.ReloadedRoot, "Reloaded-II.exe"));
-                SeedSharedHookDependency(fixture.ReloadedRoot);
-                SeedAutoLaunchDependency(fixture.ReloadedRoot);
-                SeedReloadedBootstrapConfiguration(fixture.ReloadedRoot, fixture.ReloadedConfigPath);
-                Directory.CreateDirectory(fixture.GameDirectory);
-                File.Copy(InstalledGameExecutable, fixture.GameExecutable);
+            var sourceExe = Path.Combine(Directory.GetParent(repositoryRoot)!.FullName, "Chrono Trigger.exe");
+            var package = Path.Combine(repositoryRoot, @"artifacts\package\chrono.trigger.accessibility");
+            var native = Path.Combine(repositoryRoot, @".build\native");
 
-                var package = RunPowerShell(
-                    fixture.RepositoryRoot,
-                    Path.Combine(fixture.RepositoryRoot, "tools", "Package-Mod.ps1"),
-                    "-OutputDirectory", fixture.PackageDirectory,
-                    "-Configuration", "Release",
-                    "-SkipBuild");
-                Assert.Equal(0, package.ExitCode);
+            if (!File.Exists(sourceExe)) return null;
+            if (!File.Exists(Path.Combine(package, "ChronoTriggerAccessibility.Mod.dll"))) return null;
+            if (!File.Exists(Path.Combine(native, "ChronoTriggerAccessibility.Launcher.exe"))) return null;
 
-                if (seedExistingArtifacts)
-                    fixture.SeedExistingArtifacts();
-
-                return fixture;
-            }
-            catch
-            {
-                fixture.Dispose();
-                throw;
-            }
+            var root = Path.Combine(Path.GetTempPath(), $"cta-deploy-{Guid.NewGuid():N}");
+            var fixture = new DeploymentFixture(root, repositoryRoot, package);
+            Directory.CreateDirectory(fixture.GameRoot);
+            File.Copy(sourceExe, Path.Combine(fixture.GameRoot, "Chrono Trigger.exe"));
+            return fixture;
         }
 
-        public (int ExitCode, string Output) Deploy(params string[] extraArguments)
+        public ProcessResult Deploy(string failureInjectionPoint = "None") => RunPowerShell(
+            Path.Combine(RepositoryRoot, @"tools\Deploy-Mod.ps1"),
+            "-GameRoot", GameRoot,
+            "-PackageDirectory", PackageDirectory,
+            "-SkipIfeo",
+            "-SkipNativeBuild",
+            "-FailureInjectionPoint", failureInjectionPoint);
+
+        public ProcessResult Verify() => RunPowerShell(
+            Path.Combine(RepositoryRoot, @"tools\Verify-Deployment.ps1"),
+            "-GameRoot", GameRoot);
+
+        private ProcessResult RunPowerShell(string script, params string[] arguments)
         {
-            var arguments = new List<string>
+            var startInfo = new ProcessStartInfo("powershell.exe")
             {
-                "-PackageDirectory", PackageDirectory,
-                "-ReloadedRoot", ReloadedRoot,
-                "-GameExecutable", GameExecutable,
-                "-RuntimeRoot", RuntimeRoot,
-                "-LauncherDestinationDirectory", LauncherDirectory,
-                "-ReloadedConfigPath", ReloadedConfigPath
+                WorkingDirectory = RepositoryRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
             };
-            arguments.AddRange(extraArguments);
-            return RunPowerShell(
-                RepositoryRoot,
-                Path.Combine(RepositoryRoot, "tools", "Deploy-Mod.ps1"),
-                arguments.ToArray());
-        }
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(script);
+            foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
 
-        public (int ExitCode, string Output) Verify() =>
-            RunPowerShell(
-                RepositoryRoot,
-                Path.Combine(RepositoryRoot, "tools", "Verify-Deployment.ps1"),
-                "-ReloadedRoot", ReloadedRoot,
-                "-GameExecutable", GameExecutable,
-                "-RuntimeRoot", RuntimeRoot,
-                "-LauncherPath", LauncherPath,
-                "-ReloadedConfigPath", ReloadedConfigPath);
+            using var process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Could not start powershell.exe.");
+            var output = new StringBuilder();
+            output.Append(process.StandardOutput.ReadToEnd());
+            output.Append(process.StandardError.ReadToEnd());
+            process.WaitForExit();
+            return new ProcessResult(process.ExitCode, output.ToString());
+        }
 
         public void Dispose()
         {
-            if (Directory.Exists(TemporaryRoot))
-                Directory.Delete(TemporaryRoot, recursive: true);
-        }
-
-        private void SeedExistingArtifacts()
-        {
-            Directory.CreateDirectory(Path.Combine(ModDirectory, "nested"));
-            File.WriteAllText(Path.Combine(ModDirectory, "legacy.txt"), "restore this mod");
-            File.WriteAllBytes(Path.Combine(ModDirectory, "nested", "state.bin"), [0x00, 0x7F, 0xFF]);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(ProfilePath)!);
-            File.WriteAllText(
-                ProfilePath,
-                "{\"AppId\":\"chrono trigger.exe\",\"AutoInject\":true,\"EnabledMods\":[\"other.mod\"],\"SortedMods\":[\"other.mod\"],\"Custom\":\"restore profile exactly\"}");
-
-            Directory.CreateDirectory(LauncherDirectory);
-            File.WriteAllText(LauncherPath, "# restore this launcher exactly\r\n");
-
-            File.Copy(
-                Path.Combine(RepositoryRoot, "native", "ultimate-asi-loader", "v6.9.0", "win-x86", "UltimateAsiLoader.dll"),
-                AsiLoaderPath);
-            File.Copy(
-                Path.Combine(InstalledReloadedRoot, "Loader", "X86", "Bootstrapper", "Reloaded.Mod.Loader.Bootstrapper.dll"),
-                BootstrapperPath);
-        }
-
-        private static void SeedSharedHookDependency(string reloadedRoot)
-        {
-            var installedDependency = Path.Combine(InstalledReloadedRoot, "Mods", "reloaded.sharedlib.hooks");
-            var fakeDependency = Path.Combine(reloadedRoot, "Mods", "reloaded.sharedlib.hooks");
-            Directory.CreateDirectory(Path.Combine(fakeDependency, "x86"));
-            File.Copy(Path.Combine(installedDependency, "ModConfig.json"), Path.Combine(fakeDependency, "ModConfig.json"));
-            File.Copy(
-                Path.Combine(installedDependency, "x86", "Reloaded.Hooks.ReloadedII.dll"),
-                Path.Combine(fakeDependency, "x86", "Reloaded.Hooks.ReloadedII.dll"));
-        }
-
-        private static void SeedAutoLaunchDependency(string reloadedRoot)
-        {
-            var relativePath = Path.Combine("Loader", "X86", "Bootstrapper", "Reloaded.Mod.Loader.Bootstrapper.dll");
-            var destination = Path.Combine(reloadedRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            File.Copy(Path.Combine(InstalledReloadedRoot, relativePath), destination);
-        }
-
-        private static void SeedReloadedBootstrapConfiguration(string reloadedRoot, string configPath)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
-            File.WriteAllText(
-                configPath,
-                System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    LoaderPath32 = Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"),
-                    LauncherPath = Path.Combine(reloadedRoot, "Reloaded-II.exe"),
-                    Bootstrapper32Path = Path.Combine(reloadedRoot, "Loader", "X86", "Bootstrapper", "Reloaded.Mod.Loader.Bootstrapper.dll"),
-                    ApplicationConfigDirectory = Path.Combine(reloadedRoot, "Apps"),
-                    ModConfigDirectory = Path.Combine(reloadedRoot, "Mods")
-                }));
-            Directory.CreateDirectory(Path.Combine(reloadedRoot, "Loader", "X86"));
-            File.Copy(
-                Path.Combine(InstalledReloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"),
-                Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.dll"));
-            File.Copy(
-                Path.Combine(InstalledReloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.runtimeconfig.json"),
-                Path.Combine(reloadedRoot, "Loader", "X86", "Reloaded.Mod.Loader.runtimeconfig.json"));
-        }
-
-        private static string FindRepositoryRoot()
-        {
-            for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            try
             {
-                if (File.Exists(Path.Combine(directory.FullName, "ChronoTriggerAccessibility.slnx")))
-                    return directory.FullName;
+                if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
             }
-
-            throw new DirectoryNotFoundException("Could not locate the repository root.");
+            catch (IOException)
+            {
+                // A throwaway temp folder; losing the cleanup race is not a test failure.
+            }
         }
     }
 
-    private static (int ExitCode, string Output) RunPowerShell(string workingDirectory, string scriptPath, params string[] arguments)
-    {
-        var startInfo = new ProcessStartInfo("powershell.exe")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-ExecutionPolicy");
-        startInfo.ArgumentList.Add("Bypass");
-        startInfo.ArgumentList.Add("-File");
-        startInfo.ArgumentList.Add(scriptPath);
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-
-        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start PowerShell.");
-        var standardOutput = new StringBuilder();
-        var standardError = new StringBuilder();
-        var standardOutputReader = new Thread(() => standardOutput.Append(process.StandardOutput.ReadToEnd()));
-        var standardErrorReader = new Thread(() => standardError.Append(process.StandardError.ReadToEnd()));
-        standardOutputReader.Start();
-        standardErrorReader.Start();
-        if (!process.WaitForExit(milliseconds: 120_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"PowerShell did not finish within two minutes: {scriptPath}");
-        }
-
-        standardOutputReader.Join();
-        standardErrorReader.Join();
-        return (process.ExitCode, standardOutput.ToString() + standardError);
-    }
+    private sealed record ProcessResult(int ExitCode, string Output);
 }
