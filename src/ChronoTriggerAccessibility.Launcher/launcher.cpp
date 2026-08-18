@@ -53,7 +53,9 @@ static void ShowError(const std::wstring& msg) {
 
 static bool WaitForRemoteModuleBase(DWORD processId, const std::wstring& moduleName,
                                     HANDLE process, uintptr_t& outBase, Logger& log) {
-    DWORD deadline = GetTickCount() + MODULE_WAIT_MS;
+    // GetTickCount64 rather than GetTickCount: the 32-bit counter wraps after about
+    // 49.7 days of uptime, which would make this deadline compare wrongly.
+    ULONGLONG deadline = GetTickCount64() + MODULE_WAIT_MS;
     for (;;) {
         HANDLE snapshot = CreateToolhelp32Snapshot(
             TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, processId);
@@ -76,7 +78,7 @@ static bool WaitForRemoteModuleBase(DWORD processId, const std::wstring& moduleN
             log.W(L"WaitForRemoteModuleBase: target exited while waiting for " + moduleName);
             return false;
         }
-        if (GetTickCount() >= deadline) {
+        if (GetTickCount64() >= deadline) {
             log.W(L"WaitForRemoteModuleBase: timed out waiting for " + moduleName);
             return false;
         }
@@ -186,12 +188,17 @@ static InjectResult InjectDll(HANDLE process, DWORD processId,
             log.W(L"InjectDll: still waiting... " + std::to_wstring(elapsed) + L"ms");
             if (elapsed >= INJECT_TIMEOUT_MS) {
                 CloseHandle(thread);
+                // The remote allocation is deliberately NOT freed here. The remote
+                // thread is still running and LoadLibraryW may still be reading the
+                // path string out of it; unmapping it underneath would fault inside
+                // the game. Leaking one page is the lesser harm.
                 return InjectResult::TimedOut;
             }
             continue;
         }
         log.Err(L"InjectDll: WaitForSingleObject", GetLastError());
         CloseHandle(thread);
+        // Same reasoning as the timeout path: the thread's state is unknown.
         return InjectResult::CreateThreadFailed;
     }
 
@@ -270,7 +277,7 @@ static int LaunchGamePlain(const fs::path& gameExe, const std::wstring& extraArg
 
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi = {};
-    std::wstring cmd = L"\"" + gameExe.wstring() + L"\"";
+    std::wstring cmd = QuoteArgument(gameExe.wstring());
     if (!extraArgs.empty()) cmd += L" " + extraArgs;
     std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end()); cmdBuf.push_back(0);
     fs::path gameDir = gameExe.parent_path();
@@ -340,7 +347,7 @@ static int LaunchWithMod(const fs::path& gameExe, const std::wstring& extraArgs,
 
     STARTUPINFOW si = { sizeof(si) };
     PROCESS_INFORMATION pi = {};
-    std::wstring cmd = L"\"" + gameExe.wstring() + L"\"";
+    std::wstring cmd = QuoteArgument(gameExe.wstring());
     if (!extraArgs.empty()) cmd += L" " + extraArgs;
     std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end()); cmdBuf.push_back(0);
     fs::path gameDir = gameExe.parent_path();
@@ -432,7 +439,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
         std::wstring extraArgs;
         for (int i = 2; i < argc; ++i) {
             if (!extraArgs.empty()) extraArgs += L" ";
-            extraArgs += L"\""; extraArgs += argv[i]; extraArgs += L"\"";
+            extraArgs += QuoteArgument(argv[i]);
         }
         LocalFree(argv);
         log.W(L"gameExe=" + gameExe.wstring());
@@ -447,10 +454,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
             throw std::runtime_error("game exe missing");
         }
 
-        // Recursion guard. If we somehow got redirected into ourselves, launch plainly.
-        wchar_t envBuf[8];
-        DWORD envLen = GetEnvironmentVariableW(RECURSION_ENV_VAR, envBuf, ARRAYSIZE(envBuf));
-        if (envLen > 0 && envLen < ARRAYSIZE(envBuf)) {
+        // Recursion guard. DEBUG_ONLY_THIS_PROCESS should already stop Windows
+        // re-applying the IFEO redirect to the child, so this is a backstop only.
+        //
+        // Presence is the whole signal, so test that and nothing else. An earlier
+        // version also required the value to fit a small buffer, which meant an
+        // unexpectedly long value silently disabled the guard. GetEnvironmentVariableW
+        // returns 0 only when the variable does not exist.
+        DWORD envLen = GetEnvironmentVariableW(RECURSION_ENV_VAR, nullptr, 0);
+        if (envLen > 0) {
             log.A("recursion guard tripped; launching the game directly");
             rc = LaunchGamePlain(gameExe, extraArgs, log);
         } else {

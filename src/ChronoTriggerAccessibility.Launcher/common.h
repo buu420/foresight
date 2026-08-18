@@ -170,6 +170,44 @@ inline std::wstring JsonEscape(const std::wstring& s) {
     return r;
 }
 
+// Quotes one argument the way CommandLineToArgvW will parse it back.
+//
+// Naively wrapping in quotes is wrong: a trailing backslash would escape the
+// closing quote ("C:\dir\" swallows it), and an embedded quote would terminate the
+// argument early. Steam can pass either, so follow the documented rules --
+// backslashes are only special immediately before a quote, so double exactly those
+// runs, then escape the quote itself.
+inline std::wstring QuoteArgument(const std::wstring& argument) {
+    if (!argument.empty() &&
+        argument.find_first_of(L" \t\n\v\"") == std::wstring::npos) {
+        return argument;   // nothing that needs quoting
+    }
+
+    std::wstring quoted;
+    quoted.reserve(argument.size() + 2);
+    quoted.push_back(L'"');
+    for (auto it = argument.begin(); ; ++it) {
+        size_t backslashes = 0;
+        while (it != argument.end() && *it == L'\\') { ++it; ++backslashes; }
+
+        if (it == argument.end()) {
+            // Trailing backslashes must be doubled so they do not escape the
+            // closing quote we are about to append.
+            quoted.append(backslashes * 2, L'\\');
+            break;
+        }
+        if (*it == L'"') {
+            quoted.append(backslashes * 2 + 1, L'\\');
+            quoted.push_back(L'"');
+        } else {
+            quoted.append(backslashes, L'\\');
+            quoted.push_back(*it);
+        }
+    }
+    quoted.push_back(L'"');
+    return quoted;
+}
+
 inline fs::path SelfPath() {
     std::vector<wchar_t> buf(MAX_PATH * 4);
     DWORD n = GetModuleFileNameW(nullptr, buf.data(), (DWORD)buf.size());
@@ -193,15 +231,42 @@ inline fs::path ReloadedIIPointerFile() {
     return a / L"Reloaded-Mod-Loader-II" / L"ReloadedII.json";
 }
 
+// Writes to a sibling temporary file, flushes it to disk, then renames it over the
+// target. The destination is therefore never observed half-written: a reader sees
+// either the old bytes or all of the new ones.
+//
+// This matters because ReloadedPointerLease's recovery logic distinguishes "our
+// content" from "somebody else's content". A torn write would look like neither,
+// and would force a manual repair on the next launch.
 inline bool WriteUtf8File(const fs::path& path, const std::wstring& content) {
     std::error_code ec;
     fs::create_directories(path.parent_path(), ec);
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) return false;
-    std::string utf8 = WideToUtf8(content);
-    out.write(utf8.data(), (std::streamsize)utf8.size());
-    out.flush();
-    return out.good();
+
+    fs::path temp = path;
+    temp += L".tmp";
+
+    const std::string utf8 = WideToUtf8(content);
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return false;
+
+    bool ok = true;
+    if (!utf8.empty()) {
+        DWORD written = 0;
+        ok = WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr) != FALSE
+             && written == (DWORD)utf8.size();
+    }
+    if (ok) ok = FlushFileBuffers(file) != FALSE;
+    CloseHandle(file);
+
+    if (!ok) { fs::remove(temp, ec); return false; }
+
+    if (!MoveFileExW(temp.c_str(), path.c_str(),
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        fs::remove(temp, ec);
+        return false;
+    }
+    return true;
 }
 
 inline bool ReadUtf8File(const fs::path& path, std::string& out) {
@@ -230,8 +295,16 @@ inline bool FileSha256(const fs::path& path, std::wstring& outHex) {
     if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
         BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0) {
         ok = true;
-        DWORD read = 0;
-        while (ReadFile(file, buffer.data(), (DWORD)buffer.size(), &read, nullptr) && read > 0) {
+        for (;;) {
+            DWORD read = 0;
+            // A read failure must not be mistaken for end of file. Hashing only the
+            // bytes read so far would yield a plausible-looking but wrong digest,
+            // which would be reported as "unsupported build" instead of an I/O error.
+            if (!ReadFile(file, buffer.data(), (DWORD)buffer.size(), &read, nullptr)) {
+                ok = false;
+                break;
+            }
+            if (read == 0) break;   // genuine end of file
             if (BCryptHashData(hash, buffer.data(), read, 0) != 0) { ok = false; break; }
         }
         if (ok && BCryptFinishHash(hash, digest.data(), (ULONG)digest.size(), 0) == 0) {
@@ -431,17 +504,31 @@ public:
         m_log->W(L"ReloadedPointerLease: pointer aimed at " + reloadedRoot.wstring());
     }
 
+    // Never allowed to throw: this runs while the launcher is unwinding, and losing
+    // the mutex release or the restore would strand the user's other Reloaded mods.
     ~ReloadedPointerLease() {
-        if (m_wroteOurs) {
-            std::string current;
-            if (ReadUtf8File(m_pointer, current) && current != WideToUtf8(m_ourContent)) {
-                // Somebody rewrote it while we held the lease. Theirs is newer than
-                // ours; do not clobber it. Leave the backup for manual recovery.
-                m_log->A("ReloadedPointerLease: pointer changed externally; preserving it "
-                         "and leaving our backup in place");
-            } else {
-                RestoreFromBackup();
+        try {
+            if (m_wroteOurs) {
+                std::string current;
+                const bool readOk = ReadUtf8File(m_pointer, current);
+                if (!readOk) {
+                    // Cannot verify what is on disk. Restoring the original is the
+                    // safer default: leaving our portable pointer in place would
+                    // silently redirect every other Reloaded game.
+                    m_log->A("ReloadedPointerLease: could not read the pointer back; "
+                             "restoring the original anyway");
+                    RestoreFromBackup(/*confirmedOurs*/ false);
+                } else if (current != WideToUtf8(m_ourContent)) {
+                    // Somebody rewrote it while we held the lease. Theirs is newer
+                    // than ours; do not clobber it. Leave the backup for recovery.
+                    m_log->A("ReloadedPointerLease: pointer changed externally; preserving "
+                             "it and leaving our backup in place");
+                } else {
+                    RestoreFromBackup(/*confirmedOurs*/ true);
+                }
             }
+        } catch (...) {
+            // Swallow: the mutex still has to be released below.
         }
         if (m_ownsMutex) ReleaseMutex(m_mutex);
         if (m_mutex) CloseHandle(m_mutex);
@@ -509,7 +596,7 @@ private:
         return true;
     }
 
-    void RestoreFromBackup() {
+    void RestoreFromBackup(bool confirmedOurs = true) {
         std::error_code ec;
         if (m_hadOriginal && fs::exists(m_backup, ec)) {
             if (MoveFileExW(m_backup.c_str(), m_pointer.c_str(),
@@ -518,9 +605,16 @@ private:
             } else {
                 m_log->Err(L"ReloadedPointerLease: restore original", GetLastError());
             }
-        } else {
+        } else if (confirmedOurs) {
+            // There was nothing here before us and the file on disk is still ours,
+            // so removing it returns the machine to its original state.
             fs::remove(m_pointer, ec);
             m_log->A("ReloadedPointerLease: removed our pointer (no original existed)");
+        } else {
+            // No original to restore and we could not confirm the file is ours.
+            // Deleting it might destroy something another tool just created.
+            m_log->A("ReloadedPointerLease: leaving the pointer in place; no original "
+                     "existed and its contents could not be confirmed as ours");
         }
         m_wroteOurs = false;
     }
