@@ -1,6 +1,10 @@
 # Chrono Trigger Accessibility
 
-This Reloaded-II mod adds screen-reader output to the Windows Steam release of Chrono Trigger for startup and the title menu, Control Descriptions, New Game settings and naming, the Extras hub and Ending Log, both Options interfaces, the ordinary in-game menu, and field dialogue with choices. Combat, movement, inventory subpages, shops, and maps are not yet accessible; unsupported menu subpages are announced explicitly instead of failing silently.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.2.0 combines the portable Reloaded loader with the existing Settings, Extras, field-dialogue, and top-menu accessibility work, alongside startup, Control Descriptions, New Game settings, and character-name confirmation.
+
+Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This integration is a test release: automated checks and exact native hook-byte verification do not establish that every screen works in a live session. Combat, inventory, shops, and map navigation remain outside the implemented coverage.
+
+It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 
 ## Supported game build
 
@@ -11,85 +15,118 @@ The native hooks are fail-closed and support only this executable:
 - SHA-256: `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`
 - Architecture: 32-bit x86
 
-An exact hash mismatch stops the mod before any hook is activated. Do not replace or patch the game executable to bypass this check.
+Both the launcher and the mod verify this hash and refuse to hook anything else. If it does not match, the game still starts — silently, with an explanatory dialog. Do not patch the executable to bypass the check.
 
 ## Screen-reader output
 
-The included 32-bit Prism 0.17.3 build supports these backends: NVDA, UI Automation, Windows OneCore speech, PC Talker, ZDSR, and Boy PC Reader. Prism selects the best available backend and sends each announcement to its speech and braille-capable output path.
+The included 32-bit Prism 0.17.3 build supports NVDA, UI Automation, Windows OneCore speech, PC Talker, ZDSR, and Boy PC Reader. Prism selects the best available backend and sends each announcement to its speech and braille-capable output path.
 
-With a normal launch, the first expected announcement is “Square Enix.” If Reloaded injects after that brief scene, the first announcement can instead describe the opening movie or the current title screen.
-
-In the field, opening the main menu announces its seven visible commands, current selection, time, currency, and party status. Options announces the localized heading, categories or rows, current values, help text, and confirmation choices for either the classic gamepad/keyboard interface or the touch/mouse interface. NPC and story text is announced when the game presents it, including visible dialogue choices and the selected choice.
+Start your screen reader **before** launching the game. The first expected announcement is "Square Enix."
 
 ## Prerequisites
 
 - Windows 10 or newer.
-- Chrono Trigger installed at `G:\SteamLibrary\steamapps\common\Chrono Trigger`.
-- Reloaded-II 1.30.2 at `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release`.
-- Reloaded shared hooks mod `reloaded.sharedlib.hooks` installed in that Reloaded-II instance.
-- 32-bit .NET 9.0.18 runtime and Windows Desktop runtime at `C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86`.
+- Chrono Trigger installed through Steam.
+- A **32-bit .NET 9 Desktop Runtime**. Any 9.0.x revision works; no specific patch version is required, and `DOTNET_ROOT_X86` does not need to be set.
+- Visual Studio 2022 Build Tools with the C++ x86 toolset, and the .NET SDK — only if you are building from source.
 
-Run your screen reader before launching the game when using a screen-reader-specific Prism backend.
+## Install
 
-## Build, package, and deploy
-
-From this repository in PowerShell:
+From the repository, in PowerShell:
 
 ```powershell
 & '.\tools\Package-Mod.ps1'
 & '.\tools\Deploy-Mod.ps1'
+```
+
+`Deploy-Mod.ps1` builds the native launcher, lays out the portable tree, removes the superseded ASI proxy, and then runs the installer. Windows shows a security prompt because registering the launch redirect writes to `HKEY_LOCAL_MACHINE`; approve it, then choose **Yes** in the installer dialog.
+
+Deployment is transactional. Existing directories are moved aside first and restored if any step fails. It never writes to `Chrono Trigger.exe`, and re-checks its hash afterwards.
+
+To verify an installation at any time:
+
+```powershell
 & '.\tools\Verify-Deployment.ps1'
 ```
 
-Packaging creates `artifacts\package\chrono.trigger.accessibility` and writes `SHA256SUMS.txt` over every packaged payload file. Deployment stages and verifies every replacement before committing it. If the mod swap, profile update, launcher update, automatic-startup update, or final verification fails, it restores the preceding mod directory, profile, launcher, `winmm.dll`, and Reloaded bootstrapper byte-for-byte (or removes newly created targets from a first install). It never overwrites the game executable or another original game binary.
+Every path is derived at runtime, so the repository works from any location and for any user. Pass `-GameRoot` if the repository does not live inside the game folder.
 
 ## Launch
 
-After deployment, a normal Steam launch from Chrono Trigger's existing library entry starts Reloaded and the accessibility mod. No script, separate Steam shortcut, Steam launch option, or already-running Reloaded window is required.
+A normal Steam launch is all that is required. No script, no separate shortcut, no Steam launch option, no Reloaded window.
 
-The deployer installs Reloaded-II's supported Ultimate ASI Loader integration beside the game:
+### Upgrading from an earlier version
 
-- `winmm.dll` is the reviewed 32-bit Ultimate ASI Loader supplied by this repository. Chrono Trigger imports `WINMM.dll`, so Windows loads this proxy during normal startup.
-- `Reloaded.Mod.Loader.Bootstrapper.asi` is the reviewed x86 bootstrapper from the installed Reloaded-II 1.30.2 instance.
+Earlier versions injected Reloaded through Ultimate ASI Loader, deployed as `winmm.dll` beside the game together with `Reloaded.Mod.Loader.Bootstrapper.asi`. The native launcher replaces both, and `Deploy-Mod.ps1` deletes them — but only when their SHA-256 matches the files this mod installed, so a proxy DLL belonging to some other mod is left alone and reported instead. Leaving them in place would load Reloaded twice.
 
-`DOTNET_ROOT_X86` must be set in the user environment to `C:\Users\User\AppData\Local\ChronoTriggerAccessibility\dotnet-x86`. If that value was added while Steam was already running, fully exit and restart Steam once so subsequently launched games inherit it.
+Earlier versions also required a machine-wide `DOTNET_ROOT_X86` environment variable and a `Launch Chrono Trigger Accessible.ps1` script. Neither is used any more; the variable can be deleted and the script has been removed from the repository.
 
-The PowerShell launcher remains available only as a recovery and diagnostic path:
+## How it works
 
-```powershell
-& 'G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1'
+```
+Steam starts "Chrono Trigger.exe"
+  -> Windows redirects to ChronoTriggerAccessibility.Launcher.exe   (IFEO "Debugger" value)
+       -> verifies the game's SHA-256
+       -> borrows %APPDATA%\Reloaded-Mod-Loader-II\ReloadedII.json and aims it
+          at <game>\Reloaded-II  (restored on every exit path)
+       -> starts the real game, bypassing the redirect so it cannot recurse
+       -> injects <game>\Reloaded-II\Loader\X86\Bootstrapper\...Bootstrapper.dll
+       -> waits for the game, forwards its exit code, gives the pointer back
 ```
 
-The launcher sets `DOTNET_ROOT_X86` only for its own process, verifies both required 9.0.18 frameworks, and then invokes this exact Reloaded command:
+Deployed layout:
 
-```powershell
-& 'C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Reloaded-II.exe' --launch 'G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe'
+```
+<game>\Reloaded-II\Loader\X86\**                        Reloaded-II 1.30.3, x86 only
+<game>\Reloaded-II\Mods\reloaded.sharedlib.hooks\**      hook implementation, 1.16.3
+<game>\Reloaded-II\Mods\chrono.trigger.accessibility\**  this mod, plus prism.dll
+<game>\Reloaded-II\Apps\chrono trigger.exe\AppConfig.json
+<game>\Accessibility\Launcher\*.exe                      launcher and installer
+<game>\Accessibility\Backups\<timestamp>\**              previous copy, kept by deployment
 ```
 
-To check the launcher's game hash, x86 host, hostfxr, and framework prerequisites without starting the game, add `-VerifyOnly`.
+Two design points are worth knowing before changing the launcher:
 
-## Logs and troubleshooting
-
-Reloaded writes timestamped game logs to `%APPDATA%\Reloaded-Mod-Loader-II\Logs`. Search the newest `Chrono Trigger` log for `[chrono.trigger.accessibility]`; it records the executable check, each required hook, selected Prism backend, semantic events, exact announcement text, and any fatal accessibility failure.
-
-- “Unsupported executable” or a SHA-256 error: in Steam, verify the game files, then rerun `Verify-Deployment.ps1`. The mod intentionally does not hook an unknown build.
-- Missing .NET framework: confirm both `shared\Microsoft.NETCore.App\9.0.18` and `shared\Microsoft.WindowsDesktop.App\9.0.18` exist below the configured x86 runtime root. Do not substitute an x64-only runtime.
-- Missing shared hooks: install or repair `reloaded.sharedlib.hooks` in the same Reloaded-II instance, then rerun deployment verification.
-- No speech: start NVDA or the intended screen reader before launching. If no screen reader is active, Prism may select UI Automation or OneCore. Check the log for the selected backend and any Prism error.
-- A blocking accessibility error: stop testing that screen and keep the newest log. The mod treats missing interactive information as a fatal defect rather than continuing silently.
+- **The AppData pointer swap is unavoidable.** Reloaded hardcodes `%APPDATA%\Reloaded-Mod-Loader-II\ReloadedII.json` in both the managed loader (`Reloaded.Mod.Loader.IO/Paths.cs`) and the C++ bootstrapper. `portable.txt` only takes effect *after* that file is located, and `ReloadedPortable.txt` means "relaunch synchronously through the launcher exe", which a launcher-less tree does not have. So the launcher borrows the pointer and gives it back, guarded by a named mutex, a durable backup, and recovery of a leftover backup on the next start. The mutex name is shared with the author's Blind Soldier mod deliberately, so two portable Reloaded installs cannot swap that file concurrently.
+- **The game's primary thread is resumed before injection, on purpose.** Injecting into a pristine `CREATE_SUSPENDED` process, or while the process is parked at its initial loader breakpoint, deadlocks: that breakpoint is raised from inside ntdll's process initialisation, so the primary thread owns the loader lock and a remote `LoadLibraryW` waits on an owner that can never release it. This was measured, not assumed. See the comment in `launcher.cpp`.
 
 ## Uninstall
 
-Close Chrono Trigger and Reloaded-II first. Then:
+Close Chrono Trigger first, then:
 
-Only perform steps 3 and 4 if those files were absent before this accessibility mod was deployed **and** no other ASI or Reloaded mod uses them. If you are unsure, leave both loader files in place; disabling and removing the accessibility mod is sufficient.
+```powershell
+& '<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Installer.exe' /uninstall
+```
 
-1. Remove `chrono.trigger.accessibility` from `EnabledMods` and `SortedMods` in `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Apps\chrono trigger.exe\AppConfig.json`, or disable it in Reloaded-II.
-2. Delete only `C:\Program Files (x86)\Steam\steamapps\common\Spyro Reignited Trilogy\mod-tools\reloaded-ii\Release\Mods\chrono.trigger.accessibility`.
-3. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\winmm.dll` only if its SHA-256 is `A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37`.
-4. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\Reloaded.Mod.Loader.Bootstrapper.asi` only if its SHA-256 is `1A9F704549F66E357C0D22C395B57FE4E7BD5248521DBB40E566D2EE1CA809AB`.
-5. Delete `G:\SteamLibrary\steamapps\common\Chrono Trigger\Launch Chrono Trigger Accessible.ps1` if the recovery launcher is no longer wanted.
+Approve the security prompt and choose Yes. The game then starts normally without the mod. The uninstaller removes the launch redirect only if the mod created it, so it can never delete another tool's redirect.
 
-The deployer ensures that the two reviewed loader files are present but leaves matching pre-existing copies untouched; it does not alter original game files. Keep the shared-hooks mod and the per-user x86 .NET runtime if another accessibility mod uses them.
+Afterwards you may delete `<game>\Accessibility` and `<game>\Reloaded-II`. Nothing else is added to the game folder and no original game file is modified.
 
-Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. The package includes Prism's root `LICENSE` and `NOTICE`, the exact `LICENSES` subtree from pinned Prism source commit `9911156998b52fee91fb2cb4f71ac793d4e546c7`, the Reloaded license texts, and the Ultimate ASI Loader MIT license under `LICENSES`.
+## Logs and troubleshooting
+
+Two logs matter:
+
+- `<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.log` — the launcher's own record: hash check, pointer lease, injection, exit code.
+- `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` — the newest `Chrono Trigger` log. Search it for `[chrono.trigger.accessibility]`; it records the executable check, each hook, the selected Prism backend, semantic events, and the exact announcement text.
+
+| Symptom | Cause and fix |
+|---|---|
+| A dialog titled **"Oh Noes!"** | That is Reloaded's own error box, never the game's. It means Reloaded could not find its app configuration. Run `Verify-Deployment.ps1`. |
+| Game starts but says nothing | Check the launcher log for the injection result, then the Reloaded log for the Prism backend. Start your screen reader before the game. |
+| "not the build the accessibility mod supports" | Verify the game files in Steam. The mod deliberately refuses to hook an unknown build. |
+| Game will not start at all | The launch redirect may point at a missing launcher. Run the installer with `/uninstall`, then deploy again. |
+| No x86 .NET 9 runtime | Install the 32-bit .NET 9 Desktop Runtime. Do not substitute an x64-only runtime; the game is 32-bit. |
+| A blocking accessibility error | Stop testing that screen and keep the newest log. The mod treats missing interactive information as a fatal defect rather than continuing silently. |
+
+## Build from source
+
+```powershell
+& '.\tools\Build-Native.ps1'      # x86 launcher and installer; asserts PE machine 0x14C
+& '.\tools\Package-Mod.ps1'       # managed mod + Prism into artifacts\package
+& '.\tools\Deploy-Mod.ps1'        # lay out, register, verify
+& '.\tools\Verify-Deployment.ps1'
+```
+
+`Package-Mod.ps1` writes `SHA256SUMS.txt` over every packaged payload file.
+
+Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. Provenance and per-file hashes for the vendored Reloaded payload are in `native/reloaded-ii/v1.30.3/SOURCE.md`.

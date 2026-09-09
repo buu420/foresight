@@ -5,13 +5,23 @@ param(
 
     [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\package\chrono.trigger.accessibility'),
 
-    [string]$DotNetPath = 'C:\Program Files (x86)\Steam\steamapps\common\Yu-Gi-Oh! Legacy of the Duelist Link Evolution\YuGiOhAccessibility\.worktrees\accessibility-native-uia\.tools\dotnet\dotnet.exe',
+    # Resolved from PATH when not supplied. Never hardcode a machine path here.
+    [string]$DotNetPath,
 
     [switch]$SkipBuild
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if (-not $DotNetPath) {
+    $resolved = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $resolved) {
+        throw 'The .NET SDK was not found on PATH. Install it, or pass -DotNetPath.'
+    }
+    $DotNetPath = $resolved.Source
+}
 
 $SupportedPrismSha256 = '6A84322E42D1B4123E2E66E9887CFDF0CDEA2A972FA40FC7B7185AEC77F5178A'
 $PeMachineI386 = 0x014c

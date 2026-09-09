@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using ChronoTriggerAccessibility.Core.Events;
 using ChronoTriggerAccessibility.Core.Startup;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Native.Capture;
@@ -11,9 +12,14 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Mod.Startup;
 
-public sealed class StartupTitleHookSet : IHookActivationObserver
+public sealed class StartupTitleHookSet : IHookActivationObserver, ISharedNativeHookObserver
 {
     public const uint CurrentSceneGlobalRva = 0x41C3E8;
+    public const uint ManagerFocusKeyOffset = 0x2C4;
+    public const uint FocusableStateControlOffset = 0x14;
+    public const uint ManagerVtableRva = 0x3A5D0C;
+    public const uint CustomButtonVtableRva = 0x3A4364;
+    public const uint FocusableStateVtableRva = 0x3AC3F4;
     public const int SquareEnixSceneId = 2;
     public const int TitleSceneId = 3;
     public const int OpeningMovieSceneId = 0x1E;
@@ -23,6 +29,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
     private readonly ISemanticEventDispatcher dispatcher;
     private readonly OpeningMovieTimeline movieTimeline;
     private readonly MsvcStringReader stringReader;
+    private readonly Action<int>? titleActionCompleted;
     private readonly LocalizedTextCache localizedText = new();
     private readonly ITitleCapture titleCapture;
     private readonly object lifecycleGate = new();
@@ -35,24 +42,30 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
     private nuint activeTitleMode;
     private nuint activeTitleOwner;
     private nuint activeTitleManager;
+    private TitleQuitConfirmation? activeQuitConfirmation;
     private TitleInteraction titleInteraction;
     private CancellationTokenSource? movieCancellation;
     private int currentScene = -1;
     private int activeEpoch = 1;
     private bool hooksActive = true;
 
+    [ThreadStatic]
+    private static QuitConfirmationScope? threadQuitConfirmationScope;
+
     public StartupTitleHookSet(
         IRuntimeNativeHookFactory hookFactory,
         IReadableMemory memory,
         ISemanticEventDispatcher dispatcher,
         OpeningMovieTimeline movieTimeline,
-        ITitleCapture? titleCapture = null)
+        ITitleCapture? titleCapture = null,
+        Action<int>? titleActionCompleted = null)
     {
         this.hookFactory = hookFactory ?? throw new ArgumentNullException(nameof(hookFactory));
         this.memory = memory ?? throw new ArgumentNullException(nameof(memory));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         this.movieTimeline = movieTimeline ?? throw new ArgumentNullException(nameof(movieTimeline));
         this.titleCapture = titleCapture ?? new TitleCapture();
+        this.titleActionCompleted = titleActionCompleted;
         stringReader = new MsvcStringReader(memory);
 
         RequiredHookIds = new ReadOnlyCollection<HookId>(
@@ -114,6 +127,102 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             hooksActive = false;
             activeEpoch = unchecked(activeEpoch + 1);
             InvalidateCurrentScene();
+            if (ReferenceEquals(threadQuitConfirmationScope?.Owner, this))
+            {
+                threadQuitConfirmationScope = null;
+            }
+        }
+    }
+
+    public void AfterTextManagerGetMsg(
+        nint textManager,
+        nint result,
+        int fileId,
+        int messageId,
+        nint returned)
+    {
+        _ = textManager;
+        try
+        {
+            if (fileId == 0x41 && messageId is 0x11 or 0x12)
+            {
+                ObserveQuitLocalizedText(fileId, messageId, result, returned);
+            }
+        }
+        catch (Exception exception)
+        {
+            dispatcher.ReportCoverageFailure($"Title Quit localized-text capture failed: {FormatException(exception)}");
+        }
+    }
+
+    public void AfterOpeTextResolver(
+        nint resolver,
+        nint result,
+        int bank,
+        int messageId,
+        nint returned)
+    {
+        _ = resolver;
+        try
+        {
+            if (bank == 0x3A && messageId == 5)
+            {
+                ObserveQuitLocalizedText(bank, messageId, result, returned);
+            }
+        }
+        catch (Exception exception)
+        {
+            dispatcher.ReportCoverageFailure($"Title Quit Ope localized-text capture failed: {FormatException(exception)}");
+        }
+    }
+
+    public void AfterCustomButtonConstructed(nint storage, nint returned)
+    {
+        try
+        {
+            if (!TryCaptureActiveEpoch(out _) || GetOwnedQuitScope() is not { } scope)
+            {
+                return;
+            }
+            var control = (nuint)returned;
+            if (storage == 0 || returned != storage || !TryReadExactVtable(control, CustomButtonVtableRva))
+            {
+                scope.Errors.Add("Title Quit CustomButton did not return exact typed ECX storage.");
+            }
+            else if (!scope.Controls.Add(control))
+            {
+                scope.Errors.Add("Title Quit constructed the same choice control more than once.");
+            }
+        }
+        catch (Exception exception)
+        {
+            dispatcher.ReportCoverageFailure($"Title Quit control capture failed: {FormatException(exception)}");
+        }
+    }
+
+    public void AfterControlBound(nint manager, nint focusableState, int managerKey)
+    {
+        try
+        {
+            if (!TryCaptureActiveEpoch(out _) || GetOwnedQuitScope() is not { } scope)
+            {
+                return;
+            }
+            var managerPointer = (nuint)manager;
+            var state = (nuint)focusableState;
+            if (managerKey < 0 || !TryReadExactVtable(managerPointer, ManagerVtableRva) ||
+                !TryReadExactVtable(state, FocusableStateVtableRva) ||
+                !TryReadPointer(state + FocusableStateControlOffset, out var control) ||
+                !TryReadExactVtable(control, CustomButtonVtableRva))
+            {
+                scope.Errors.Add($"Title Quit binder key {managerKey} does not match the audited manager/control layout.");
+                return;
+            }
+            scope.Bindings.Add(new QuitBinding(managerPointer, control, managerKey));
+        }
+        catch (Exception exception)
+        {
+            dispatcher.ReportCoverageFailure($"Title Quit binder capture failed: {FormatException(exception)}");
         }
     }
 
@@ -399,7 +508,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                         {
                             if (!titleCapture.IsBuilderActive)
                             {
-                                PublishCurrentFocus((nuint)manager);
+                                ObserveFocusAfterOriginal((nuint)manager, rawKey);
                             }
                         }));
                     }
@@ -416,7 +525,8 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                 () =>
                 {
                     var instrument = TryCaptureActiveEpoch(out var epoch);
-                    TitleMenuItem? activation = null;
+                    TitleActivation? activation = null;
+                    QuitConfirmationScope? quitScope = null;
                     Exception? captureFailure = null;
                     if (instrument)
                     {
@@ -430,7 +540,11 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                                     (nuint)actionPointer);
                                 if (activation is not null)
                                 {
-                                    dispatcher.Publish(new ControlActivated(activation.Label));
+                                    dispatcher.Publish(new ControlActivated(activation.Item.Label));
+                                    if (activation.Action == 6)
+                                    {
+                                        quitScope = BeginQuitConfirmationScope(epoch);
+                                    }
                                 }
                             });
                         }
@@ -440,7 +554,25 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
                         }
                     }
 
-                    original()(closure, eventTypePointer, actionPointer);
+                    try
+                    {
+                        original()(closure, eventTypePointer, actionPointer);
+                    }
+                    finally
+                    {
+                        if (quitScope is not null && ReferenceEquals(threadQuitConfirmationScope, quitScope))
+                        {
+                            threadQuitConfirmationScope = null;
+                        }
+                    }
+                    if (quitScope is not null && captureFailure is null && instrument)
+                    {
+                        RunIfActive(epoch, () => FinalizeQuitConfirmation(quitScope));
+                    }
+                    if (activation is not null && captureFailure is null && instrument)
+                    {
+                        RunIfActive(epoch, () => titleActionCompleted?.Invoke(activation.Action));
+                    }
                     if (captureFailure is not null && instrument)
                     {
                         RunIfActive(epoch, () => boundary.Run(
@@ -635,6 +767,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             activeTitleOwner = nativeState.Owner;
             activeTitleManager = nativeState.Manager;
             activeTitleMenu = snapshot;
+            activeQuitConfirmation = null;
             titleInteraction = TitleInteraction.Menu;
         }
 
@@ -661,6 +794,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             activeTitleOwner = 0;
             activeTitleManager = 0;
             activeTitleMenu = null;
+            activeQuitConfirmation = null;
             titleInteraction = TitleInteraction.Prompt;
         }
 
@@ -682,6 +816,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             activeTitleOwner = 0;
             activeTitleManager = 0;
             activeTitleMenu = null;
+            activeQuitConfirmation = null;
         }
 
         if (!publishExit)
@@ -715,6 +850,179 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
 
         return capturedOwner == owner &&
             GetTitleInspector().TryInspectTitleMenu(mode, out _, out _);
+    }
+
+    private QuitConfirmationScope BeginQuitConfirmationScope(int epoch)
+    {
+        if (threadQuitConfirmationScope is not null)
+        {
+            throw new InvalidOperationException("A Title Quit confirmation capture is already active on this thread.");
+        }
+        var scope = new QuitConfirmationScope(this, epoch);
+        threadQuitConfirmationScope = scope;
+        return scope;
+    }
+
+    private QuitConfirmationScope? GetOwnedQuitScope() =>
+        threadQuitConfirmationScope is { } scope && ReferenceEquals(scope.Owner, this) ? scope : null;
+
+    private void ObserveQuitLocalizedText(int fileId, int messageId, nint result, nint returned)
+    {
+        if (!TryCaptureActiveEpoch(out _) || GetOwnedQuitScope() is not { } scope)
+        {
+            return;
+        }
+        var isPrompt = fileId == 0x3A && messageId == 5;
+        var isChoice = fileId == 0x41 && messageId is 0x11 or 0x12;
+        if (!isPrompt && !isChoice)
+        {
+            return;
+        }
+        var address = returned != 0 ? (nuint)returned : (nuint)result;
+        if (!stringReader.TryRead(address, out var text, out var error) || string.IsNullOrWhiteSpace(text))
+        {
+            scope.Errors.Add($"Title Quit text ({fileId:X},{messageId:X}) is unreadable or blank: {error}");
+            return;
+        }
+        text = new string(text.AsSpan());
+        if (isPrompt)
+        {
+            if (scope.Prompt is not null)
+            {
+                scope.Errors.Add("Title Quit prompt was localized more than once.");
+            }
+            else
+            {
+                scope.Prompt = text;
+            }
+            return;
+        }
+        var choiceKey = messageId - 0x11;
+        if (!scope.ChoiceLabels.TryAdd(choiceKey, text))
+        {
+            scope.Errors.Add($"Title Quit choice key {choiceKey} was localized more than once.");
+        }
+    }
+
+    private void ObserveFocusAfterOriginal(nuint manager, int rawKey)
+    {
+        if (!TryReadExactVtable(manager, ManagerVtableRva) ||
+            !TryReadInt32(manager + ManagerFocusKeyOffset, out var authoritativeKey) ||
+            authoritativeKey != rawKey)
+        {
+            if (GetOwnedQuitScope() is { } invalidScope)
+            {
+                invalidScope.Errors.Add("Title Quit focus did not commit to the audited manager state.");
+            }
+            return;
+        }
+
+        if (GetOwnedQuitScope() is { } scope)
+        {
+            scope.Focus.Add(new QuitFocus(manager, rawKey));
+            return;
+        }
+
+        TitleQuitConfirmation? confirmation;
+        var titleManagerFocused = false;
+        lock (titleGate)
+        {
+            confirmation = activeQuitConfirmation?.Manager == manager ? activeQuitConfirmation : null;
+            titleManagerFocused = titleInteraction == TitleInteraction.Menu && activeTitleManager == manager;
+            if (titleManagerFocused)
+            {
+                activeQuitConfirmation = null;
+            }
+        }
+        if (confirmation is not null)
+        {
+            if (!confirmation.IndexByKey.TryGetValue(rawKey, out var selectedIndex))
+            {
+                dispatcher.ReportCoverageFailure($"Title Quit focus key {rawKey} has no captured localized choice.");
+                return;
+            }
+            dispatcher.Publish(new ConfirmationOpened(
+                confirmation.Prompt,
+                confirmation.Choices,
+                selectedIndex));
+            return;
+        }
+        if (titleManagerFocused)
+        {
+            PublishCurrentFocus(manager);
+        }
+    }
+
+    private void FinalizeQuitConfirmation(QuitConfirmationScope scope)
+    {
+        if (scope.Errors.Count != 0)
+        {
+            dispatcher.ReportCoverageFailure(scope.Errors[0]);
+            return;
+        }
+        if (scope.Prompt is null || scope.ChoiceLabels.Count != 2 ||
+            !scope.ChoiceLabels.Keys.Order().SequenceEqual([0, 1]))
+        {
+            dispatcher.ReportCoverageFailure(
+                "Title Quit confirmation did not capture one prompt and localized choice keys 0 and 1.");
+            return;
+        }
+        if (scope.Focus.Count == 0)
+        {
+            dispatcher.ReportCoverageFailure(
+                "Title Quit confirmation did not capture an authoritative final focused manager.");
+            return;
+        }
+        // The Quit factory first builds nested prompt UI, then creates the two
+        // choices and finally focuses their manager. Restrict correlation to
+        // that final audited focus assignment so nested prompt bindings cannot
+        // contaminate the choice transaction.
+        var initialFocus = scope.Focus[^1];
+        var manager = initialFocus.Manager;
+        var bindings = scope.Bindings.Where(binding => binding.Manager == manager).ToArray();
+        if (bindings.Length != 2 ||
+            bindings.Select(binding => binding.Key).Distinct().Order().SequenceEqual([0, 1]) is false ||
+            bindings.Any(binding => !scope.Controls.Contains(binding.Control)))
+        {
+            dispatcher.ReportCoverageFailure(
+                $"Title Quit final manager correlated {bindings.Length} choice bindings with keys " +
+                $"[{string.Join(",", bindings.Select(binding => binding.Key).Order())}], not exact keys 0 and 1.");
+            return;
+        }
+        if (bindings.All(binding => binding.Key != initialFocus.Key))
+        {
+            dispatcher.ReportCoverageFailure(
+                "Title Quit confirmation did not capture one authoritative initial choice.");
+            return;
+        }
+
+        var ordered = bindings.OrderBy(binding => binding.Key).ToArray();
+        var choices = new ReadOnlyCollection<string>(ordered
+            .Select(binding => new string(scope.ChoiceLabels[binding.Key].AsSpan()))
+            .ToArray());
+        var indexByKey = new ReadOnlyDictionary<int, int>(ordered
+            .Select((binding, index) => (binding.Key, index))
+            .ToDictionary(item => item.Key, item => item.index));
+        var selectedIndex = indexByKey[initialFocus.Key];
+        var confirmation = new TitleQuitConfirmation(
+            manager,
+            new string(scope.Prompt.AsSpan()),
+            choices,
+            indexByKey);
+        lock (titleGate)
+        {
+            if (titleInteraction != TitleInteraction.Menu || scope.Epoch != activeEpoch)
+            {
+                dispatcher.ReportCoverageFailure(
+                    "Title Quit confirmation completed outside the active title menu lifecycle.");
+                return;
+            }
+            activeQuitConfirmation = confirmation;
+        }
+        dispatcher.Publish(new ConfirmationOpened(
+            confirmation.Prompt,
+            confirmation.Choices,
+            selectedIndex));
     }
 
     private void PublishCurrentFocus(nuint manager)
@@ -766,7 +1074,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         dispatcher.Publish(new FocusChanged(item.Label, item.Position, item.Count, Disabled: false));
     }
 
-    private TitleMenuItem? CaptureActivationBeforeOriginal(
+    private TitleActivation? CaptureActivationBeforeOriginal(
         nuint closure,
         nuint eventTypePointer,
         nuint actionPointer)
@@ -808,7 +1116,7 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
             return null;
         }
 
-        return item;
+        return new TitleActivation(item, action);
     }
 
     private bool TryCaptureActiveEpoch(out int epoch)
@@ -877,6 +1185,9 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         return true;
     }
 
+    private bool TryReadExactVtable(nuint instance, uint expectedRva) =>
+        instance != 0 && TryReadPointer(instance, out var vtable) && vtable == imageBase + expectedRva;
+
     private bool TryReadInt32(nuint address, out int value)
     {
         Span<byte> bytes = stackalloc byte[4];
@@ -889,6 +1200,9 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         value = BinaryPrimitives.ReadInt32LittleEndian(bytes);
         return true;
     }
+
+    private static string FormatException(Exception exception) =>
+        $"{exception.GetType().Name}: {exception.Message}";
 
     private static IHookRegistration CreateRegistration(
         HookId id,
@@ -903,6 +1217,30 @@ public sealed class StartupTitleHookSet : IHookActivationObserver
         public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
             prepare(build, boundary);
     }
+
+    private sealed record TitleActivation(TitleMenuItem Item, int Action);
+
+    private sealed record QuitBinding(nuint Manager, nuint Control, int Key);
+
+    private sealed record QuitFocus(nuint Manager, int Key);
+
+    private sealed class QuitConfirmationScope(StartupTitleHookSet owner, int epoch)
+    {
+        public StartupTitleHookSet Owner { get; } = owner;
+        public int Epoch { get; } = epoch;
+        public string? Prompt { get; set; }
+        public HashSet<nuint> Controls { get; } = [];
+        public Dictionary<int, string> ChoiceLabels { get; } = [];
+        public List<QuitBinding> Bindings { get; } = [];
+        public List<QuitFocus> Focus { get; } = [];
+        public List<string> Errors { get; } = [];
+    }
+
+    private sealed record TitleQuitConfirmation(
+        nuint Manager,
+        string Prompt,
+        IReadOnlyList<string> Choices,
+        IReadOnlyDictionary<int, int> IndexByKey);
 
     private enum TitleInteraction
     {

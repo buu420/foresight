@@ -41,10 +41,35 @@ public static class SteamSettingsCapture
         int captureGeneration,
         IReadOnlyList<SteamSettingsValueObservation>? valueObservations,
         out SteamSettingsSnapshot snapshot,
+        out string diagnostic) =>
+        TryCreateSnapshot(
+            memory,
+            imageBase,
+            root,
+            captureGeneration,
+            valueObservations,
+            renderedRowCount: null,
+            out snapshot,
+            out diagnostic);
+
+    public static bool TryCreateSnapshot(
+        IReadableMemory? memory,
+        nuint imageBase,
+        nuint root,
+        int captureGeneration,
+        IReadOnlyList<SteamSettingsValueObservation>? valueObservations,
+        int? renderedRowCount,
+        out SteamSettingsSnapshot snapshot,
         out string diagnostic)
     {
         try
         {
+            if (renderedRowCount is < 0 or > MaximumRowCount)
+            {
+                snapshot = null!;
+                diagnostic = $"Steam Settings rendered row count {renderedRowCount} is outside 0 through {MaximumRowCount}.";
+                return false;
+            }
             if (!SettingsCaptureMemory.TryCloneBounded(
                     valueObservations,
                     MaximumRowCount,
@@ -61,6 +86,7 @@ public static class SteamSettingsCapture
                 root,
                 captureGeneration,
                 capturedValueObservations,
+                renderedRowCount,
                 out snapshot,
                 out diagnostic);
         }
@@ -78,6 +104,7 @@ public static class SteamSettingsCapture
         nuint root,
         int captureGeneration,
         IReadOnlyList<SteamSettingsValueObservation> valueObservations,
+        int? renderedRowCount,
         out SteamSettingsSnapshot snapshot,
         out string diagnostic)
     {
@@ -146,7 +173,7 @@ public static class SteamSettingsCapture
         }
 
         var expectedCategoryCount = context == SteamSettingsContext.InGame ? 6 : 4;
-        var expectedDescriptorCount = context == SteamSettingsContext.InGame ? 4 : 2;
+        var expectedDescriptorCount = context == SteamSettingsContext.InGame ? 4 : 3;
         if (categoryVector.Count != expectedCategoryCount || descriptorVector.Count != expectedDescriptorCount)
         {
             diagnostic = $"Steam Settings {context} requires {expectedCategoryCount} categories and {expectedDescriptorCount} ordinary descriptors; observed {categoryVector.Count} and {descriptorVector.Count}.";
@@ -201,7 +228,8 @@ public static class SteamSettingsCapture
                     $"Steam Settings category {index} help",
                     guards,
                     out var help,
-                    out diagnostic))
+                    out diagnostic,
+                    allowBlank: true))
             {
                 return false;
             }
@@ -286,6 +314,11 @@ public static class SteamSettingsCapture
         int? focusedSubcontrol;
         if (mode == SteamSettingsMode.Categories)
         {
+            if (renderedRowCount.HasValue && renderedRowCount.Value != 0)
+            {
+                diagnostic = "Steam Settings category mode cannot contain rendered page rows.";
+                return false;
+            }
             if (valueObservations.Count != 0)
             {
                 diagnostic = "Steam Settings category mode cannot consume stale page value observations.";
@@ -354,12 +387,20 @@ public static class SteamSettingsCapture
             guards.Add(new SettingsMemoryGuard(activeDescriptorAddress, descriptorBytes.AsSpan(descriptorOffset, DescriptorStride).ToArray(), "Steam Settings active descriptor"));
             guards.Add(new SettingsMemoryGuard(rowVector.Begin, rowBytes, "Steam Settings active rows"));
 
-            var rows = new SteamSettingsRowSnapshot[rowVector.Count];
+            var visibleRowCount = renderedRowCount ?? rowVector.Count;
+            if (visibleRowCount <= 0 || visibleRowCount > rowVector.Count)
+            {
+                diagnostic = $"Steam Settings rendered row count {visibleRowCount} is not a nonempty prefix of its {rowVector.Count} backing rows.";
+                return false;
+            }
+
+            var rows = new SteamSettingsRowSnapshot[visibleRowCount];
             var consumedObservations = new HashSet<SteamSettingsValueObservation>();
             for (var index = 0; index < rows.Length; index++)
             {
                 if (!TryCaptureRow(
                         memory,
+                        context,
                         captureGeneration,
                         root,
                         activePage,
@@ -446,6 +487,7 @@ public static class SteamSettingsCapture
 
     private static bool TryCaptureRow(
         IReadableMemory memory,
+        SteamSettingsContext context,
         int captureGeneration,
         nuint root,
         int activePage,
@@ -505,6 +547,55 @@ public static class SteamSettingsCapture
             observation.RootAddress == root &&
             observation.PageIndex == activePage &&
             observation.RowAddress == rowAddress).ToArray();
+        var renderedAction = matching.Where(observation => observation.RenderedActionValue is not null).ToArray();
+        if (renderedAction.Length != 0)
+        {
+            var renderedObservation = renderedAction[0];
+            if (matching.Length != 1 || renderedAction.Length != 1 || context != SteamSettingsContext.Title ||
+                activePage != 0 || index != 1 || values.Count == 0 ||
+                string.IsNullOrWhiteSpace(renderedObservation.RenderedActionValue) ||
+                !SettingsCaptureMemory.FitsX86Address(renderedObservation.ValueSourceAddress) ||
+                help.Count != 1 && help.Count != values.Count)
+            {
+                diagnostic = "Steam Settings title Resolution row did not have one exact rendered action-value observation.";
+                return false;
+            }
+
+            var matchingValueIndices = values
+                .Select((candidate, valueIndex) => (candidate, valueIndex))
+                .Where(entry => string.Equals(
+                    entry.candidate,
+                    renderedObservation.RenderedActionValue,
+                    StringComparison.Ordinal))
+                .Select(entry => entry.valueIndex)
+                .ToArray();
+            int? renderedSelectedIndex = matchingValueIndices.Length == 1 ? matchingValueIndices[0] : null;
+            if (help.Count != 1 && renderedSelectedIndex is null)
+            {
+                diagnostic = "Steam Settings title Resolution help could not be correlated with its rendered value.";
+                return false;
+            }
+            if (!SettingsCaptureMemory.TryAddX86(rowAddress, RowSetterOffset, out var renderedSetterAddress))
+            {
+                diagnostic = "Steam Settings title Resolution setter-object address crosses x86 memory.";
+                return false;
+            }
+
+            consumedObservations.Add(renderedObservation);
+            row = new SteamSettingsRowSnapshot(
+                index,
+                SteamSettingsRowKind.Action,
+                label,
+                help,
+                values,
+                renderedSelectedIndex,
+                renderedObservation.RenderedActionValue,
+                rowAddress,
+                renderedSetterAddress,
+                null);
+            diagnostic = string.Empty;
+            return true;
+        }
         if (values.Count == 0)
         {
             if (matching.Length != 0 || help.Count != 1)

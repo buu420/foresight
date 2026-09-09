@@ -50,6 +50,15 @@ public enum HookId
     SteamSettingsResolutionCallback,
     SteamSettingsConfirmationBuilderA,
     SteamSettingsConfirmationBuilderB,
+    SteamSettingsLicensePageBuilder,
+    SteamSettingsConfirmationCallbackA,
+    SteamSettingsConfirmationCallbackB,
+    SteamSettingsControllerBuilder,
+    SteamSettingsControllerRowRefresh,
+    SteamSettingsControllerCallback,
+    SteamSettingsKeyboardBuilder,
+    SteamSettingsKeyboardRowRefresh,
+    SteamSettingsKeyboardCallback,
     MenuNodeConfigConstructor,
     MenuNodeConfigBuilder,
     MenuNodeConfigDestructor,
@@ -62,6 +71,7 @@ public enum HookId
     TouchSettingsConfirmationCallbackB,
     SteamSettingsCategoryLabelCallSite,
     SteamSettingsRowLabelCallSite,
+    SteamSettingsTitleResolutionValueLabelCallSite,
     SteamSettingsSelectedValueLabelCallSite,
     SteamSettingsResolutionHeadingLabelCallSite,
     SteamSettingsResolutionEntryLabelCallSite,
@@ -332,6 +342,12 @@ public delegate void SteamSettingsSetterInvokerDelegate(nint setter, int newInde
 public delegate void SteamSettingsNestedBuilderDelegate(nint root);
 
 [Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsLicensePageBuilderDelegate(nint root, int pageIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsRowRefreshDelegate(nint context, int rowIndex);
+
+[Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint MenuNodeConfigConstructorDelegate(nint root);
 
 [Function(CallingConventions.MicrosoftThiscall)]
@@ -393,6 +409,9 @@ public delegate void TopMenuActionDispatcherDelegate(nint context);
 
 [Function(CallingConventions.Cdecl)]
 public delegate void NativeCallSiteProbeDelegate();
+
+[Function(CallingConventions.Cdecl)]
+public delegate void SteamSettingsRenderedValueProbeDelegate(nint text);
 
 // Callable wrapper for the audited std::function<int()>::_Do_call target. Reloaded
 // supplies the x86 thiscall-to-managed wrapper; the target object is passed in ECX.

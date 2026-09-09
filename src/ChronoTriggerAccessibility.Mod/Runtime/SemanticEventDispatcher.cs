@@ -10,8 +10,9 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
     private readonly IModLog log;
     private readonly IAccessibleFatalError fatalError;
     private readonly object gate = new();
+    private readonly HashSet<string> reportedCoverageFailures = new(StringComparer.Ordinal);
     private IRuntimePrismSession? session;
-    private int coverageFailureReported;
+    private bool fatalCoverageWindowShown;
 
     public SemanticEventDispatcher(IModLog log, IAccessibleFatalError fatalError)
     {
@@ -77,16 +78,21 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
     public void ReportCoverageFailure(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        if (Interlocked.Exchange(ref coverageFailureReported, 1) != 0)
-        {
-            return;
-        }
-
         var accessibleMessage = $"Chrono Trigger accessibility error: {message}";
+        var showFatalWindow = false;
         try
         {
             lock (gate)
             {
+                if (!reportedCoverageFailures.Add(accessibleMessage))
+                {
+                    return;
+                }
+                if (!fatalCoverageWindowShown)
+                {
+                    fatalCoverageWindowShown = true;
+                    showFatalWindow = true;
+                }
                 log.Error(accessibleMessage);
                 session?.Output(accessibleMessage, interrupt: true);
             }
@@ -101,6 +107,11 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
             {
                 // Continue to the independent native accessible sink.
             }
+        }
+
+        if (!showFatalWindow)
+        {
+            return;
         }
 
         try

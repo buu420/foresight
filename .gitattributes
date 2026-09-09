@@ -1,0 +1,2 @@
+# The deployment manifest is verified byte-for-byte across checkouts.
+src/ChronoTriggerAccessibility.Mod/ModConfig.json text eol=lf

@@ -1072,9 +1072,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         var enabled = new bool[5];
         for (var index = 0; index < 5; index++)
         {
-            if (!TryReadInt32(scope.Pending.Node + 0x2E4u + (nuint)(index * 8), out var available))
+            if (!TryReadByte(scope.Pending.Node + 0x2E4u + (nuint)(index * 8), out var available) ||
+                available is not 0 and not 1)
             {
-                FailCoverage($"Extras Hub availability for position {index} is unreadable.");
+                FailCoverage($"Extras Hub availability byte for position {index} is unreadable or invalid.");
                 return;
             }
             enabled[index] = available != 0;
@@ -2034,6 +2035,18 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             return false;
         }
         value = BinaryPrimitives.ReadInt32LittleEndian(bytes);
+        return true;
+    }
+
+    private bool TryReadByte(nuint address, out byte value)
+    {
+        Span<byte> bytes = stackalloc byte[1];
+        if (!memory.TryRead(address, bytes))
+        {
+            value = 0;
+            return false;
+        }
+        value = bytes[0];
         return true;
     }
 

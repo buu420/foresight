@@ -87,16 +87,16 @@ public sealed class Mod : ModBase
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(movieTimeline);
 
-        var newGame = new NewGameHookSet(hookFactory, wrapperFactory, memory, dispatcher);
         var sharedFanout = new SharedNativeHookFanoutFactory(
             hookFactory,
-            newGame,
             dispatcher.ReportCoverageFailure);
+        var newGame = new NewGameHookSet(sharedFanout, wrapperFactory, memory, dispatcher);
         var startupTitle = new StartupTitleHookSet(
             sharedFanout,
             memory,
             dispatcher,
             movieTimeline);
+        sharedFanout.ConfigureObservers([startupTitle, newGame]);
         var registrations = startupTitle.Registrations.Concat(newGame.Registrations).ToArray();
         var installer = new ReloadedHookInstaller(registrations, [startupTitle, newGame]);
         return new AccessibilityComposition(startupTitle, newGame, installer);
@@ -126,15 +126,22 @@ public sealed class Mod : ModBase
         var touchSettings = new TouchSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var topMenu = new TopMenuHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
 
-        // Root shared-hook owners are constructed only after the complete, ordered observer
-        // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
-        sharedFanout.ConfigureObservers([newGame, extras, steamSettings, touchSettings, topMenu]);
-
         var startupTitle = new StartupTitleHookSet(
             sharedFanout,
             memory,
             dispatcher,
-            movieTimeline);
+            movieTimeline,
+            titleActionCompleted: action =>
+            {
+                if (action == 5)
+                {
+                    steamSettings.FlushDeferredPresentation();
+                }
+            });
+
+        // Root shared-hook owners are constructed only after the complete, ordered observer
+        // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
+        sharedFanout.ConfigureObservers([startupTitle, newGame, extras, steamSettings, touchSettings, topMenu]);
         var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)

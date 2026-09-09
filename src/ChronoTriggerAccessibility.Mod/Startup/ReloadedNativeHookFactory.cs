@@ -140,6 +140,29 @@ public static class NativeCallSiteProbeAssembly
     }
 }
 
+/// <summary>
+/// Passes the intercepted call site's EDX text argument directly to a managed
+/// cdecl observer while preserving the original flags and caller-saved state.
+/// </summary>
+public static class EdxCallSiteProbeAssembly
+{
+    public static IReadOnlyList<string> Build(RuntimeAsmHookAssemblyContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return new ReadOnlyCollection<string>(
+        [
+            "use32",
+            "pushfd",
+            new string(context.PushCdeclCallerSavedRegisters.AsSpan()),
+            "push edx",
+            new string(context.AbsoluteCallMnemonic.AsSpan()),
+            "add esp, 4",
+            new string(context.PopCdeclCallerSavedRegisters.AsSpan()),
+            "popfd",
+        ]);
+    }
+}
+
 public sealed class ReloadedNativeHookFactory :
     IRuntimeNativeHookFactory,
     IRuntimeNativeFunctionWrapperFactory,

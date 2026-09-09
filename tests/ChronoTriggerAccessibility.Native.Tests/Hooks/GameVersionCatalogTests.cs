@@ -108,6 +108,7 @@ public sealed class GameVersionCatalogTests
     {
         { HookId.SteamSettingsCategoryLabelCallSite, "Steam Settings category label call site", 0x1EFD44, 0x1EFD49, 0x2400B0, "E867030500" },
         { HookId.SteamSettingsRowLabelCallSite, "Steam Settings row label call site", 0x1F091D, 0x1F0922, 0x2400B0, "E88EF70400" },
+        { HookId.SteamSettingsTitleResolutionValueLabelCallSite, "Steam Settings title-resolution value label call site", 0x1F0AB4, 0x1F0AB9, 0x2400B0, "E8F7F50400" },
         { HookId.SteamSettingsSelectedValueLabelCallSite, "Steam Settings selected-value label call site", 0x1F0D05, 0x1F0D0A, 0x2400B0, "E8A6F30400" },
         { HookId.SteamSettingsResolutionHeadingLabelCallSite, "Steam Settings resolution heading label call site", 0x1FA41A, 0x1FA41F, 0x2400B0, "E8915C0400" },
         { HookId.SteamSettingsResolutionEntryLabelCallSite, "Steam Settings resolution entry label call site", 0x1FA9C0, 0x1FA9C5, 0x2400B0, "E8EB560400" },
@@ -142,12 +143,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredTwoUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredTwelveUniqueContracts()
     {
-        Assert.Equal(102, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(102, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(112, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

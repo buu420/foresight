@@ -7,6 +7,7 @@ namespace ChronoTriggerAccessibility.Mod.NewGame;
 public interface ISharedNativeHookObserver
 {
     void AfterTextManagerGetMsg(nint textManager, nint result, int fileId, int messageId, nint returned) { }
+    void AfterOpeTextResolver(nint resolver, nint result, int bank, int messageId, nint returned) { }
     void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned) { }
     void AfterFocusSet(nint manager, int managerKey) { }
     void AfterCustomButtonConstructed(nint storage, nint returned) { }
@@ -82,6 +83,10 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
         {
             HookId.TextManagerGetMsg when typeof(TDelegate) == typeof(TextManagerGetMsgDelegate) =>
                 CastHook<TDelegate, TextManagerGetMsgDelegate>(CreateTextHook((TextManagerGetMsgDelegate)(Delegate)detour, address)),
+            HookId.OpeTextResolver when typeof(TDelegate) == typeof(OpeTextResolverDelegate) =>
+                CastHook<TDelegate, OpeTextResolverDelegate>(CreateOpeTextHook(
+                    (OpeTextResolverDelegate)(Delegate)detour,
+                    address)),
             HookId.MenuTextLabelFactory when typeof(TDelegate) == typeof(MenuTextLabelFactoryDelegate) =>
                 CastHook<TDelegate, MenuTextLabelFactoryDelegate>(CreateMenuLabelHook(
                     (MenuTextLabelFactoryDelegate)(Delegate)detour, address)),
@@ -94,7 +99,7 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
             HookId.TouchTopMenuDeletingDestructor when typeof(TDelegate) == typeof(TouchTopMenuDeletingDestructorDelegate) =>
                 CastHook<TDelegate, TouchTopMenuDeletingDestructorDelegate>(CreateTouchDeletingDestructorHook(
                     (TouchTopMenuDeletingDestructorDelegate)(Delegate)detour, address)),
-            HookId.TextManagerGetMsg or HookId.MenuTextLabelFactory or HookId.NsMenuFocusSetter or HookId.NsMenuCustomButtonConstructor or
+            HookId.TextManagerGetMsg or HookId.OpeTextResolver or HookId.MenuTextLabelFactory or HookId.NsMenuFocusSetter or HookId.NsMenuCustomButtonConstructor or
                 HookId.NsMenuControlBinder or HookId.TouchTopMenuDeletingDestructor =>
                 throw new InvalidOperationException($"Shared hook {id} was requested with incompatible delegate {typeof(TDelegate).FullName}."),
             _ => inner.CreateHook(id, detour, address),
@@ -110,6 +115,19 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
             return returned;
         };
         return Root(HookId.TextManagerGetMsg, fanout, address);
+    }
+
+    private IHook<OpeTextResolverDelegate> CreateOpeTextHook(OpeTextResolverDelegate root, nuint address)
+    {
+        OpeTextResolverDelegate fanout = (resolver, result, bank, messageId) =>
+        {
+            var returned = root(resolver, result, bank, messageId);
+            ObserveAll(
+                "Ope localized text resolver",
+                observer => observer.AfterOpeTextResolver(resolver, result, bank, messageId, returned));
+            return returned;
+        };
+        return Root(HookId.OpeTextResolver, fanout, address);
     }
 
     private IHook<MenuTextLabelFactoryDelegate> CreateMenuLabelHook(

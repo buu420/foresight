@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$Rebuild,
-    [string]$SourceDirectory = 'C:\Users\User\AppData\Local\Temp\prism-source-research',
-    [string]$ReviewedArtifact = 'G:\SteamLibrary\steamapps\common\Chrono Trigger\accessibility-mod\.build\prism-dist-win32\bin\prism.dll'
+    [string]$SourceDirectory = (Join-Path ([System.IO.Path]::GetTempPath()) 'prism-source-research'),
+    [string]$ReviewedArtifact = (Join-Path $PSScriptRoot '..\.build\prism-dist-win32\bin\prism.dll')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,7 +27,7 @@ Get-Content -LiteralPath (Join-Path $SourceDirectory 'README.md')
 
 if ($Rebuild) {
     $buildDirectory = Join-Path $SourceDirectory 'build-win32-release'
-    $vsWhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+    $vsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $vsInstall = (& $vsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
     if (-not $vsInstall) { throw 'Visual Studio 2022 C++ x86 tools are not installed.' }
     $msvcDirectory = Get-ChildItem -LiteralPath (Join-Path $vsInstall 'VC\Tools\MSVC') -Directory |

@@ -13,7 +13,59 @@ public sealed class SteamSettingsCaptureTests
     private const nuint ImageBase = 0x400000;
 
     [Fact]
-    public void CapturesTitleCategoryModeWithFourCategoriesAndTwoOrdinaryDescriptors()
+    public void TitleCategoriesKeepVisibleLabelsWhenNativeHelpIsEmpty()
+    {
+        var fixture = new SteamFixture(categoryMode: true, categoryKey: 2);
+        WriteInlineString(fixture.Categories, 2 * 0x30 + 0x18, string.Empty);
+
+        Assert.True(fixture.TryCapture(out var snapshot, out var diagnostic), diagnostic);
+        Assert.Equal("Cat 2", snapshot.Categories[2].Label);
+        Assert.Empty(snapshot.Categories[2].Help);
+        Assert.Equal(2, snapshot.FocusedCategoryIndex);
+    }
+
+    [Fact]
+    public void ResolutionActionUsesItsRenderedSizeWithoutRequiringAVectorMatch()
+    {
+        var fixture = new SteamFixture(rows:
+        [
+            new("Screen Mode", ["Choose mode"], ["Windowed", "Fullscreen"], 0),
+            new("Screen Size", ["Choose size"], ["Default", "1280x720"], 0),
+        ], focusKey: 10);
+        fixture.Observations[1] = fixture.Observations[1] with
+        {
+            ValueSourceAddress = 0x60000,
+            RenderedActionValue = "3440x1440 [21:9]",
+        };
+
+        Assert.True(fixture.TryCapture(out var snapshot, out var diagnostic), diagnostic);
+        var resolution = snapshot.Page!.Rows[1];
+        Assert.Equal(SteamSettingsRowKind.Action, resolution.Kind);
+        Assert.Equal("3440x1440 [21:9]", resolution.Value);
+        Assert.Null(resolution.SelectedIndex);
+        Assert.Equal(1, snapshot.FocusedRowIndex);
+    }
+
+    [Fact]
+    public void HiddenResolutionRowDoesNotChangeTheVisibleReturnControlKey()
+    {
+        var fixture = new SteamFixture(rows:
+        [
+            new("Screen Mode", ["Choose mode"], ["Windowed", "Fullscreen"], 0),
+            new("Screen Size", ["Choose size"], ["Default", "1280x720"], 0),
+        ], focusKey: 10);
+        fixture.Observations.RemoveAt(1);
+
+        Assert.True(SteamSettingsCapture.TryCreateSnapshot(
+            fixture.Memory, ImageBase, SteamFixture.RootAddress, SteamFixture.CaptureGeneration,
+            fixture.Observations, renderedRowCount: 1, out var snapshot, out var diagnostic), diagnostic);
+        Assert.Single(snapshot.Page!.Rows);
+        Assert.Equal(SteamSettingsFocusKind.ReturnToCategories, snapshot.FocusKind);
+        Assert.Equal(10, snapshot.Page.ReturnControl.Key);
+    }
+
+    [Fact]
+    public void CapturesTitleCategoryModeWithFourCategoriesAndThreeOrdinaryDescriptors()
     {
         var fixture = new SteamFixture(context: 1, categoryMode: true, categoryKey: 3);
 
@@ -21,10 +73,10 @@ public sealed class SteamSettingsCaptureTests
         Assert.Equal(SteamSettingsContext.Title, snapshot.Context);
         Assert.Equal(SteamSettingsMode.Categories, snapshot.Mode);
         Assert.Equal(4, snapshot.Categories.Count);
-        Assert.Equal(2, snapshot.DescriptorCount);
+        Assert.Equal(3, snapshot.DescriptorCount);
         Assert.Equal(
             [SteamSettingsCategoryKind.OrdinaryPage, SteamSettingsCategoryKind.OrdinaryPage,
-                SteamSettingsCategoryKind.SpecialAction, SteamSettingsCategoryKind.SpecialAction],
+                SteamSettingsCategoryKind.OrdinaryPage, SteamSettingsCategoryKind.SpecialAction],
             snapshot.Categories.Select(category => category.Kind));
         Assert.Equal(SteamSettingsFocusKind.Category, snapshot.FocusKind);
         Assert.Equal(3, snapshot.FocusedCategoryIndex);
@@ -185,6 +237,7 @@ public sealed class SteamSettingsCaptureTests
         Assert.True(new SteamFixture(context: 1, categoryMode: true).TryCapture(out _, out var titleError), titleError);
         Assert.True(new SteamFixture(context: 0, categoryMode: true).TryCapture(out _, out var gameError), gameError);
         AssertSteamFailure(new SteamFixture(context: 1, categoryMode: true, categoryCount: 6, descriptorCount: 4), _ => { }, "title counts");
+        AssertSteamFailure(new SteamFixture(context: 1, categoryMode: true, descriptorCount: 2), _ => { }, "missing title Licenses descriptor");
         AssertSteamFailure(new SteamFixture(context: 0, categoryMode: true, categoryCount: 4, descriptorCount: 2), _ => { }, "game counts");
     }
 
@@ -220,7 +273,6 @@ public sealed class SteamSettingsCaptureTests
     public void RejectsBlankMalformedUnreadableAndInconsistentLocalizedSteamText()
     {
         AssertSteamFailure(new SteamFixture(), fixture => WriteInlineString(fixture.Categories, 0, " "), "category label blank");
-        AssertSteamFailure(new SteamFixture(), fixture => WriteInlineString(fixture.Categories, 0x18, " "), "category help blank");
         AssertSteamFailure(new SteamFixture(), fixture => WriteInlineString(fixture.Rows, 0, " "), "row label blank");
         AssertSteamFailure(new SteamFixture(), fixture => WriteInvalidInlineString(fixture.Rows, 0), "row label malformed");
         AssertSteamFailure(new SteamFixture(), fixture => fixture.Memory.Remove(fixture.HelpAddresses[0]), "help unreadable");
@@ -858,7 +910,7 @@ internal sealed class SteamFixture
     {
         rows ??= [new("Display", ["Choose display"], ["Low", "High"], 0)];
         categoryCount ??= context == 0 ? 6 : 4;
-        descriptorCount ??= context == 0 ? 4 : 2;
+        descriptorCount ??= context == 0 ? 4 : 3;
         Root = new byte[0x340];
         Descriptors = new byte[descriptorCount.Value * 0x0C];
         Categories = new byte[categoryCount.Value * 0x30];

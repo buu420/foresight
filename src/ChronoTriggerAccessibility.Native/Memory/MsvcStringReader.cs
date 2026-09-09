@@ -67,8 +67,16 @@ public sealed class MsvcStringReader
 
     public static MsvcStringReader ForCurrentProcess() => new(new CurrentProcessReadableMemory());
 
-    public bool TryRead(nuint stringAddress, out string value, out string error)
+    public bool TryRead(nuint stringAddress, out string value, out string error) =>
+        TryRead(stringAddress, MaximumByteLength, out value, out error);
+
+    public bool TryRead(
+        nuint stringAddress,
+        int maximumByteLength,
+        out string value,
+        out string error)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumByteLength);
         value = string.Empty;
         error = string.Empty;
 
@@ -86,9 +94,10 @@ public sealed class MsvcStringReader
 
         var length = BinaryPrimitives.ReadUInt32LittleEndian(layout[0x10..]);
         var capacity = BinaryPrimitives.ReadUInt32LittleEndian(layout[0x14..]);
-        if (length > MaximumByteLength)
+        if (length > (uint)maximumByteLength)
         {
-            error = $"MSVC string length {length} exceeds the 4,096-byte safety limit.";
+            var formattedLimit = maximumByteLength.ToString("N0", CultureInfo.InvariantCulture);
+            error = $"MSVC string length {length} exceeds the {formattedLimit}-byte safety limit.";
             return false;
         }
 

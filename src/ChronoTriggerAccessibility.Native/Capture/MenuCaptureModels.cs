@@ -48,7 +48,8 @@ public sealed record SteamSettingsValueObservation(
     nuint RootAddress,
     int PageIndex,
     nuint RowAddress,
-    nuint ValueSourceAddress);
+    nuint ValueSourceAddress,
+    string? RenderedActionValue = null);
 
 public sealed class SteamSettingsCategorySnapshot
 {

@@ -27,7 +27,7 @@ public sealed class SemanticEventDispatcherTests
     }
 
     [Fact]
-    public void RequiredCaptureFailureIsSpokenLoggedAndReportedOnlyOnce()
+    public void DistinctCaptureFailuresAreSpokenOnceEachAndShareOneFatalWindow()
     {
         var log = new RecordingLog();
         var fatal = new RecordingFatal();
@@ -36,12 +36,15 @@ public sealed class SemanticEventDispatcherTests
         dispatcher.Attach(session);
 
         dispatcher.ReportCoverageFailure("Title focus source is unavailable.");
-        dispatcher.ReportCoverageFailure("A repeated failure must be suppressed.");
+        dispatcher.ReportCoverageFailure("Title focus source is unavailable.");
+        dispatcher.ReportCoverageFailure("Settings focus source is unavailable.");
+        dispatcher.ReportCoverageFailure("Settings focus source is unavailable.");
 
-        var output = Assert.Single(session.Outputs);
-        Assert.True(output.Interrupt);
-        Assert.Contains("Title focus source is unavailable", output.Text, StringComparison.Ordinal);
-        Assert.Single(log.Errors);
+        Assert.Equal(2, session.Outputs.Count);
+        Assert.All(session.Outputs, output => Assert.True(output.Interrupt));
+        Assert.Contains("Title focus source is unavailable", session.Outputs[0].Text, StringComparison.Ordinal);
+        Assert.Contains("Settings focus source is unavailable", session.Outputs[1].Text, StringComparison.Ordinal);
+        Assert.Equal(2, log.Errors.Count);
         Assert.Single(fatal.Messages);
     }
 

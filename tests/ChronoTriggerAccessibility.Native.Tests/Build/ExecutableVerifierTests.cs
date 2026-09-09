@@ -8,7 +8,22 @@ namespace ChronoTriggerAccessibility.Native.Tests.Build;
 
 public sealed class ExecutableVerifierTests
 {
-    private const string InstalledExecutable = @"G:\SteamLibrary\steamapps\common\Chrono Trigger\Chrono Trigger.exe";
+    // Find the installed game from either the primary checkout or a nested
+    // worktree without weakening the executable-identity tests.
+    private static readonly string InstalledExecutable =
+        Path.Combine(FindGameRoot(), "Chrono Trigger.exe");
+
+    private static string FindGameRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Chrono Trigger.exe")))
+                return directory.FullName;
+            directory = directory.Parent;
+        }
+        throw new InvalidOperationException("Could not locate the installed game above the test directory.");
+    }
 
     [Fact]
     public void InstalledExecutable_HasExactSupportedIdentityAndHookBytesInExecutableText()

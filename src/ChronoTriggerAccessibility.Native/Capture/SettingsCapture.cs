@@ -286,7 +286,8 @@ internal static class SettingsCaptureMemory
         string name,
         ICollection<SettingsMemoryGuard> guards,
         out string value,
-        out string diagnostic)
+        out string diagnostic,
+        bool allowBlank = false)
     {
         value = string.Empty;
         if (capturedLayout.Length < MsvcStringReader.LayoutSize || !FitsX86Range(address, MsvcStringReader.LayoutSize))
@@ -332,7 +333,7 @@ internal static class SettingsCaptureMemory
             diagnostic = $"{name} is invalid: {error}";
             return false;
         }
-        if (string.IsNullOrWhiteSpace(value))
+        if (!allowBlank && string.IsNullOrWhiteSpace(value))
         {
             diagnostic = $"{name} is blank.";
             return false;
