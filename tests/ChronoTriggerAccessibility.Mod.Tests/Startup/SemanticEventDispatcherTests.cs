@@ -9,6 +9,41 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Startup;
 public sealed class SemanticEventDispatcherTests
 {
     [Fact]
+    public void CaptureDiagnosticIsLoggedWithoutSpeechStateChangesOrFatalWindow()
+    {
+        var log = new RecordingLog();
+        var fatal = new RecordingFatal();
+        var session = new RecordingPrismSession();
+        ISemanticEventDispatcher dispatcher = new SemanticEventDispatcher(log, fatal);
+        dispatcher.Attach(session);
+        var generation = dispatcher.Generation;
+
+        dispatcher.RecordDiagnostic("Name confirmation trace: controls=1, rendered=1");
+
+        Assert.Equal("Name confirmation trace: controls=1, rendered=1", Assert.Single(log.Infos));
+        Assert.Equal(generation, dispatcher.Generation);
+        Assert.Empty(session.Outputs);
+        Assert.Empty(log.Errors);
+        Assert.Empty(fatal.Messages);
+    }
+
+    [Fact]
+    public void CaptureDiagnosticLogFailureDoesNotEscapeOrReachSpeech()
+    {
+        var fatal = new RecordingFatal();
+        var session = new RecordingPrismSession();
+        var log = new ThrowingLog();
+        ISemanticEventDispatcher dispatcher = new SemanticEventDispatcher(log, fatal);
+        dispatcher.Attach(session);
+
+        Assert.Null(Record.Exception(() => dispatcher.RecordDiagnostic("Name confirmation trace")));
+
+        Assert.Equal(1, log.Attempts);
+        Assert.Empty(session.Outputs);
+        Assert.Empty(fatal.Messages);
+    }
+
+    [Fact]
     public void SemanticEventReachesPrismWithInterruptFlagAndExactDiagnostics()
     {
         var log = new RecordingLog();
@@ -106,5 +141,16 @@ public sealed class SemanticEventDispatcherTests
     {
         public List<string> Messages { get; } = [];
         public void Show(string message) => Messages.Add(message);
+    }
+
+    private sealed class ThrowingLog : IModLog
+    {
+        public int Attempts { get; private set; }
+        public void Info(string message)
+        {
+            Attempts++;
+            throw new IOException("Diagnostic sink unavailable.");
+        }
+        public void Error(string message) => throw new IOException("Diagnostic sink unavailable.");
     }
 }

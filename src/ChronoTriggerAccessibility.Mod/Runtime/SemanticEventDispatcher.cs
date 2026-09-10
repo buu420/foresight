@@ -75,6 +75,18 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
         }
     }
 
+    public void RecordDiagnostic(string message)
+    {
+        try
+        {
+            log.Info(message);
+        }
+        catch (Exception)
+        {
+            // Diagnostic-only output must not change speech or escape to the game.
+        }
+    }
+
     public void ReportCoverageFailure(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);

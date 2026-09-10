@@ -40,6 +40,7 @@ public interface ISemanticEventDispatcher
     void Detach(IRuntimePrismSession session);
     void Publish(AccessibilityEvent accessibilityEvent);
     void ReportCoverageFailure(string message);
+    void RecordDiagnostic(string message) { }
 }
 
 public interface IRuntimeHookInstaller

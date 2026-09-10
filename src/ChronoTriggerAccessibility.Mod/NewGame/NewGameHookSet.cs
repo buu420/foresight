@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using ChronoTriggerAccessibility.Core.NewGame;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Reloaded;
@@ -73,6 +74,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
     private bool pendingDirectEntryGridClosed;
     private nuint activeDirectEntryOwner;
     private nuint activeDirectEntryTarget;
+    // Visible across threads only for diagnostics. Capture still requires the
+    // original thread-owned scope; this must never become a fallback data source.
+    private ConfirmationTrace? confirmationTrace;
 
     public NewGameHookSet(
         IRuntimeNativeHookFactory hookFactory,
@@ -149,6 +153,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             hooksActive = false;
             activeEpoch = unchecked(activeEpoch + 1);
             ClearRuntimeState();
+            Interlocked.Exchange(ref confirmationTrace, null);
             if (ReferenceEquals(threadCaptureScope?.Owner, this))
             {
                 threadCaptureScope = null;
@@ -163,7 +168,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         int messageId,
         nint returned)
     {
-        _ = textManager;
+        TraceConfirmationCallback("TextManagerGetMsg", textManager, result, fileId, messageId, returned);
         try
         {
             if (!TryCaptureActiveEpoch(out _) || GetOwnedThreadScope() is not { } scope)
@@ -180,6 +185,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
 
     public void AfterFocusSet(nint manager, int managerKey)
     {
+        TraceConfirmationCallback("FocusSet", manager, key0: managerKey);
         try
         {
             if (!TryCaptureActiveEpoch(out var epoch))
@@ -227,6 +233,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
 
     public void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned)
     {
+        TraceConfirmationCallback("MenuTextLabelFactory", position, text, fontSize, returned: returned);
         _ = position;
         _ = anchor;
         if (!TryCaptureActiveEpoch(out _) ||
@@ -289,6 +296,8 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 () =>
                 {
                     var returned = original()(resolver, result, bank, messageId);
+                    TraceConfirmationCallback("OpeTextResolver", resolver, result, bank, messageId, returned,
+                        SharedNativeHookFanoutFactory.IsTextManagerGetMsgActive);
                     if (!SharedNativeHookFanoutFactory.IsTextManagerGetMsgActive &&
                         TryCaptureActiveEpoch(out _) && GetOwnedThreadScope() is { } scope)
                     {
@@ -752,6 +761,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                     string? decodedName = null;
                     string? decodeError = null;
                     CaptureScope? scope = null;
+                    ConfirmationTrace? trace = null;
                     if (instrument)
                     {
                         try
@@ -770,6 +780,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                         try
                         {
                             scope = BeginScope(CaptureKind.NameConfirmation);
+                            trace = StartConfirmationTrace(scope, scene, length, capacity);
                         }
                         catch (Exception exception)
                         {
@@ -777,9 +788,11 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                         }
                     }
 
+                    var nativeReturned = false;
                     try
                     {
                         original()(scene, word0, word1, word2, word3, length, capacity);
+                        nativeReturned = true;
                     }
                     finally
                     {
@@ -787,6 +800,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                         {
                             EndScope(scope);
                         }
+                        FinishConfirmationTrace(trace, nativeReturned);
                     }
 
                     if (instrument)
@@ -815,7 +829,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 "nsMenu CustomButton constructor",
                 () =>
                 {
+                    TraceConfirmationCallback("CustomButton.enter", storage);
                     var returned = original()(storage);
+                    TraceConfirmationCallback("CustomButton.return", storage, returned: returned);
                     if (TryCaptureActiveEpoch(out _) &&
                         GetOwnedThreadScope() is { Kind: CaptureKind.NameConfirmation } scope)
                     {
@@ -861,6 +877,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 () =>
                 {
                     original()(manager, focusableState, managerKey);
+                    TraceConfirmationCallback("ControlBinder", manager, focusableState, managerKey);
                     if (TryCaptureActiveEpoch(out _) && GetOwnedThreadScope() is { } scope &&
                         scope.Kind is CaptureKind.NameEntry or CaptureKind.NameConfirmation)
                     {
@@ -1444,7 +1461,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             scope.ConfirmationControlLabels.Count != 2)
         {
             FailCoverage(
-                "Name confirmation did not produce exactly two CustomButton controls with correlated rendered labels.");
+                "Name confirmation did not produce exactly two CustomButton controls with correlated rendered labels. " +
+                $"Captured {scope.ConstructedControls.Count} controls and {scope.ConfirmationControlLabels.Count} rendered labels; " +
+                $"a label is pending: {scope.PendingConfirmationControl != 0}.");
             return;
         }
         if (!TryGetScopeText(scope, NameInputCapture.ConfirmationPromptTextKey, out var prompt))
@@ -2238,6 +2257,74 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         return true;
     }
 
+    private ConfirmationTrace? StartConfirmationTrace(CaptureScope scope, nint scene, uint length, uint capacity)
+    {
+        try
+        {
+            var trace = new ConfirmationTrace(scope);
+            Volatile.Write(ref confirmationTrace, trace);
+            TraceConfirmationCallback("Builder.begin", scene, key0: unchecked((int)length), key1: unchecked((int)capacity));
+            return trace;
+        }
+        catch (Exception)
+        {
+            Interlocked.Exchange(ref confirmationTrace, null);
+            return null;
+        }
+    }
+
+    private void TraceConfirmationCallback(
+        string eventName, nint receiver, nint data = 0, int key0 = 0, int key1 = 0,
+        nint returned = 0, bool suppressed = false)
+    {
+        var trace = Volatile.Read(ref confirmationTrace);
+        if (trace is null) return;
+        try
+        {
+            var scope = GetOwnedThreadScope();
+            var matches = ReferenceEquals(scope, trace.Scope);
+            // Never inspect another thread's mutable capture collections.
+            var counts = matches
+                ? $"; constructed={scope!.ConstructedControls.Count}; rendered={scope.ConfirmationControlLabels.Count}; pending=0x{scope.PendingConfirmationControl:X}; errors={scope.Errors.Count}"
+                : string.Empty;
+            trace.Record(
+                $"event={eventName}; thread={Environment.CurrentManagedThreadId}; scopeMatch={matches}; scope={scope?.Kind.ToString() ?? "none"}; " +
+                $"active={Volatile.Read(ref hooksActive)}; epoch={Volatile.Read(ref activeEpoch)}; faulted={Volatile.Read(ref faulted)}; " +
+                $"receiver=0x{(nuint)receiver:X}; data=0x{(nuint)data:X}; key0={key0}; key1={key1}; returned=0x{(nuint)returned:X}; suppressed={suppressed}{counts}");
+        }
+        catch (Exception)
+        {
+            // Tracing must never affect native forwarding or semantic capture.
+        }
+    }
+
+    private void FinishConfirmationTrace(ConfirmationTrace? trace, bool nativeReturned)
+    {
+        if (trace is null) return;
+        Interlocked.CompareExchange(ref confirmationTrace, null, trace);
+        try
+        {
+            var scope = trace.Scope;
+            var summary =
+                $"nativeReturned={nativeReturned}; constructed={scope.ConstructedControls.Count}; rendered={scope.ConfirmationControlLabels.Count}; " +
+                $"localized={scope.ConfirmationLocalizedLabels.Count}; pending=0x{scope.PendingConfirmationControl:X}; " +
+                $"bindings={scope.Bindings.Count}; focus={scope.FocusObservations.Count}; errors={scope.Errors.Count}; " +
+                $"controls=[{string.Join(",", scope.ConstructedControls.Take(8).Select(control => $"0x{control:X}"))}]; " +
+                $"labels=[{string.Join(",", scope.ConfirmationControlLabels.Take(8).Select(pair => $"0x{pair.Key:X}:{TraceText(pair.Value)}"))}]; " +
+                $"keys=[{string.Join(",", scope.Text.Keys.Take(16).Select(key => $"{key.Bank:X}/{key.MessageId:X}"))}]; " +
+                $"bound=[{string.Join(",", scope.Bindings.Take(8).Select(item => $"0x{item.Manager:X}/{item.Key}/0x{item.Control:X}"))}]; " +
+                $"focused=[{string.Join(",", scope.FocusObservations.Take(8).Select(item => $"0x{item.Manager:X}/{item.Key}"))}]; " +
+                $"failures=[{string.Join(",", scope.Errors.Take(4).Select(TraceText))}]";
+            dispatcher.RecordDiagnostic(trace.Finish(summary));
+        }
+        catch (Exception)
+        {
+            // The original returned (or threw) already; diagnostics cannot alter that outcome.
+        }
+    }
+
+    private static string TraceText(string text) => JsonSerializer.Serialize(text[..Math.Min(text.Length, 160)]);
+
     private CaptureScope BeginScope(CaptureKind kind)
     {
         if (threadCaptureScope is not null)
@@ -2519,6 +2606,38 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         public string Name { get; } = name;
         public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
             prepare(build, boundary);
+    }
+
+    private sealed class ConfirmationTrace(CaptureScope scope)
+    {
+        private const int MaximumEntries = 64;
+        private readonly object gate = new();
+        private readonly List<string> entries = new(MaximumEntries);
+        private int dropped;
+        private bool finished;
+
+        public CaptureScope Scope { get; } = scope;
+
+        public void Record(string message)
+        {
+            lock (gate)
+            {
+                if (finished) return;
+                if (entries.Count < MaximumEntries) entries.Add(message);
+                else dropped++;
+            }
+        }
+
+        public string Finish(string summary)
+        {
+            lock (gate)
+            {
+                finished = true;
+                return "Name confirmation trace (0.2.5):" + Environment.NewLine +
+                    string.Join(Environment.NewLine, entries.Select((entry, index) => $"{index + 1}: {entry}")) +
+                    Environment.NewLine + $"Summary: {summary}; dropped={dropped}";
+            }
+        }
     }
 
     private sealed class CaptureScope(NewGameHookSet owner, CaptureKind kind)

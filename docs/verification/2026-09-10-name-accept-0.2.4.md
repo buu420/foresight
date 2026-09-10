@@ -1,5 +1,10 @@
 # Name Entry and Accept version 0.2.4
 
+Subsequent player test: the current name correctly read as Crono and the naming
+actions read, but Accept still failed the two-control/two-rendered-label guard.
+See the [0.2.5 diagnostic follow-up](2026-09-10-name-confirmation-0.2.5.md).
+The verification below records the original 0.2.4 delivery state.
+
 This release corrects the name reader's use of the saved grid-entry name and
 captures confirmation choices from the text actually passed to the label
 renderer. The previous version could announce an empty name while the game

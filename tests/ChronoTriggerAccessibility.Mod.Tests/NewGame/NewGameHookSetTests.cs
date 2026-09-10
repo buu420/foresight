@@ -1653,6 +1653,158 @@ public sealed class NewGameHookSetTests
         Assert.Contains("exact distinct keys", dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    public void ConfirmationDiagnosticDistinguishesMissingConstructorAndRendererCallbacks(
+        int constructors, int rendered)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        ConfigureDiagnosticConfirmation(factory, set, memory, constructors, rendered);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        var failure = Assert.Single(dispatcher.Failures);
+        Assert.Contains($"Captured {constructors} controls and {rendered} rendered labels", failure);
+        Assert.Empty(dispatcher.Events);
+        var trace = Assert.Single(dispatcher.Diagnostics);
+        Assert.Contains($"constructed={constructors}; rendered={rendered}", trace);
+        Assert.Contains("nativeReturned=True", trace);
+        Assert.Contains("bindings=2; focus=1; errors=0", trace);
+        Assert.Contains("23/DA", trace);
+        Assert.Contains("event=OpeTextResolver", trace);
+        Assert.Contains("event=FocusSet", trace);
+    }
+
+    [Fact]
+    public void ConfirmationDiagnosticRecordsUnownedCallbacksWithoutUsingThemForCapture()
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        ConfigureDiagnosticConfirmation(factory, set, memory, 2, 2, beforeChoices: () =>
+        {
+            Exception? workerFailure = null;
+            var worker = new Thread(() => workerFailure = Record.Exception(() =>
+            {
+                factory.GetDetour<NsMenuCustomButtonConstructorDelegate>(HookId.NsMenuCustomButtonConstructor)(0xDEAD);
+                set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(1), 2, 12, 3);
+                set.AfterTextManagerGetMsg(4, (nint)ConfirmationTextAddress(1), 0x41, 0x11,
+                    (nint)ConfirmationTextAddress(1));
+            }));
+            worker.Start();
+            Assert.True(worker.Join(TimeSpan.FromSeconds(5)), "Diagnostic worker did not finish.");
+            Assert.Null(workerFailure);
+        });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Empty(dispatcher.Failures);
+        var confirmation = Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal(new[] { "Yes", "No" }, confirmation.Choices);
+        var trace = Assert.Single(dispatcher.Diagnostics);
+        Assert.Contains("scopeMatch=False; scope=none", trace);
+        Assert.Contains("receiver=0xDEAD", trace);
+        Assert.Contains("event=TextManagerGetMsg", trace);
+        Assert.Contains("constructed=2; rendered=2", trace);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfirmationDiagnosticIsBoundedAndClearedEvenWhenNativeBuilderThrows(bool throws)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var nativeCalls = 0;
+        factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
+            (_, _, _, _, _, _, _) =>
+            {
+                nativeCalls++;
+                for (var index = 0; index < 200; index++)
+                    set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(1), 2, 12, 3);
+                if (throws) throw new InvalidOperationException("Simulated native wrapper failure.");
+            });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Equal(1, nativeCalls);
+        var trace = Assert.Single(dispatcher.Diagnostics);
+        Assert.Equal(64, trace.Split('\n').Count(line => line.Contains("event=", StringComparison.Ordinal)));
+        Assert.Contains("dropped=137", trace);
+        Assert.Contains($"nativeReturned={!throws}", trace);
+        Assert.Empty(dispatcher.Events);
+        dispatcher.Diagnostics.Clear();
+        set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(1), 2, 12, 3);
+        factory.GetDetour<NsMenuCustomButtonConstructorDelegate>(HookId.NsMenuCustomButtonConstructor)(0xDEAD);
+        Assert.Empty(dispatcher.Diagnostics);
+        // A fresh naming scope also proves the thread-owned scope was cleared.
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        Assert.DoesNotContain(dispatcher.Failures, message => message.Contains("Nested New Game"));
+    }
+
+    [Fact]
+    public void ConfirmationDiagnosticSinkFailurePreservesNativeResultAndAccessibleChoices()
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher { ThrowOnDiagnostic = true };
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var forwarded = new List<uint[]>();
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Equal(words, Assert.Single(forwarded));
+        Assert.Equal(1, dispatcher.DiagnosticAttempts);
+        Assert.Empty(dispatcher.Failures);
+        Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+    }
+
     [Fact]
     public void ConfirmationForwardsSixWordNameAndCorrelatesConstructedControlsThroughBinderStates()
     {
@@ -2576,6 +2728,38 @@ public sealed class NewGameHookSetTests
             });
     }
 
+    private static void ConfigureDiagnosticConfirmation(
+        RecordingHookFactory factory, NewGameHookSet set, TestMemory memory,
+        int constructors, int rendered, Action? beforeChoices = null)
+    {
+        factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
+            (_, _, _, _, _, _, _) =>
+            {
+                var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
+                resolver(0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
+                // Native name-character labels precede both choices, and also use font 12.
+                for (var index = 0; index < 5; index++)
+                    set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(0), 2, 12, 3);
+                beforeChoices?.Invoke();
+                for (var index = 0; index < 2; index++)
+                {
+                    if (index < constructors)
+                        factory.GetDetour<NsMenuCustomButtonConstructorDelegate>(HookId.NsMenuCustomButtonConstructor)(
+                            (nint)(index == 0 ? ConfirmationControl0 : ConfirmationControl1));
+                    // The real builder reuses the same temporary string for both choices.
+                    memory.AddInlineString(ConfirmationTextAddress(1), index == 0 ? "Yes" : "No");
+                    if (index < rendered)
+                        set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(1), 2, 12, 3);
+                }
+                var binder = factory.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder);
+                binder((nint)ConfirmationManager, (nint)ConfirmationState0, 0);
+                binder((nint)ConfirmationManager, (nint)ConfirmationState1, 1);
+                set.AfterFocusSet((nint)ConfirmationManager, 1);
+                if (constructors == 3)
+                    factory.GetDetour<NsMenuCustomButtonConstructorDelegate>(HookId.NsMenuCustomButtonConstructor)(0xC5200);
+            });
+    }
+
     private static void AddFocusableState(TestMemory memory, nuint state, nuint control)
     {
         memory
@@ -2856,6 +3040,9 @@ public sealed class NewGameHookSetTests
         public int Generation => 0;
         public List<AccessibilityEvent> Events { get; } = [];
         public List<string> Failures { get; } = [];
+        public List<string> Diagnostics { get; } = [];
+        public bool ThrowOnDiagnostic { get; set; }
+        public int DiagnosticAttempts { get; private set; }
         public Action<AccessibilityEvent>? AfterPublish { get; set; }
         public bool ThrowOnPublish { get; set; }
         public int PublishAttempts { get; private set; }
@@ -2872,6 +3059,12 @@ public sealed class NewGameHookSetTests
             AfterPublish?.Invoke(accessibilityEvent);
         }
         public void ReportCoverageFailure(string message) => Failures.Add(message);
+        public void RecordDiagnostic(string message)
+        {
+            DiagnosticAttempts++;
+            if (ThrowOnDiagnostic) throw new IOException("Diagnostic sink unavailable.");
+            Diagnostics.Add(message);
+        }
     }
 
     private sealed class RecordingLog : IModLog
