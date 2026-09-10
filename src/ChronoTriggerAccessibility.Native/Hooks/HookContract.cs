@@ -126,6 +126,7 @@ public enum HookId
     CompactStatusMaximumValueCallSite,
     CompactStatusExtraLabelCallSite,
     StatusBarGlyphRendererCallSite,
+    FieldNavigationPadCallSite,
 }
 
 public enum X86CallingConvention
@@ -424,6 +425,9 @@ public delegate void NativeCallSiteProbeDelegate();
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void FieldOpcodeDispatcherDelegate(nint context, int opcode);
+
+[Function(CallingConventions.Cdecl)]
+public delegate uint FieldNavigationPadProbeDelegate(nint engine, uint originalPad);
 
 [Function(CallingConventions.Cdecl)]
 public delegate void SteamSettingsRenderedValueProbeDelegate(nint text);

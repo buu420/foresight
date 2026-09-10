@@ -5,6 +5,8 @@ using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Extras;
 using ChronoTriggerAccessibility.Mod.Intro;
 using ChronoTriggerAccessibility.Mod.NewGame;
+using ChronoTriggerAccessibility.Mod.Navigation;
+using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Settings;
@@ -120,6 +122,14 @@ public sealed class Mod : ModBase
 
         var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
         dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
+        var navigationSpeech = dispatcher;
+        var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic);
+        var navigation = new FieldNavigationRuntime(navigationSource.Capture, new NavigationKeyboard(),
+            NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
+            engine => navigationSource.Capture(engine), navigationSource.Reset);
+        var navigationHooks = new FieldNavigationHookSet(asmHookFactory, navigation.OnInput, navigation.Enable, navigation.Disable);
+        dispatcher = new NavigationDispatcher(dispatcher, navigation);
 
         var sharedFanout = new SharedNativeHookFanoutFactory(
             hookFactory,
@@ -156,6 +166,7 @@ public sealed class Mod : ModBase
             .Concat(topMenu.Registrations)
             .Concat(dialogue.Registrations)
             .Concat(introTrace.Registrations)
+            .Concat(navigationHooks.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -167,6 +178,7 @@ public sealed class Mod : ModBase
             topMenu,
             dialogue,
             introTrace,
+            navigationHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -178,6 +190,7 @@ public sealed class Mod : ModBase
             topMenu,
             dialogue,
             introTrace,
+            navigationHooks,
             installer);
     }
 
@@ -202,4 +215,5 @@ public sealed record CompleteAccessibilityComposition(
     TopMenuHookSet TopMenuHookSet,
     DialogueHookSet DialogueHookSet,
     IntroTraceHookSet IntroTraceHookSet,
+    FieldNavigationHookSet FieldNavigationHookSet,
     ReloadedHookInstaller Installer);

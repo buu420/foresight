@@ -1,8 +1,26 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. It combines the portable Reloaded loader with Settings, Extras, field-dialogue, and top-menu accessibility work, alongside startup, Control Descriptions, New Game settings, and character-name confirmation. The player passed naming and the opening through first control with 0.2.6. Version 0.2.8 accounts for the empty StatusBar line allocation that still caused a field-menu error in 0.2.7, while preserving the separately rendered line text. It retains the bounded New Game script recorder to establish timing for the requested intro descriptions; those descriptions are not enabled yet. Main menus, Settings, Extras, and quit confirmation were previously verified by the player.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.0 adds an initial field-navigation pass to startup, New Game setup, Settings, Extras, field dialogue, and top-menu accessibility. Main menus, Settings, Extras, quit confirmation, and New Game through first control were previously verified by the player. The latest menu-test log contained no accessibility errors. Intro audio descriptions are still pending.
 
-Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This integration is a test release: automated checks and exact native hook-byte verification do not establish that every screen works in a live session. Combat, inventory, shops, and map navigation remain outside the implemented coverage.
+Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Combat, the overworld, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
+
+## Field navigation
+
+Use these keys while controlling the party in a local field area, starting with Crono's room:
+
+| Keys | Action |
+|---|---|
+| U / O | Previous / next category: People, Exits, Interactable Objects |
+| J / L | Previous / next destination |
+| K | Repeat the selected destination, direction, and distance |
+| I | Start spoken route guidance while you move |
+| P | Start or stop automatic walking |
+
+Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object, use K to hear its direction, face it, and press the game's confirm button yourself.
+
+Targets come from the native interaction flags, current exit grid, and rendered unopened chests. People includes creatures such as cats. Appearance labels are deliberately general where the game supplies no name. Previously seen targets retain their last seen positions when outside the current view; hidden pickups and chest contents are not listed. Discovery is kept for the current field visit. The first pass uses the native camera window conservatively and may omit targets at the outer widescreen margins. The overworld and every field's special movement rules have not been implemented or tested.
+
+For the first live check, use O to find Exits, K to repeat, and I for guidance. Then test P, stop it with P, and verify that a direction key or opening the menu also stops it. The new navigation code has only been tested offline so far.
 
 It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 

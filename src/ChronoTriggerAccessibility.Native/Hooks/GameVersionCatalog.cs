@@ -340,6 +340,8 @@ public static class GameVersionCatalog
         Create(HookId.FieldOpcodeDispatcher, "Field event opcode dispatcher", 0x1619E0,
             "55 8B EC 8B 45 08 53 56 8B F1 57 3D FF 00 00 00",
             typeof(FieldOpcodeDispatcherDelegate), X86CallingConvention.MicrosoftThiscall),
+        CreateAssemblyCallSite(HookId.FieldNavigationPadCallSite,
+            "Field navigation input before dash predicate", 0x175A8D, "E8 FE 01 00 00"),
     ]);
 
     public static HookContract Get(HookId id) => Hooks.Single(hook => hook.Id == id);

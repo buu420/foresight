@@ -1,0 +1,89 @@
+using ChronoTriggerAccessibility.Core.Navigation;
+using ChronoTriggerAccessibility.Mod.Navigation;
+using Xunit;
+
+namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
+
+public sealed class FieldNavigationRuntimeTests
+{
+    [Fact]
+    public void GuidanceNeverInjectsInputAndWalkingOnlyAddsNativeDirectionBits()
+    {
+        var h = new Harness(); h.Enable();
+        Assert.Equal(0u, h.Press('I'));
+        Assert.Contains(h.Speech, s => s.Contains("Guidance to"));
+        Assert.Equal(0x100u, h.Press('P'));
+        Assert.Equal(0x100u, h.Tick());
+        Assert.Equal(0u, h.Press('P'));
+        Assert.Equal(0u, h.Tick());
+    }
+
+    [Theory]
+    [InlineData("foreground")]
+    [InlineData("gap")]
+    [InlineData("engine")]
+    [InlineData("menu")]
+    [InlineData("capture")]
+    [InlineData("manual")]
+    [InlineData("disable")]
+    public void EveryLossOfMovementAuthorityStopsWithoutAutomaticResumption(string cause)
+    {
+        var h = new Harness(); h.Enable(); Assert.Equal(0x100u, h.Press('P'));
+        switch (cause)
+        {
+            case "foreground": h.Foreground = false; break;
+            case "gap": h.Now += 1000; break;
+            case "engine": h.Engine = 2; break;
+            case "menu": h.Runtime.Suspend("menu opened"); break;
+            case "capture": h.FailCapture = true; break;
+            case "disable": h.Runtime.Disable(); break;
+        }
+        var original = cause == "manual" ? 0x800u : 0u;
+        Assert.Equal(original, h.Tick(original));
+        h.Foreground = true; h.FailCapture = false;
+        Assert.Equal(0u, h.Tick());
+        Assert.Equal(0u, h.Tick());
+    }
+
+    [Fact]
+    public void NoCaptureWorkIsDoneUntilRequestedAndFailuresRemainReviewable()
+    {
+        var h = new Harness(); h.Enable(); h.Tick();
+        Assert.Equal(0, h.Captures);
+        h.FailCapture = true;
+        Assert.Equal(0u, h.Press('K'));
+        Assert.Contains(h.Speech, s => s.Contains("unavailable"));
+        h.Tick(); Assert.Equal(1, h.Captures);
+    }
+
+    private sealed class Harness
+    {
+        public HashSet<int> Keys { get; } = [];
+        public List<string> Speech { get; } = [];
+        public bool Foreground = true;
+        public bool FailCapture;
+        public long Now;
+        public nint Engine = 1;
+        public int Captures;
+        public FieldNavigationRuntime Runtime { get; }
+        public Harness() => Runtime = new(_ =>
+        {
+            Captures++;
+            if (FailCapture) return null;
+            var point = new NavigationPoint(16, 0, 1);
+            return new("room", true, new(0, 0, 1), [new("person", "Person", NavigationCategory.People,
+                point, [point], true, false)], new Line());
+        }, new(Keys.Contains, () => Foreground), () => Foreground, () => Now, Speech.Add, _ => { });
+        public void Enable() { Runtime.Enable(); Tick(); }
+        public uint Tick(uint input = 0) { Now += 16; return Runtime.OnInput(Engine, input); }
+        public uint Press(int key) { Keys.Clear(); Tick(); Keys.Add(key); var value = Tick(); Keys.Clear(); return value; }
+    }
+
+    private sealed class Line : INavigationGraph
+    {
+        public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point)
+        {
+            if (point.X < 16) yield return point with { X = point.X + 4 };
+        }
+    }
+}
