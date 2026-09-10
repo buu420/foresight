@@ -4,7 +4,23 @@
 
 The user confirmed the Settings/resolution fix, including continued speech without a freeze after changing resolution. They then requested New Game and the intro, and explicitly selected the first milestone as **all New Game setup screens and the opening scene through first control of Crono**. They operate the game; Computer Use, synthetic input, launching, and closing the game are excluded.
 
-Version 0.2.0 is already deployed. This investigation has not changed its runtime. The integrated composition enables New Game and field-dialogue hooks, but the available runtime logs through the 18:17 session contain no New Game activation or New Game/dialogue presentation events. Automated coverage is not a substitute for this first live pass.
+The first investigation used deployed version 0.2.0. The player's subsequent 21:16 test reached Control Descriptions and exposed a duplicate text-capture error when advancing to New Game settings. The correction below is version 0.2.1. Opening dialogue and first control still require the player's next live pass.
+
+## First live failure and nested text correction
+
+The Reloaded log `2026-09-10 02.15.45 ~ Chrono Trigger.txt` records New Game activation and a complete `ControlDescriptionsPresented` at local 21:16:01, then `ControlDescriptionNextActivated` at 21:16:09 followed by `Localized text (3F,5) was captured more than once.` The launcher records a normal user-owned exit at 21:16:15, code 0.
+
+Claude traced the exact executable in Ghidra; Codex independently inspected the artifact and reproduced the failure using the combined Startup/New Game hook composition. `TextManagerGetMsg` at RVA `0x1B9110` calls `OpeTextResolver` at call site RVA `0x1B9150`, then removes the prefix through the first comma when present. The nested resolver returns a temporary raw string; the outer function returns the final string used by the caller. Capturing both as separate UI text records is incorrect even when their text happens to match.
+
+`ModeSelectSteam::init` requests 15 distinct row label/value/help keys. Its first three requests call Ope directly; its first TextManager request is `(3F,05)` at RVA `0x2A9DE8`, matching the first live failure. Ten of these requests use TextManager. The selected-help helpers at RVAs `0x2ABE60` and `0x2ABF20` make no additional localized-text requests.
+
+The shared TextManager detour now tracks its native call depth per thread and restores that depth in `finally`. New Game skips its nested Ope observation during that call, then captures the final TextManager result once. Direct Ope requests still capture normally. Actual duplicate requests, missing/unreadable strings, and name-choice control correlation retain their existing validation. Other menu observers are unchanged.
+
+Regression tests reproduce the native nesting with identical raw text and with a prefix removed in a separate final buffer. They require all three setup rows, selected values/help, Start and lower help, and subsequent native focus/value changes. Additional cases cover processed Yes/No text correlated to the correct controls, all 25 Control Descriptions records through TextManager, a separate duplicate request still failing without partial output, exception cleanup, and another thread's TextManager call not suppressing direct capture. The old code reproduced the exact `(3F,5)` error and the related name-choice correlation failure; the corrected code passed all 79 Mod New Game tests. Claude reviewed the fix and its native-call model; Codex added the Control Descriptions regression and documented the opt-in observation rule following that review.
+
+The final Release suite passed **699 tests, 0 failed**: Core 52, Native 397, Prism 8, Mod 242. Version **0.2.1** was deployed while the game was closed, with **25/25** deployment checks, **27/27** installed payload checksums, and both native executable hashes verified. Installed mod SHA-256: `2E41A507F37C7240A49FDB3E90D28CB0BEE2F535EC23CF3D50DFED19CEFBBA56`. Manifest SHA-256: `21A2DAC4154C4A3DEAD14CBE8AC94E10A1A8607A88A044FC34D36647D966ABB0`. Previous installation: `Accessibility\Backups\20260909-213542`. The existing IFEO redirect remains valid; no registration step is needed. Live verification past Control Descriptions remains pending.
+
+During packaging checks, main's ignored `.build/native` still contained August 18 executables. The previous integration worktree held the September 9 native build that exactly matched both installed executables; native sources had no changes since integration. Codex preserved the stale outputs under the research directory and restored these verified build artifacts into main before rerunning the complete suite. No launcher, installer, or registry behavior changed.
 
 ## Native entry flow
 
@@ -54,6 +70,8 @@ Artifacts are in `C:\Users\buu42\Documents\Codex\2026-09-09\chrono-trigger-intro
 - `ReviewNewGameNative.java`, `new-game-field-native-review.txt`, and `new-game-field-ghidra-console.log`: exact-build decompilation of the flow above. Earlier untyped/typed reports are retained for provenance; the field report supersedes them for call arguments.
 - `ReviewNameLifecycleClaude*.java` and `name-lifecycle-claude*.txt`: Claude's completed read-only callback, continuation, vtable, and teardown trace. In particular, the fourth and fifth reports contain the callback wrappers and lambda body discussed above.
 - `test-results/new-game-intro-baseline_*.trx`: Codex's focused test results.
+- `ReviewModeSelectTextClaude.java` and `mode-select-text-claude.txt`: wrapper/leaf relationship and exact Mode Select text call sites.
+- `test-results/nested-text-red_net9.0_20260909212820.trx`: three expected pre-fix failures and two controls passing. `nested-text-final_net9.0_20260909213431.trx`: all 79 Mod New Game tests passing. `new-game-0.2.1-final-release_*.trx`: the final 699-test suite.
 - `inspect_resources.py` and `resource-index.json`: read-only inventory of the installed `resources.bin` archive, whose decoded ARC1 directory contains 9,509 entries. Selected resources are extracted only into this research directory; game assets are unchanged and are not committed into the mod.
 
 The archive structure was cross-checked against [CTViewer's resource reader](https://github.com/GitExl/CTViewer/blob/main/src/filesystem/resourcesbin.rs) and [ChronoMod's resource reader](https://github.com/jimzrt/ChronoMod/blob/main/resourcebin.cpp). [CTViewer's dialogue documentation](https://github.com/GitExl/CTViewer/blob/main/docs/scene_scripts/dialogue.md) provides a comparison for PC message-table mapping and control tags; installed data and the exact native executable remain authoritative.

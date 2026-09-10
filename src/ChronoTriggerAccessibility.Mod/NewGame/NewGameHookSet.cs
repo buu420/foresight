@@ -235,7 +235,8 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 () =>
                 {
                     var returned = original()(resolver, result, bank, messageId);
-                    if (TryCaptureActiveEpoch(out _) && GetOwnedThreadScope() is { } scope)
+                    if (!SharedNativeHookFanoutFactory.IsTextManagerGetMsgActive &&
+                        TryCaptureActiveEpoch(out _) && GetOwnedThreadScope() is { } scope)
                     {
                         try
                         {

@@ -21,6 +21,16 @@ public interface ISharedNativeHookObserver
 /// </summary>
 public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
 {
+    [ThreadStatic]
+    private static int threadTextManagerDepth;
+
+    /// <summary>
+    /// Observers accepting the same key from both text entry points must skip the nested
+    /// Ope observation while this is true, then capture the processed TextManager result.
+    /// This is opt-in because other observers may intentionally accept disjoint key sets.
+    /// </summary>
+    internal static bool IsTextManagerGetMsgActive => threadTextManagerDepth != 0;
+
     private readonly IRuntimeNativeHookFactory inner;
     private readonly object observerGate = new();
     private readonly Action<string> reportFailure;
@@ -110,7 +120,18 @@ public sealed class SharedNativeHookFanoutFactory : IRuntimeNativeHookFactory
     {
         TextManagerGetMsgDelegate fanout = (textManager, result, fileId, messageId) =>
         {
-            var returned = root(textManager, result, fileId, messageId);
+            nint returned;
+            threadTextManagerDepth++;
+            try
+            {
+                // getMsg calls OpeTextResolver at RVA 0x1B9150, then processes its text.
+                // New Game must capture the final getMsg result instead of that nested raw text.
+                returned = root(textManager, result, fileId, messageId);
+            }
+            finally
+            {
+                threadTextManagerDepth--;
+            }
             ObserveAll("TextManager::getMsg", observer => observer.AfterTextManagerGetMsg(textManager, result, fileId, messageId, returned));
             return returned;
         };

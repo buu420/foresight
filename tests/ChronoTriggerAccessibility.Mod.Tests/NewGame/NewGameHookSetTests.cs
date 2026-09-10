@@ -332,8 +332,12 @@ public sealed class NewGameHookSetTests
         Assert.DoesNotContain(dispatcher.Events, item => item is ModeSelectPresented);
     }
 
-    [Fact]
-    public void ModeInitPublishesAllThreeRowsAndChangeRecapturesAuthoritativePostOriginalState()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ModeInitPublishesAllThreeRowsAndChangeRecapturesAuthoritativePostOriginalState(
+        bool useTextManager, bool postprocessText)
     {
         var memory = CreateModeMemory()
             .AddInt32(ModeScene + ModeSelectCapture.CompositeFocusOffset, 11)
@@ -341,14 +345,28 @@ public sealed class NewGameHookSetTests
             .AddPointer(0xB8000 + NewGameHookSet.ModeCallbackSceneOffset, ModeScene)
             .AddInt32(0xB8100 + NewGameHookSet.ManagerFocusKeyOffset, 11);
         var dispatcher = new RecordingDispatcher();
-        var factory = new RecordingHookFactory();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
         var wrappers = new RecordingWrapperFactory { Values = [1, 0, 1] };
         var initCalls = 0;
         var callbackCalls = 0;
+        var textCalls = 0;
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (manager, result, bank, messageId) =>
+            {
+                textCalls++;
+                var index = Array.IndexOf(EnumerateModeTextKeys().ToArray(),
+                    new LocalizedMessageKey(bank, messageId));
+                Assert.True(index >= 0);
+                var rawAddress = (nuint)result + 0x10000;
+                memory.AddInlineString(rawAddress, postprocessText ? $"key,Mode {index}" : $"Mode {index}");
+                factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                    manager, (nint)rawAddress, bank, messageId);
+                return result;
+            });
         factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
         {
             initCalls++;
-            EmitModeLocalizedText(factory);
+            EmitModeLocalizedText(factory, useTextManager);
             return 1;
         });
         factory.SetOriginal<ModeSelectCallbackDelegate>(HookId.ModeSelectCallback, (_, eventType, value) =>
@@ -359,17 +377,19 @@ public sealed class NewGameHookSetTests
             wrappers.Values[1] = 1;
             memory.AddInt32(ModeScene + ModeSelectCapture.CompositeFocusOffset, 20);
         });
-        var set = new NewGameHookSet(factory, wrappers, memory, dispatcher);
-        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
-        installer.PrepareAll(CreateBuild(), CreateBoundary());
-        installer.ActivateAll();
+        ActivateCombinedHooks(factory, wrappers, memory, dispatcher);
 
         Assert.Equal(1, factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)(
             (nint)ModeScene));
 
+        Assert.Empty(dispatcher.Failures);
         var presented = Assert.IsType<ModeSelectPresented>(Assert.Single(dispatcher.Events));
         Assert.Equal(3, presented.Rows.Count);
         Assert.Equal(11, presented.CompositeFocus);
+        Assert.Equal("Mode 15", presented.StartLabel);
+        Assert.Equal("Mode 16", presented.LowerHelp);
+        Assert.Equal(new[] { "Mode 0", "Mode 5", "Mode 10" }, presented.Rows.Select(row => row.Label));
+        Assert.Equal(new[] { "Mode 4", "Mode 8", "Mode 14" }, presented.Rows.Select(row => row.Help));
         Assert.Equal("Mode 2", presented.Rows[0].Value);
         Assert.Equal("Mode 6", presented.Rows[1].Value);
         Assert.Equal("Mode 12", presented.Rows[2].Value);
@@ -382,8 +402,116 @@ public sealed class NewGameHookSetTests
         Assert.Equal("Mode 7", changed.Rows[1].Value);
         Assert.Equal(1, initCalls);
         Assert.Equal(1, callbackCalls);
+        Assert.Equal(useTextManager ? 10 : 0, textCalls);
         Assert.Equal(6, wrappers.InvokedTargets.Count);
         Assert.Empty(dispatcher.Failures);
+    }
+
+    [Fact]
+    public void SeparateDuplicateModeTextRequestsStillFailBeforePublishingOrCallingGetters()
+    {
+        var memory = CreateModeMemory();
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        var wrappers = new RecordingWrapperFactory();
+        factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
+        {
+            EmitModeLocalizedText(factory);
+            factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                0x100, (nint)ModeTextAddress(3), 0x3F, 5);
+            return 1;
+        });
+        var set = new NewGameHookSet(factory, wrappers, memory, dispatcher);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+
+        Assert.Equal(1, factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)(
+            (nint)ModeScene));
+
+        Assert.Contains("(3F,5) was captured more than once", Assert.Single(dispatcher.Failures));
+        Assert.Empty(dispatcher.Events);
+        Assert.Empty(wrappers.InvokedTargets);
+    }
+
+    [Fact]
+    public void DirectModeTextCaptureResumesAfterTextManagerThrows()
+    {
+        var memory = CreateModeMemory();
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        var shared = new SharedNativeHookFanoutFactory(factory, dispatcher.Failures.Add);
+        var set = new NewGameHookSet(shared, new RecordingWrapperFactory(), memory, dispatcher);
+        shared.ConfigureObservers([set]);
+        var failure = new InvalidOperationException("simulated text failure");
+        shared.CreateHook<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (_, _, _, _) => throw failure, ImageBase + GameVersionCatalog.Get(HookId.TextManagerGetMsg).Rva);
+        factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
+        {
+            Assert.Same(failure, Assert.Throws<InvalidOperationException>(() =>
+                factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(0x100, 0, 0, 0)));
+            EmitModeLocalizedText(factory);
+            return 1;
+        });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+
+        Assert.Equal(1, factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)(
+            (nint)ModeScene));
+
+        Assert.Empty(dispatcher.Failures);
+        Assert.Equal(3, Assert.IsType<ModeSelectPresented>(Assert.Single(dispatcher.Events)).Rows.Count);
+    }
+
+    [Fact]
+    public void TextManagerOnAnotherThreadDoesNotSuppressDirectModeTextCapture()
+    {
+        var memory = CreateModeMemory();
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        var shared = new SharedNativeHookFanoutFactory(factory, dispatcher.Failures.Add);
+        var set = new NewGameHookSet(shared, new RecordingWrapperFactory(), memory, dispatcher);
+        shared.ConfigureObservers([set]);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        shared.CreateHook<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (_, result, _, _) =>
+            {
+                entered.Set();
+                Assert.True(release.Wait(TimeSpan.FromSeconds(5)), "Text worker was not released.");
+                return result;
+            }, ImageBase + GameVersionCatalog.Get(HookId.TextManagerGetMsg).Rva);
+        factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
+        {
+            EmitModeLocalizedText(factory);
+            return 1;
+        });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        Exception? workerFailure = null;
+        var worker = new Thread(() => workerFailure = Record.Exception(() =>
+            factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(0x100, 0, 0, 0)))
+        {
+            IsBackground = true,
+        };
+        worker.Start();
+        try
+        {
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)), "Text worker did not enter the native call.");
+            Assert.Equal(1, factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)(
+                (nint)ModeScene));
+        }
+        finally
+        {
+            release.Set();
+            Assert.True(worker.Join(TimeSpan.FromSeconds(5)), "Text worker did not finish.");
+        }
+
+        Assert.Null(workerFailure);
+        Assert.Empty(dispatcher.Failures);
+        Assert.Equal(3, Assert.IsType<ModeSelectPresented>(Assert.Single(dispatcher.Events)).Rows.Count);
     }
 
     [Fact]
@@ -1273,6 +1401,46 @@ public sealed class NewGameHookSetTests
         Assert.Contains("authoritative", dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ConfirmationCorrelatesEachChoiceOnceAfterTextManagerProcessesNestedResolverText()
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        ConfigureNameInit(factory);
+        var textCalls = 0;
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (manager, result, bank, messageId) =>
+            {
+                textCalls++;
+                var raw = messageId == 0x11 ? "key,Yes" : "key,No";
+                var rawAddress = (nuint)result + 0x10000;
+                memory.AddInlineString(rawAddress, raw);
+                factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                    manager, (nint)rawAddress, bank, messageId);
+                return result;
+            });
+        var forwarded = new List<uint[]>();
+        ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher,
+            set => ConfigureConfirmationBuilder(
+                factory, set, forwarded, extraBinding: false, useTextManager: true));
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Empty(dispatcher.Failures);
+        var confirmation = Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal("Use Crono?", confirmation.Prompt);
+        Assert.Equal(new[] { "Yes", "No" }, confirmation.Choices);
+        Assert.Equal(1, confirmation.SelectedIndex);
+        Assert.Equal(words, Assert.Single(forwarded));
+        Assert.Equal(2, textCalls);
+    }
+
     [Theory]
     [InlineData("null")]
     [InlineData("mismatch")]
@@ -1668,16 +1836,55 @@ public sealed class NewGameHookSetTests
         Assert.Empty(dispatcher.Failures);
     }
 
+    [Fact]
+    public void ControlDescriptionsCaptureAllTwentyFiveProcessedRecordsOnceThroughTextManager()
+    {
+        var memory = CreateControlMemory();
+        var reader = new MsvcStringReader(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        var textCalls = 0;
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (manager, result, bank, messageId) =>
+            {
+                textCalls++;
+                Assert.True(reader.TryRead((nuint)result, out var displayed, out var error), error);
+                var rawAddress = (nuint)result + 0x100000;
+                memory.AddHeapString(rawAddress, rawAddress + 0x10000, $"key,{displayed}");
+                factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                    manager, (nint)rawAddress, bank, messageId);
+                return result;
+            });
+        ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher,
+            set => ConfigureControlInit(factory, set, memory, useTextManager: true));
+
+        Assert.Equal(1, factory.GetDetour<OpeManualSceneInitDelegate>(HookId.OpeManualSceneInit)(
+            (nint)ControlScene));
+
+        Assert.Empty(dispatcher.Failures);
+        var presented = Assert.IsType<ControlDescriptionsPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal("Control Descriptions", presented.Title);
+        Assert.Equal("Next", presented.NextLabel);
+        Assert.Equal(Enumerable.Range(0, 25).Select(index => $"Text {index}"),
+            presented.Lines.SelectMany(line => line.VisibleTexts));
+        Assert.Equal(27, textCalls);
+    }
+
     private static void ConfigureControlInit(
         RecordingHookFactory factory,
         NewGameHookSet set,
         TestMemory memory,
-        Action? onOriginal = null)
+        Action? onOriginal = null,
+        bool useTextManager = false)
     {
         factory.SetOriginal<OpeManualSceneInitDelegate>(HookId.OpeManualSceneInit, _ =>
         {
             onOriginal?.Invoke();
-            var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
+            OpeTextResolverDelegate resolver = useTextManager
+                ? (manager, result, bank, messageId) =>
+                    factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                        manager, result, bank, messageId)
+                : factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
             resolver(0x100, 0x80000, 0x23, 0xD6);
             resolver(0x100, 0x80020, 0x23, 0xD5);
             for (var index = 0; index < ControlDescriptionCapture.RequiredMessageIds.Count; index++)
@@ -1795,13 +2002,22 @@ public sealed class NewGameHookSetTests
         return memory;
     }
 
-    private static void EmitModeLocalizedText(RecordingHookFactory factory)
+    private static void EmitModeLocalizedText(RecordingHookFactory factory, bool useTextManager = false)
     {
         var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
         var keys = EnumerateModeTextKeys().ToArray();
         for (var index = 0; index < keys.Length; index++)
         {
-            resolver(0x100, (nint)ModeTextAddress(index), keys[index].Bank, keys[index].MessageId);
+            var key = keys[index];
+            if (useTextManager && key.Bank != 0x23)
+            {
+                factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                    0x100, (nint)ModeTextAddress(index), key.Bank, key.MessageId);
+            }
+            else
+            {
+                resolver(0x100, (nint)ModeTextAddress(index), key.Bank, key.MessageId);
+            }
         }
     }
 
@@ -1911,7 +2127,8 @@ public sealed class NewGameHookSetTests
         RecordingHookFactory factory,
         NewGameHookSet set,
         List<uint[]> forwarded,
-        bool extraBinding)
+        bool extraBinding,
+        bool useTextManager = false)
     {
         factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
             (scene, word0, word1, word2, word3, length, capacity) =>
@@ -1923,9 +2140,25 @@ public sealed class NewGameHookSetTests
                 var binder = factory.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder);
 
                 constructor((nint)ConfirmationControl0);
-                resolver(0x100, (nint)ConfirmationTextAddress(1), 0x41, 0x11);
+                if (useTextManager)
+                {
+                    factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                        0x100, (nint)ConfirmationTextAddress(1), 0x41, 0x11);
+                }
+                else
+                {
+                    resolver(0x100, (nint)ConfirmationTextAddress(1), 0x41, 0x11);
+                }
                 constructor((nint)ConfirmationControl1);
-                resolver(0x100, (nint)ConfirmationTextAddress(2), 0x41, 0x12);
+                if (useTextManager)
+                {
+                    factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                        0x100, (nint)ConfirmationTextAddress(2), 0x41, 0x12);
+                }
+                else
+                {
+                    resolver(0x100, (nint)ConfirmationTextAddress(2), 0x41, 0x12);
+                }
                 resolver(0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState0, 0);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState1, 1);
@@ -2009,6 +2242,28 @@ public sealed class NewGameHookSetTests
         ExpectedDedicatedHooks.ToDictionary(
             id => id,
             id => ImageBase + GameVersionCatalog.Get(id).Rva));
+
+    private static NewGameHookSet ActivateCombinedHooks(
+        RecordingHookFactory factory,
+        RecordingWrapperFactory wrappers,
+        TestMemory memory,
+        RecordingDispatcher dispatcher,
+        Action<NewGameHookSet>? configure = null)
+    {
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva,
+            StartupTitleHookSet.SquareEnixSceneId);
+        var composition = ChronoTriggerAccessibility.Mod.Mod.CreateAccessibilityComposition(
+            factory, wrappers, memory, dispatcher, new OpeningMovieTimeline());
+        var ids = composition.StartupTitleHookSet.RequiredHookIds
+            .Concat(composition.NewGameHookSet.RequiredHookIds);
+        var build = new VerifiedBuild(ImageBase, ids.ToDictionary(
+            id => id, id => ImageBase + GameVersionCatalog.Get(id).Rva));
+        configure?.Invoke(composition.NewGameHookSet);
+        composition.Installer.PrepareAll(build, CreateBoundary());
+        composition.Installer.ActivateAll();
+        dispatcher.Events.Clear();
+        return composition.NewGameHookSet;
+    }
 
     private static UnmanagedBoundaryGuard CreateBoundary() =>
         new(new RecordingLog(), new RecordingFatal());
