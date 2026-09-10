@@ -30,6 +30,7 @@ public sealed class GameVersionCatalogTests
         { HookId.NameActionCallback, "Name action callback", 0x2C1760, "558BEC6AFF68FFD4770064A1000000005083EC70A1D0A07F0033C58945F05657", typeof(NameActionCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.NameDirectEntryActivation, "Name direct-entry activation", 0x2C1B50, "56578BF96A018B07C68090020000018B4F04E829DBFFFF33F60F1F8000000000", typeof(NameDirectEntryActivationDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.NameDirectEntryClose, "Name direct-entry close", 0x2C1BA0, "56578BF933F68B07C6809002000000908B47046A018B0C068B01FF90B8020000", typeof(NameDirectEntryCloseDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.NameGridRefresh, "Name character-grid refresh", 0x2C2A20, "558BEC6AFF68B061770064A1000000005083EC40A1D0A07F0033C58945F0535657508D45F464A300000000894DBC33FF", typeof(NameGridRefreshDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.GallerySceneSwitchNode, "GalleryScene::switchNode", 0x2A52B0, "558BEC6AFF6838AB770064A1000000005083EC64A1D0A07F", typeof(GallerySceneSwitchNodeDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.ExtrasHubOnEnter, "Extras Hub onEnter", 0x1DB570, "568BF1FF15AC5A7800FFB6CC0200008BCEE80A0000005EC3", typeof(ExtrasHubOnEnterDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.EndingLogOnEnter, "Ending Log onEnter", 0x1D3980, "568BF1FF15AC5A7800FFB6C80200008BCEE80A0000005EC3", typeof(EndingLogOnEnterDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -145,10 +146,10 @@ public sealed class GameVersionCatalogTests
     [Fact]
     public void HookCatalog_HasExactlyOneHundredTwelveUniqueContracts()
     {
-        Assert.Equal(112, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(112, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(113, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(113, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(113, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(113, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -273,6 +274,7 @@ public sealed class GameVersionCatalogTests
         AssertSignature<NameActionCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<NameDirectEntryActivationDelegate>(typeof(nint));
         AssertSignature<NameDirectEntryCloseDelegate>(typeof(nint));
+        AssertSignature<NameGridRefreshDelegate>(typeof(nint));
         AssertSignature<NsMenuControlBinderDelegate>(typeof(nint), typeof(nint), typeof(int));
     }
 

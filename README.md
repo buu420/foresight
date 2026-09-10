@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. It combines the portable Reloaded loader with Settings, Extras, field-dialogue, and top-menu accessibility work, alongside startup, Control Descriptions, New Game settings, and character-name confirmation. Version 0.2.1 corrects overlapping native text capture that caused an accessibility error when advancing from Control Descriptions to New Game settings.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. It combines the portable Reloaded loader with Settings, Extras, field-dialogue, and top-menu accessibility work, alongside startup, Control Descriptions, New Game settings, and character-name confirmation. Version 0.2.2 corrects New Game setting values and help, removes the temporary Equipment label from Start Game, and captures the naming grid's Accept label when the game draws it. It also validates the naming callbacks against their actual native invocation thunks.
 
 Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This integration is a test release: automated checks and exact native hook-byte verification do not establish that every screen works in a live session. Combat, inventory, shops, and map navigation remain outside the implemented coverage.
 

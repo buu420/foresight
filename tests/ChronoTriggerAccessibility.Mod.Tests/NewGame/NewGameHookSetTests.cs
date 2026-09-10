@@ -52,6 +52,7 @@ public sealed class NewGameHookSetTests
         HookId.NameActionCallback,
         HookId.NameDirectEntryActivation,
         HookId.NameDirectEntryClose,
+        HookId.NameGridRefresh,
     ];
 
     [Fact]
@@ -79,7 +80,7 @@ public sealed class NewGameHookSetTests
     }
 
     [Fact]
-    public void CombinedProductionCompositionPreparesExactlyTwentyOneHooksWithSingleSharedRegistrations()
+    public void CombinedProductionCompositionPreparesExactlyTwentyTwoHooksWithSingleSharedRegistrations()
     {
         var factory = new RecordingHookFactory(includeStartupOriginals: true);
         var wrappers = new RecordingWrapperFactory();
@@ -119,11 +120,11 @@ public sealed class NewGameHookSetTests
 
         composition.Installer.PrepareAll(build, CreateBoundary());
 
-        Assert.Equal(21, composition.Installer.PreparedHooks.Count);
-        Assert.Equal(21, factory.Created.Count);
+        Assert.Equal(22, composition.Installer.PreparedHooks.Count);
+        Assert.Equal(22, factory.Created.Count);
         Assert.Single(factory.Created, item => item.Id == HookId.TextManagerGetMsg);
         Assert.Single(factory.Created, item => item.Id == HookId.NsMenuFocusSetter);
-        Assert.Equal(21, factory.Created.Select(item => item.Id).Distinct().Count());
+        Assert.Equal(22, factory.Created.Select(item => item.Id).Distinct().Count());
 
         composition.Installer.ActivateAll();
         Assert.All(composition.Installer.PreparedHooks, hook => Assert.True(hook.IsActive));
@@ -173,7 +174,6 @@ public sealed class NewGameHookSetTests
                         new("Interface", "Gamepad", "Interface help"),
                     ],
                     "Start",
-                    "Lower help",
                     0));
                 memory.Remove((nuint)eventPointer).Remove((nuint)valuePointer);
             });
@@ -387,7 +387,6 @@ public sealed class NewGameHookSetTests
         Assert.Equal(3, presented.Rows.Count);
         Assert.Equal(11, presented.CompositeFocus);
         Assert.Equal("Mode 15", presented.StartLabel);
-        Assert.Equal("Mode 16", presented.LowerHelp);
         Assert.Equal(new[] { "Mode 0", "Mode 5", "Mode 10" }, presented.Rows.Select(row => row.Label));
         Assert.Equal(new[] { "Mode 4", "Mode 8", "Mode 14" }, presented.Rows.Select(row => row.Help));
         Assert.Equal("Mode 2", presented.Rows[0].Value);
@@ -402,7 +401,7 @@ public sealed class NewGameHookSetTests
         Assert.Equal("Mode 7", changed.Rows[1].Value);
         Assert.Equal(1, initCalls);
         Assert.Equal(1, callbackCalls);
-        Assert.Equal(useTextManager ? 10 : 0, textCalls);
+        Assert.Equal(useTextManager ? 11 : 0, textCalls);
         Assert.Equal(6, wrappers.InvokedTargets.Count);
         Assert.Empty(dispatcher.Failures);
     }
@@ -418,7 +417,7 @@ public sealed class NewGameHookSetTests
         {
             EmitModeLocalizedText(factory);
             factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
-                0x100, (nint)ModeTextAddress(3), 0x3F, 5);
+                0x100, (nint)ModeTextAddress(1), 0x3F, 5);
             return 1;
         });
         var set = new NewGameHookSet(factory, wrappers, memory, dispatcher);
@@ -432,6 +431,78 @@ public sealed class NewGameHookSetTests
         Assert.Contains("(3F,5) was captured more than once", Assert.Single(dispatcher.Failures));
         Assert.Empty(dispatcher.Events);
         Assert.Empty(wrappers.InvokedTargets);
+    }
+
+    [Theory]
+    [InlineData(0, "Battle Mode: ACTIVE. Time flows constantly while in battle. Left control, 1 of 4")]
+    [InlineData(10, "Graphics: Original. Play with graphics similar to the original pixel art. Left control, 2 of 4")]
+    [InlineData(20, "Interface: Gamepad/Keyboard. Easy gamepad/keyboard controls. Left control, 3 of 4")]
+    [InlineData(30, "Start Game, 4 of 4")]
+    public void ModeSelectNarratesNativeValueAndHelpWithoutTheConstructionPlaceholder(
+        int focus, string expected)
+    {
+        // Exact-build requests and visible English results, independent of TextContracts.
+        // The constructor's Equipment text is replaced by current-row help before presentation.
+        (int Bank, int Id, string Text)[] requests =
+        [
+            (0x23, 0x5A, "Battle Mode"),
+            (0x23, 0xC0, "Time flows constantly while in battle."),
+            (0x23, 0xC1, "Time freezes while you select techs or items."),
+            (0x3F, 0x05, "ACTIVE"),
+            (0x3F, 0x06, "WAIT"),
+            (0x3F, 0x31, "Graphics"),
+            (0x23, 0xC7, "Play with graphics supported by high-resolution displays."),
+            (0x23, 0xC6, "Play with graphics similar to the original pixel art."),
+            (0x3F, 0x32, "High Resolution"),
+            (0x3F, 0x33, "Original"),
+            (0x42, 0x1A, "Interface"),
+            (0x41, 0x55, "Easy touch pad/mouse controls."),
+            (0x41, 0x54, "Easy gamepad/keyboard controls."),
+            (0x42, 0x1C, "Touch Pad/Mouse"),
+            (0x42, 0x1D, "Gamepad/Keyboard"),
+            (0x23, 0xD7, "Start Game"),
+            (0x23, 0x20, "Equipment"),
+        ];
+        var memory = CreateModeMemory().AddInt32(ModeScene + ModeSelectCapture.CompositeFocusOffset, focus);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        var wrappers = new RecordingWrapperFactory { Values = [0, 1, 1] };
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (manager, result, bank, messageId) =>
+            {
+                factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                    manager, result, bank, messageId);
+                return result;
+            });
+        factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
+        {
+            for (var index = 0; index < requests.Length; index++)
+            {
+                var request = requests[index];
+                var address = 0xE0000u + (nuint)(index * 0x100);
+                memory.AddHeapString(address, address + 0x10000, request.Text);
+                if (request.Bank != 0x23 || request.Id == 0xD7)
+                {
+                    factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                        0x100, (nint)address, request.Bank, request.Id);
+                }
+                else
+                {
+                    factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                        0x100, (nint)address, request.Bank, request.Id);
+                }
+            }
+            return 1;
+        });
+        ActivateCombinedHooks(factory, wrappers, memory, dispatcher);
+
+        Assert.Equal(1, factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)(
+            (nint)ModeScene));
+
+        Assert.Empty(dispatcher.Failures);
+        var presented = Assert.IsType<ModeSelectPresented>(Assert.Single(dispatcher.Events));
+        var announcements = new NewGameNarrator().Apply(presented);
+        Assert.Equal(new[] { "New Game settings.", expected }, announcements.Select(item => item.Text));
     }
 
     [Fact]
@@ -680,6 +751,177 @@ public sealed class NewGameHookSetTests
         Assert.Equal(expectedInvocations, wrappers.InvokedTargets.Count);
         Assert.Single(dispatcher.Failures);
         Assert.DoesNotContain(dispatcher.Events, item => item is ModeSelectPresented);
+    }
+
+    [Fact]
+    public void NameInitUsesNativeInactiveGridAndDeferredLabels()
+    {
+        // The constructor creates only Defaults and Accept. The character-grid
+        // refresh runs later, after action 3 opens it, via the real _Do_call thunks.
+        var memory = CreateNameMemory(active: 0, page: -1, row: -1, column: -1)
+            .AddPointer(0xE1000 + 8, ImageBase + 0x2C5D90)
+            .AddPointer(0xE1100 + 8, ImageBase + 0x2C5D20)
+            .AddPointer(0xE1200 + 8, ImageBase + 0x2C5CE0);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory, includeGridAction: false);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+
+        var result = factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)(
+            (nint)NameScene);
+        factory.GetDetour<NameInputSceneUpdateDelegate>(HookId.NameInputSceneUpdate)(
+            (nint)NameScene, 0.016f);
+
+        Assert.Equal(1, result);
+        Assert.Empty(dispatcher.Failures);
+        Assert.Collection(Flatten(dispatcher.Events),
+            item => Assert.IsType<NameEntryPresented>(item),
+            item => Assert.Equal(new NameActionFocused("Defaults", 0, 3), item));
+    }
+
+    [Fact]
+    public void NameGridRefreshCapturesLaterAcceptThroughSharedTextAndReplacesItOnRedraw()
+    {
+        const nuint closure = 0xE0204;
+        const nuint actionClosure = 0xF0000;
+        var memory = CreateNameMemory(active: 0, page: -1)
+            .AddPointer(closure, 0xF1000)
+            .AddPointer(closure + 4, NameScene)
+            .AddPointer(actionClosure + NewGameHookSet.NameCallbackSceneOffset, NameScene)
+            .AddPointer(ImageBase + NameInputCapture.GridPointerTableRva + 87 * 4, 0xE2000)
+            .AddCString(0xE2000, string.Empty)
+            .AddInlineString(NameTextAddress(0), "Accept");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        ConfigureNameInit(factory, includeGridAction: false);
+        var refreshCalls = 0;
+        var wrapperCalls = 0;
+        factory.SetOriginal<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg,
+            (manager, result, bank, id) =>
+            {
+                wrapperCalls++;
+                factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+                    manager, result, bank, id);
+                return result;
+            });
+        factory.SetOriginal<NameGridRefreshDelegate>(HookId.NameGridRefresh, actualClosure =>
+        {
+            Assert.Equal((nint)closure, actualClosure);
+            refreshCalls++;
+            factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                0x100, (nint)NameTextAddress(0), 0x42, 0x08);
+        });
+        factory.SetOriginal<NameActionCallbackDelegate>(HookId.NameActionCallback, (_, _, _) =>
+        {
+            memory.AddByte(NameScene + NameInputCapture.ActiveOffset, 1)
+                .AddInt32(NameScene + NameInputCapture.PageOffset, 0);
+            factory.GetDetour<NameGridRefreshDelegate>(HookId.NameGridRefresh)((nint)closure);
+            memory.AddInt32(NameScene + NameInputCapture.RowOffset, 7)
+                .AddInt32(NameScene + NameInputCapture.ColumnOffset, 10);
+        });
+        ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+
+        factory.GetDetour<NameActionCallbackDelegate>(HookId.NameActionCallback)(
+            (nint)actionClosure, 0, 3);
+
+        Assert.Collection(Flatten(dispatcher.Events),
+            item => Assert.Equal(new NameGridVisibilityChanged(true), item),
+            item => Assert.Equal(new NameGridFocused("Accept", "Latin", 7, 10), item));
+        dispatcher.Events.Clear();
+        memory.AddInlineString(NameTextAddress(0), "Accepter");
+        factory.GetDetour<NameGridRefreshDelegate>(HookId.NameGridRefresh)((nint)closure);
+        // Copies must survive the native string's destruction or reuse.
+        memory.AddInlineString(NameTextAddress(0), "overwritten");
+        factory.GetDetour<NameInputSceneUpdateDelegate>(HookId.NameInputSceneUpdate)((nint)NameScene, 0.016f);
+        Assert.Equal(new NameGridFocused("Accepter", "Latin", 7, 10), Assert.Single(Flatten(dispatcher.Events)));
+        Assert.Equal(2, refreshCalls);
+        Assert.Equal(2, wrapperCalls);
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Theory]
+    [InlineData("missing label")]
+    [InlineData("wrong target")]
+    [InlineData("duplicate label")]
+    public void NameGridRefreshPreservesNativeCallAndRejectsIncompleteOwnershipOrText(string fault)
+    {
+        const nuint closure = 0xE0204;
+        var memory = CreateNameMemory(active: 0, page: -1)
+            .AddPointer(closure + 4, NameScene);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory, includeGridAction: false);
+        var nativeCalls = 0;
+        factory.SetOriginal<NameGridRefreshDelegate>(HookId.NameGridRefresh, _ =>
+        {
+            nativeCalls++;
+            if (fault == "duplicate label")
+            {
+                var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
+                resolver(0x100, (nint)NameTextAddress(0), 0x42, 0x08);
+                resolver(0x100, (nint)NameTextAddress(0), 0x42, 0x08);
+            }
+        });
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        if (fault == "wrong target")
+        {
+            memory.AddPointer(NameScene + NameInputCapture.RefreshTargetOffset, 0xFFFF0);
+        }
+
+        factory.GetDetour<NameGridRefreshDelegate>(HookId.NameGridRefresh)((nint)closure);
+
+        Assert.Equal(1, nativeCalls);
+        Assert.Single(dispatcher.Failures);
+        Assert.Empty(dispatcher.Events);
+    }
+
+    [Fact]
+    public void NameGridRefreshDuringInitRestoresParentCaptureAndIgnoresForeignScenes()
+    {
+        const nuint closure = 0xE0204;
+        var memory = CreateNameMemory(active: 0, page: -1)
+            .AddPointer(closure + 4, NameScene)
+            .AddPointer(ImageBase + NameInputCapture.GridPointerTableRva + 87 * 4, 0xE2000)
+            .AddCString(0xE2000, string.Empty)
+            .AddInlineString(NameTextAddress(0), "Accept");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        var calls = 0;
+        factory.SetOriginal<NameGridRefreshDelegate>(HookId.NameGridRefresh, _ =>
+        {
+            calls++;
+            factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
+                0x100, (nint)NameTextAddress(0), 0x42, 0x08);
+        });
+        ConfigureNameInit(factory, includeGridAction: false, onOriginal: () =>
+            factory.GetDetour<NameGridRefreshDelegate>(HookId.NameGridRefresh)((nint)closure));
+        ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        Assert.Contains(Flatten(dispatcher.Events), item => item is NameEntryPresented);
+        Assert.Contains(Flatten(dispatcher.Events), item => item is NameActionFocused { Label: "Defaults" });
+        dispatcher.Events.Clear();
+
+        memory.AddPointer(closure + 4, 0xFFFF0).AddInlineString(NameTextAddress(0), "foreign");
+        factory.GetDetour<NameGridRefreshDelegate>(HookId.NameGridRefresh)((nint)closure);
+        memory.AddByte(NameScene + NameInputCapture.ActiveOffset, 1)
+            .AddInt32(NameScene + NameInputCapture.PageOffset, 0)
+            .AddInt32(NameScene + NameInputCapture.RowOffset, 7)
+            .AddInt32(NameScene + NameInputCapture.ColumnOffset, 10);
+        factory.GetDetour<NameInputSceneUpdateDelegate>(HookId.NameInputSceneUpdate)((nint)NameScene, 0.016f);
+
+        Assert.Equal(2, calls);
+        Assert.Contains(Flatten(dispatcher.Events), item => item is NameGridFocused { Label: "Accept" });
+        Assert.Empty(dispatcher.Failures);
     }
 
     [Fact]
@@ -2009,7 +2251,7 @@ public sealed class NewGameHookSetTests
         for (var index = 0; index < keys.Length; index++)
         {
             var key = keys[index];
-            if (useTextManager && key.Bank != 0x23)
+            if (useTextManager && (key.Bank != 0x23 || key == ModeSelectCapture.StartTextKey))
             {
                 factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
                     0x100, (nint)ModeTextAddress(index), key.Bank, key.MessageId);
@@ -2024,8 +2266,7 @@ public sealed class NewGameHookSetTests
     private static IEnumerable<LocalizedMessageKey> EnumerateModeTextKeys() =>
         ModeSelectCapture.TextContracts
             .SelectMany(contract => new[] { contract.Label }.Concat(contract.Values).Concat(contract.Help))
-            .Append(ModeSelectCapture.StartTextKey)
-            .Append(ModeSelectCapture.LowerHelpTextKey);
+            .Append(ModeSelectCapture.StartTextKey);
 
     private static nuint ModeTextAddress(int index) => 0xB0000u + (nuint)(index * 0x20);
 
@@ -2049,11 +2290,11 @@ public sealed class NewGameHookSetTests
             .AddPointer(NameScene + NameInputCapture.DeleteTargetOffset, 0xE0100)
             .AddPointer(NameScene + NameInputCapture.RefreshTargetOffset, 0xE0200)
             .AddPointer(0xE0000, 0xE1000)
-            .AddPointer(0xE1000 + 8, ImageBase + NameInputCapture.GlyphAppendBodyRva)
+            .AddPointer(0xE1000 + 8, ImageBase + NameInputCapture.GlyphAppendInvokeRva)
             .AddPointer(0xE0100, 0xE1100)
-            .AddPointer(0xE1100 + 8, ImageBase + NameInputCapture.DeleteBodyRva)
+            .AddPointer(0xE1100 + 8, ImageBase + NameInputCapture.DeleteInvokeRva)
             .AddPointer(0xE0200, 0xE1200)
-            .AddPointer(0xE1200 + 8, ImageBase + NameInputCapture.RefreshBodyRva)
+            .AddPointer(0xE1200 + 8, ImageBase + NameInputCapture.RefreshInvokeRva)
             .AddInt32(ImageBase + NameInputCapture.LanguageGlobalRva, 1)
             .AddInlineString(NameScene + NameInputCapture.NameOffset, name)
             .AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, 0)
@@ -2081,15 +2322,19 @@ public sealed class NewGameHookSetTests
     private static void ConfigureNameInit(
         RecordingHookFactory factory,
         int extraBindingCount = 0,
-        Action? onOriginal = null)
+        Action? onOriginal = null,
+        bool includeGridAction = true)
     {
         factory.SetOriginal<NameInputSceneInitDelegate>(HookId.NameInputSceneInit, _ =>
         {
             onOriginal?.Invoke();
             var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
-            resolver(0x100, (nint)NameTextAddress(0),
-                NameInputCapture.GridActionTextKey.Bank,
-                NameInputCapture.GridActionTextKey.MessageId);
+            if (includeGridAction)
+            {
+                resolver(0x100, (nint)NameTextAddress(0),
+                    NameInputCapture.GridActionTextKey.Bank,
+                    NameInputCapture.GridActionTextKey.MessageId);
+            }
             resolver(0x100, (nint)NameTextAddress(1),
                 NameInputCapture.DefaultsTextKey.Bank,
                 NameInputCapture.DefaultsTextKey.MessageId);
@@ -2289,6 +2534,7 @@ public sealed class NewGameHookSetTests
             [HookId.NameActionCallback] = (NameActionCallbackDelegate)((_, _, _) => { }),
             [HookId.NameDirectEntryActivation] = (NameDirectEntryActivationDelegate)(_ => { }),
             [HookId.NameDirectEntryClose] = (NameDirectEntryCloseDelegate)(_ => { }),
+            [HookId.NameGridRefresh] = (NameGridRefreshDelegate)(_ => { }),
         };
         private readonly Dictionary<HookId, Delegate> detours = [];
 

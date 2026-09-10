@@ -84,7 +84,6 @@ public sealed record ModeSelectSnapshot(
     nuint RecordsCapacity,
     IReadOnlyList<ModeSelectRowSnapshot> Rows,
     string StartLabel,
-    string LowerHelp,
     int CompositeFocus,
     ModeSelectFocus Focus);
 
@@ -120,13 +119,13 @@ public static class ModeSelectCapture
     public static IReadOnlyList<ModeSelectTextContract> TextContracts { get; } =
         new ReadOnlyCollection<ModeSelectTextContract>(
         [
-            new(new(0x23, 0x5A), [new(0x23, 0xC0), new(0x23, 0xC1)], [new(0x3F, 0x05), new(0x3F, 0x06)]),
-            new(new(0x3F, 0x31), [new(0x23, 0xC7), new(0x23, 0xC6)], [new(0x3F, 0x32), new(0x3F, 0x33)]),
-            new(new(0x42, 0x1A), [new(0x41, 0x55), new(0x41, 0x54)], [new(0x42, 0x1C), new(0x42, 0x1D)]),
+            // The displayed alternatives are in the record's +0x24 vector; +0x18 supplies help.
+            new(new(0x23, 0x5A), [new(0x3F, 0x05), new(0x3F, 0x06)], [new(0x23, 0xC0), new(0x23, 0xC1)]),
+            new(new(0x3F, 0x31), [new(0x3F, 0x32), new(0x3F, 0x33)], [new(0x23, 0xC7), new(0x23, 0xC6)]),
+            new(new(0x42, 0x1A), [new(0x42, 0x1C), new(0x42, 0x1D)], [new(0x41, 0x55), new(0x41, 0x54)]),
         ]);
 
     public static LocalizedMessageKey StartTextKey { get; } = new(0x23, 0xD7);
-    public static LocalizedMessageKey LowerHelpTextKey { get; } = new(0x23, 0x20);
 
     public static bool TryValidateRuntimeLayout(
         IReadableMemory? memory,
@@ -227,14 +226,13 @@ public static class ModeSelectCapture
         nuint scene,
         IReadOnlyList<ModeSelectLocalizedRow>? localizedRows,
         string startLabel,
-        string lowerHelp,
         out ModeSelectSnapshot snapshot,
         out string error)
     {
         try
         {
             return TryCreateSnapshotCore(
-                memory, scene, localizedRows, startLabel, lowerHelp,
+                memory, scene, localizedRows, startLabel,
                 out snapshot, out error);
         }
         catch (Exception exception)
@@ -250,7 +248,6 @@ public static class ModeSelectCapture
         nuint scene,
         IReadOnlyList<ModeSelectLocalizedRow>? localizedRows,
         string startLabel,
-        string lowerHelp,
         out ModeSelectSnapshot snapshot,
         out string error)
     {
@@ -288,9 +285,9 @@ public static class ModeSelectCapture
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(startLabel) || string.IsNullOrWhiteSpace(lowerHelp))
+        if (string.IsNullOrWhiteSpace(startLabel))
         {
-            error = "Mode Select localized Start label or lower help text is blank.";
+            error = "Mode Select localized Start label is blank.";
             return false;
         }
 
@@ -374,7 +371,6 @@ public static class ModeSelectCapture
             capacity,
             new ReadOnlyCollection<ModeSelectRowSnapshot>(captured),
             new string(startLabel.AsSpan()),
-            new string(lowerHelp.AsSpan()),
             compositeFocus,
             focus);
         error = string.Empty;

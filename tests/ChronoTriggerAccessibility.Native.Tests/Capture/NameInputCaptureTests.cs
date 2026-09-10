@@ -214,12 +214,14 @@ public sealed class NameInputCaptureTests
         AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A").AddPointer(
             0x60000, 0), "glyph append");
         AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A").AddPointer(
-            0x61100 + 8, ImageBase + NameInputCapture.GlyphAppendBodyRva), "delete");
+            0x61100 + 8, ImageBase + NameInputCapture.GlyphAppendInvokeRva), "delete");
         AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A").AddPointer(
             0x61200 + 8, ImageBase + 0x123456), "refresh");
         AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A").AddByte(
             Scene + NameInputCapture.ActiveOffset, 2), "active");
-        AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A"), "localized action", localizedAction: "");
+        AssertRejected(CreateValidMemory("Crono", 0, 7, 10, 1, string.Empty), "localized action", localizedAction: "");
+        AssertRejected(CreateValidMemory("Crono", 0, 0, 0, 1, "A").AddPointer(
+            0x61200 + 8, ImageBase + NameInputCapture.RefreshBodyRva), "refresh");
     }
 
     [Fact]
@@ -385,11 +387,11 @@ public sealed class NameInputCaptureTests
             .AddPointer(Scene + NameInputCapture.DeleteTargetOffset, 0x60100)
             .AddPointer(Scene + NameInputCapture.RefreshTargetOffset, 0x60200)
             .AddPointer(0x60000, 0x61000)
-            .AddPointer(0x61000 + 8, ImageBase + NameInputCapture.GlyphAppendBodyRva)
+            .AddPointer(0x61000 + 8, ImageBase + NameInputCapture.GlyphAppendInvokeRva)
             .AddPointer(0x60100, 0x61100)
-            .AddPointer(0x61100 + 8, ImageBase + NameInputCapture.DeleteBodyRva)
+            .AddPointer(0x61100 + 8, ImageBase + NameInputCapture.DeleteInvokeRva)
             .AddPointer(0x60200, 0x61200)
-            .AddPointer(0x61200 + 8, ImageBase + NameInputCapture.RefreshBodyRva)
+            .AddPointer(0x61200 + 8, ImageBase + NameInputCapture.RefreshInvokeRva)
             .AddInt32(ImageBase + NameInputCapture.LanguageGlobalRva, language);
 
         if (externalName)

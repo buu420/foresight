@@ -31,8 +31,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         new HashSet<LocalizedMessageKey>(
             ModeSelectCapture.TextContracts.SelectMany(contract =>
                 new[] { contract.Label }.Concat(contract.Values).Concat(contract.Help))
-            .Append(ModeSelectCapture.StartTextKey)
-            .Append(ModeSelectCapture.LowerHelpTextKey));
+            .Append(ModeSelectCapture.StartTextKey));
     private static readonly IReadOnlySet<LocalizedMessageKey> NameTextKeys =
         new HashSet<LocalizedMessageKey>(
         [
@@ -102,6 +101,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             HookId.NameActionCallback,
             HookId.NameDirectEntryActivation,
             HookId.NameDirectEntryClose,
+            HookId.NameGridRefresh,
         ]);
         registrations = new ReadOnlyCollection<IHookRegistration>(
         [
@@ -118,6 +118,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             CreateRegistration(HookId.NameActionCallback, PrepareNameAction),
             CreateRegistration(HookId.NameDirectEntryActivation, PrepareDirectEntryActivation),
             CreateRegistration(HookId.NameDirectEntryClose, PrepareDirectEntryClose),
+            CreateRegistration(HookId.NameGridRefresh, PrepareNameGridRefresh),
         ]);
     }
 
@@ -517,6 +518,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                     try
                     {
                         scope = BeginScope(CaptureKind.NameEntry);
+                        scope.NameScene = (nuint)scene;
                     }
                     catch (Exception exception)
                     {
@@ -571,6 +573,114 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                         RunInstrumentationSafely(
                             epoch, "Name Entry post-update capture failed",
                             () => CaptureAndPublishNameState((nuint)scene));
+                    }
+                }));
+
+    private IPreparedHook PrepareNameGridRefresh(
+        IVerifiedGameBuild build,
+        UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<NameGridRefreshDelegate>(
+            HookId.NameGridRefresh,
+            build,
+            original => closure => boundary.Run(
+                "Name character-grid refresh",
+                () =>
+                {
+                    var parent = GetOwnedThreadScope();
+                    var instrument = TryCaptureActiveEpoch(out var epoch) &&
+                        (HasActiveName() || parent?.Kind == CaptureKind.NameEntry);
+                    CaptureScope? scope = null;
+                    string? error = null;
+                    nuint scene = 0;
+                    if (instrument)
+                    {
+                        try
+                        {
+                            // _Do_call adds four to the implementation object before
+                            // entering this body; the body closure is { grid, scene }.
+                            if (!TryReadPointer((nuint)closure + 4, out scene) || scene == 0)
+                            {
+                                error = "Name grid refresh scene closure is unreadable.";
+                            }
+                            else if (scene != (parent?.Kind == CaptureKind.NameEntry
+                                ? parent.NameScene : GetActiveNameScene()))
+                            {
+                                instrument = false;
+                            }
+                            else if (!TryReadPointer(scene + NameInputCapture.RefreshTargetOffset, out var target) ||
+                                target == 0 || target + 4 != (nuint)closure ||
+                                !TryReadPointer(target, out var vtable) || vtable == 0 ||
+                                !TryReadPointer(vtable + 8, out var invoke) ||
+                                invoke != imageBase + NameInputCapture.RefreshInvokeRva)
+                            {
+                                error = "Name grid refresh does not match its scene's audited std::function target.";
+                            }
+                            else if (threadCaptureScope is not null &&
+                                (parent?.Kind != CaptureKind.NameEntry || parent.NameScene != scene))
+                            {
+                                error = "Name grid refresh entered an unrelated or nested refresh capture scope.";
+                            }
+                            else
+                            {
+                                // Only this audited child may nest inside Name init.
+                                // Text ownership returns to the constructor afterward.
+                                scope = new CaptureScope(this, CaptureKind.NameGridRefresh)
+                                {
+                                    NameScene = scene,
+                                    Parent = parent,
+                                };
+                                threadCaptureScope = scope;
+                            }
+                        }
+                        catch (Exception exception)
+                        {
+                            error = $"Name grid refresh capture failed: {FormatException(exception)}";
+                        }
+                    }
+
+                    try
+                    {
+                        original()(closure);
+                    }
+                    finally
+                    {
+                        if (scope is not null)
+                        {
+                            EndScope(scope);
+                        }
+                    }
+
+                    if (instrument)
+                    {
+                        RunInstrumentationSafely(epoch, "Name grid refresh post-capture failed", () =>
+                        {
+                            if (error is not null || scope is null)
+                            {
+                                FailCoverage(error ?? "Name grid refresh capture scope is unavailable.");
+                                return;
+                            }
+                            if (scope.Errors.Count != 0 ||
+                                !TryGetScopeText(scope, NameInputCapture.GridActionTextKey, out var label))
+                            {
+                                FailCoverage(FirstScopeErrorOr(scope,
+                                    "Name grid refresh did not capture its localized Accept label."));
+                                return;
+                            }
+                            if (parent is not null)
+                            {
+                                StoreScopeText(parent, NameInputCapture.GridActionTextKey, label);
+                            }
+                            else
+                            {
+                                lock (stateGate)
+                                {
+                                    if (activeNameScene == scene)
+                                    {
+                                        activeNameGridActionLabel = new string(label.AsSpan());
+                                    }
+                                }
+                            }
+                        });
                     }
                 }));
 
@@ -867,10 +977,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                             else if (eventType == 0 && actionId == 1)
                             {
                                 var actionLabel = GetActiveNameGridActionLabel();
-                                var snapshotError = "localized grid action label is unavailable";
-                                if (actionLabel is null || !NameInputCapture.TryCreateSnapshot(
+                                if (!NameInputCapture.TryCreateSnapshot(
                                         memory, imageBase, scene, actionLabel,
-                                        out var before, out snapshotError))
+                                        out var before, out var snapshotError))
                                 {
                                     error = $"Name Accept cannot capture the proposed name: {snapshotError}";
                                 }
@@ -1167,13 +1276,15 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             FailCoverage(FirstScopeErrorOr(scope, "Name Entry localized construction capture failed."));
             return;
         }
-        if (!TryGetScopeText(scope, NameInputCapture.GridActionTextKey, out var gridAction) ||
-            !TryGetScopeText(scope, NameInputCapture.DefaultsTextKey, out var defaults) ||
+        if (!TryGetScopeText(scope, NameInputCapture.DefaultsTextKey, out var defaults) ||
             !TryGetScopeText(scope, NameInputCapture.AcceptTextKey, out var accept))
         {
-            FailCoverage("Name Entry is missing a localized grid action, Defaults, or Accept label.");
+            FailCoverage("Name Entry is missing a localized Defaults or Accept label.");
             return;
         }
+        // The grid is initially inactive. Its localized label is drawn by a
+        // later refresh, so it is not a prerequisite for the main name screen.
+        TryGetScopeText(scope, NameInputCapture.GridActionTextKey, out var gridAction);
         if (!NameInputCapture.TryCreateSnapshot(
                 memory, imageBase, scene, gridAction,
                 out var snapshot, out var snapshotError))
@@ -1360,10 +1471,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         NewGameAccessibilityEvent? prefix = null)
     {
         var gridAction = GetActiveNameGridActionLabel();
-        var error = "the localized Name Entry grid-action label is unavailable";
-        if (gridAction is null || !NameInputCapture.TryCreateSnapshot(
+        if (!NameInputCapture.TryCreateSnapshot(
                 memory, imageBase, scene, gridAction,
-                out var snapshot, out error))
+                out var snapshot, out var error))
         {
             FailCoverage($"Name Entry changed but its authoritative state is unavailable: {error}");
             return;
@@ -1437,10 +1547,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
     private void ArmDirectEntry(nuint scene, nuint owner, nuint target)
     {
         var gridAction = GetActiveNameGridActionLabel();
-        var error = "the localized Name Entry grid-action label is unavailable";
-        if (gridAction is null || !NameInputCapture.TryCreateSnapshot(
+        if (!NameInputCapture.TryCreateSnapshot(
                 memory, imageBase, scene, gridAction,
-                out var snapshot, out error))
+                out var snapshot, out var error))
         {
             FailCoverage(
                 $"Keyboard name-entry activation cannot capture its authoritative screen state: {error}");
@@ -1508,10 +1617,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         }
 
         var gridAction = GetActiveNameGridActionLabel();
-        var error = "the localized Name Entry grid-action label is unavailable";
-        if (gridAction is null || !NameInputCapture.TryCreateSnapshot(
+        if (!NameInputCapture.TryCreateSnapshot(
                 memory, imageBase, scene, gridAction,
-                out var snapshot, out error))
+                out var snapshot, out var error))
         {
             FailCoverage(
                 $"Name direct-entry activation cannot capture its authoritative screen state: {error}");
@@ -1580,10 +1688,9 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         }
 
         var gridAction = GetActiveNameGridActionLabel();
-        var error = "the localized Name Entry grid-action label is unavailable";
-        if (gridAction is null || !NameInputCapture.TryCreateSnapshot(
+        if (!NameInputCapture.TryCreateSnapshot(
                 memory, imageBase, scene, gridAction,
-                out var snapshot, out error))
+                out var snapshot, out var error))
         {
             FailCoverage(
                 $"Name direct-entry close cannot capture its authoritative screen state: {error}");
@@ -1814,14 +1921,13 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 help,
                 value);
         }
-        if (!TryGetScopeText(scope, ModeSelectCapture.StartTextKey, out var start) ||
-            !TryGetScopeText(scope, ModeSelectCapture.LowerHelpTextKey, out var lowerHelp))
+        if (!TryGetScopeText(scope, ModeSelectCapture.StartTextKey, out var start))
         {
-            error = "Mode Select localized Start label or lower help is missing.";
+            error = "Mode Select localized Start label is missing.";
             return false;
         }
         return ModeSelectCapture.TryCreateSnapshot(
-            memory, scene, rows, start, lowerHelp, out snapshot, out error);
+            memory, scene, rows, start, out snapshot, out error);
     }
 
     private bool TryRecaptureModeSnapshot(
@@ -1869,7 +1975,6 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             scene,
             rows,
             previous.StartLabel,
-            previous.LowerHelp,
             out snapshot,
             out error);
     }
@@ -1934,10 +2039,10 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
     }
 
     private static ModeSelectPresented ToPresented(ModeSelectSnapshot snapshot) =>
-        new(ToModeRows(snapshot), snapshot.StartLabel, snapshot.LowerHelp, snapshot.CompositeFocus);
+        new(ToModeRows(snapshot), snapshot.StartLabel, snapshot.CompositeFocus);
 
     private static ModeSelectChanged ToChanged(ModeSelectSnapshot snapshot) =>
-        new(ToModeRows(snapshot), snapshot.StartLabel, snapshot.LowerHelp, snapshot.CompositeFocus);
+        new(ToModeRows(snapshot), snapshot.StartLabel, snapshot.CompositeFocus);
 
     private static IReadOnlyList<ModeSelectRowPresentation> ToModeRows(ModeSelectSnapshot snapshot) =>
         new ReadOnlyCollection<ModeSelectRowPresentation>(snapshot.Rows
@@ -1998,6 +2103,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 key.Bank == 0x37 && ControlDescriptionCapture.RequiredMessageIds.Contains(key.MessageId),
             CaptureKind.ModeSelect => ModeTextKeys.Contains(key),
             CaptureKind.NameEntry => NameTextKeys.Contains(key),
+            CaptureKind.NameGridRefresh => key == NameInputCapture.GridActionTextKey,
             CaptureKind.NameConfirmation =>
                 key == NameInputCapture.ConfirmationPromptTextKey ||
                 NameInputCapture.ConfirmationChoiceTextKeys.Contains(key),
@@ -2086,7 +2192,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
     {
         if (ReferenceEquals(threadCaptureScope, scope))
         {
-            threadCaptureScope = null;
+            threadCaptureScope = scope.Parent;
         }
     }
 
@@ -2357,6 +2463,8 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
     {
         public NewGameHookSet Owner { get; } = owner;
         public CaptureKind Kind { get; } = kind;
+        public CaptureScope? Parent { get; init; }
+        public nuint NameScene { get; set; }
         public Dictionary<LocalizedMessageKey, string> Text { get; } = [];
         public List<ControlDescriptionTextObservation> ControlRecords { get; } = [];
         public List<(nuint Manager, int Key)> FocusObservations { get; } = [];
@@ -2372,6 +2480,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         ControlDescriptions,
         ModeSelect,
         NameEntry,
+        NameGridRefresh,
         NameConfirmation,
     }
 }

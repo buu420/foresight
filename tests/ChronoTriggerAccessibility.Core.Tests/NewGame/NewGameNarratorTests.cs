@@ -87,7 +87,7 @@ public sealed class NewGameNarratorTests
         };
 
         var entered = narrator.Apply(new ModeSelectPresented(
-            rows, "Start", "Begin the game with these settings.", 0));
+            rows, "Start", 0));
         Assert.Equal(new[]
         {
             "New Game settings.",
@@ -95,7 +95,7 @@ public sealed class NewGameNarratorTests
         }, entered.Select(item => item.Text));
 
         var focusChanged = Assert.Single(narrator.Apply(new ModeSelectChanged(
-            rows, "Start", "Begin the game with these settings.", 11)));
+            rows, "Start", 11)));
         Assert.Equal(
             "Graphics: Original. Uses the original presentation. Right control, 2 of 4",
             focusChanged.Text);
@@ -107,23 +107,23 @@ public sealed class NewGameNarratorTests
             Help = "Uses higher-resolution graphics.",
         };
         var valueChanged = Assert.Single(narrator.Apply(new ModeSelectChanged(
-            changedRows, "Start", "Begin the game with these settings.", 11)));
+            changedRows, "Start", 11)));
         Assert.Equal(
             "Graphics: High resolution. Uses higher-resolution graphics. Right control, 2 of 4",
             valueChanged.Text);
         Assert.Empty(narrator.Apply(new ModeSelectChanged(
-            changedRows, "Start", "Begin the game with these settings.", 11)));
+            changedRows, "Start", 11)));
 
         var start = Assert.Single(narrator.Apply(new ModeSelectChanged(
-            changedRows, "Start", "Begin the game with these settings.", 30)));
-        Assert.Equal("Start, 4 of 4. Begin the game with these settings.", start.Text);
+            changedRows, "Start", 30)));
+        Assert.Equal("Start, 4 of 4", start.Text);
         Assert.Equal("New Game settings closed.", Assert.Single(narrator.Apply(new ModeSelectCancelled())).Text);
 
         narrator.Apply(new ModeSelectPresented(
-            changedRows, "Start", "Begin the game with these settings.", 30));
+            changedRows, "Start", 30));
         Assert.Equal("Start selected.", Assert.Single(narrator.Apply(new ModeSelectActivated("Start"))).Text);
         var staleChange = Assert.Single(narrator.Apply(new ModeSelectChanged(
-            changedRows, "Start", "Begin the game with these settings.", 11)));
+            changedRows, "Start", 11)));
         Assert.Contains("without a validated screen entry", staleChange.Text, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -243,7 +243,7 @@ public sealed class NewGameNarratorTests
     {
         var invalidMode = new NewGameNarrator();
         var modeFailure = Assert.Single(invalidMode.Apply(new ModeSelectPresented(
-            [new("Battle Mode", "ACTIVE", "Help")], "Start", "Lower help", 0)));
+            [new("Battle Mode", "ACTIVE", "Help")], "Start", 0)));
         Assert.Contains("exactly three", modeFailure.Text, StringComparison.OrdinalIgnoreCase);
         Assert.StartsWith("Chrono Trigger accessibility stopped:", modeFailure.Text, StringComparison.Ordinal);
 

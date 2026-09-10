@@ -16,13 +16,12 @@ public sealed class ModeSelectCaptureTests
         Assert.Equal(
             new ModeSelectTextContract[]
             {
-                new(new(0x23, 0x5A), [new(0x23, 0xC0), new(0x23, 0xC1)], [new(0x3F, 0x05), new(0x3F, 0x06)]),
-                new(new(0x3F, 0x31), [new(0x23, 0xC7), new(0x23, 0xC6)], [new(0x3F, 0x32), new(0x3F, 0x33)]),
-                new(new(0x42, 0x1A), [new(0x41, 0x55), new(0x41, 0x54)], [new(0x42, 0x1C), new(0x42, 0x1D)]),
+                new(new(0x23, 0x5A), [new(0x3F, 0x05), new(0x3F, 0x06)], [new(0x23, 0xC0), new(0x23, 0xC1)]),
+                new(new(0x3F, 0x31), [new(0x3F, 0x32), new(0x3F, 0x33)], [new(0x23, 0xC7), new(0x23, 0xC6)]),
+                new(new(0x42, 0x1A), [new(0x42, 0x1C), new(0x42, 0x1D)], [new(0x41, 0x55), new(0x41, 0x54)]),
             },
             ModeSelectCapture.TextContracts);
         Assert.Equal(new LocalizedMessageKey(0x23, 0xD7), ModeSelectCapture.StartTextKey);
-        Assert.Equal(new LocalizedMessageKey(0x23, 0x20), ModeSelectCapture.LowerHelpTextKey);
 
         var memory = CreateValidMemory(compositeFocus: 11);
         var localizedRows = CreateLocalizedRows();
@@ -32,7 +31,6 @@ public sealed class ModeSelectCaptureTests
             Scene,
             localizedRows,
             "Start",
-            "Choose settings, then start.",
             out var snapshot,
             out var error), error);
 
@@ -101,7 +99,7 @@ public sealed class ModeSelectCaptureTests
     {
         Assert.True(ModeSelectCapture.TryCreateSnapshot(
             CreateValidMemory(compositeFocus), Scene, CreateLocalizedRows(),
-            "Start", "Lower help", out var snapshot, out var error), error);
+            "Start", out var snapshot, out var error), error);
 
         Assert.Equal(expectedRow, snapshot.Focus.RowIndex);
         Assert.Equal(expectedSubfocus, snapshot.Focus.Subfocus);
@@ -195,7 +193,7 @@ public sealed class ModeSelectCaptureTests
         var exception = Record.Exception(() =>
         {
             Assert.False(ModeSelectCapture.TryCreateSnapshot(
-                memory, Scene, rows, "Start", "Lower help",
+                memory, Scene, rows, "Start",
                 out var snapshot, out var error));
             Assert.Null(snapshot);
             Assert.Contains(expectedDiagnostic, error, StringComparison.OrdinalIgnoreCase);

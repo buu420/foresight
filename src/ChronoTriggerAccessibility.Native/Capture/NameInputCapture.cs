@@ -68,6 +68,11 @@ public static class NameInputCapture
     public const uint GlyphAppendBodyRva = 0x2C1BE0;
     public const uint DeleteBodyRva = 0x2C1D10;
     public const uint RefreshBodyRva = 0x2C2A20;
+    // std::function vtable slot +8 points to _Do_call, which adjusts ECX by
+    // four bytes before entering the body. It never points straight at the body.
+    public const uint GlyphAppendInvokeRva = 0x2C5D90;
+    public const uint DeleteInvokeRva = 0x2C5D20;
+    public const uint RefreshInvokeRva = 0x2C5CE0;
     public const uint NameOffset = 0x350;
     public const uint NameLengthOffset = 0x360;
     public const uint NameCapacityOffset = 0x364;
@@ -118,8 +123,32 @@ public static class NameInputCapture
     public static IReadOnlyList<NameGridCellDescriptor> AuditedGrid { get; } =
         new ReadOnlyCollection<NameGridCellDescriptor>(BuildGrid());
 
+    /// <summary>
+    /// The grid's localized action cell (row 7, column 10 on every page).
+    ///
+    /// Proven by the grid refresh callback at <see cref="RefreshBodyRva"/>: it walks
+    /// 8 rows by 11 columns, and for row 7 column 10 alone it calls
+    /// <c>TextManager::getMsg(out, 0x42, 0x08)</c> — bytes <c>6A 08 6A 42</c> at
+    /// RVA 0x2C2A8A, guarded by <c>CMP ESI,0xA</c> — and assigns the result to that
+    /// cell's label. Every other cell takes its text from the audited pointer table
+    /// at <see cref="GridPointerTableRva"/>. In the English build bank 0x42 index 8
+    /// is "Accept".
+    ///
+    /// This label is requested by the refresh, not by <c>NameInputScene::init</c>,
+    /// so a capture taken before the first refresh legitimately has no label yet.
+    /// See <c>docs/native-audits/2026-09-09-name-entry-labels.md</c>.
+    /// </summary>
     public static LocalizedMessageKey GridActionTextKey { get; } = new(0x42, 0x08);
+
+    /// <summary>
+    /// Proven: the Name Entry button builder (RVA 0x2C08D0) reads its two button
+    /// message ids from the table at RVA 0x3B715C, which holds exactly
+    /// <c>{ 0x35, 0x08 }</c>, and requests them from bank 0x41 via
+    /// <c>TextManager::getMsg</c> at RVA 0x2C0CDF.
+    /// </summary>
     public static LocalizedMessageKey DefaultsTextKey { get; } = new(0x41, 0x35);
+
+    /// <inheritdoc cref="DefaultsTextKey"/>
     public static LocalizedMessageKey AcceptTextKey { get; } = new(0x41, 0x08);
     public static LocalizedMessageKey ConfirmationPromptTextKey { get; } = new(0x23, 0xDA);
     public static IReadOnlyList<LocalizedMessageKey> ConfirmationChoiceTextKeys { get; } =
@@ -204,11 +233,22 @@ public static class NameInputCapture
         return true;
     }
 
+    /// <param name="localizedActionLabel">
+    /// The localized label of the grid's action cell, or <see langword="null"/> when
+    /// the caller has not observed it yet. The game requests it from the grid refresh
+    /// callback (<see cref="RefreshBodyRva"/>), not from <c>NameInputScene::init</c>,
+    /// and the grid starts inactive on page -1, so a snapshot taken before the first
+    /// refresh has no label to supply. It is consumed at exactly one place — the
+    /// focused cell, when that cell's kind is
+    /// <see cref="NameGridCellKind.LocalizedAction"/> — so a missing label fails
+    /// closed only there. Requiring it for every capture made the whole screen fail
+    /// before the grid had ever been drawn.
+    /// </param>
     public static bool TryCreateSnapshot(
         IReadableMemory? memory,
         nuint imageBase,
         nuint scene,
-        string localizedActionLabel,
+        string? localizedActionLabel,
         out NameInputSnapshot snapshot,
         out string error)
     {
@@ -230,7 +270,7 @@ public static class NameInputCapture
         IReadableMemory? memory,
         nuint imageBase,
         nuint scene,
-        string localizedActionLabel,
+        string? localizedActionLabel,
         out NameInputSnapshot snapshot,
         out string error)
     {
@@ -238,12 +278,6 @@ public static class NameInputCapture
         if (memory is null || imageBase == 0 || scene == 0)
         {
             error = "Name Entry memory, image base, or scene is unavailable.";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(localizedActionLabel))
-        {
-            error = "The Name Entry localized action label is blank.";
             return false;
         }
 
@@ -265,13 +299,13 @@ public static class NameInputCapture
         }
 
         if (!TryReadRequiredTarget(
-                memory, imageBase, scene + GlyphAppendTargetOffset, GlyphAppendBodyRva,
+                memory, imageBase, scene + GlyphAppendTargetOffset, GlyphAppendInvokeRva,
                 "glyph append", out var glyphAppend, out error) ||
             !TryReadRequiredTarget(
-                memory, imageBase, scene + DeleteTargetOffset, DeleteBodyRva,
+                memory, imageBase, scene + DeleteTargetOffset, DeleteInvokeRva,
                 "delete", out var delete, out error) ||
             !TryReadRequiredTarget(
-                memory, imageBase, scene + RefreshTargetOffset, RefreshBodyRva,
+                memory, imageBase, scene + RefreshTargetOffset, RefreshInvokeRva,
                 "refresh", out var refresh, out error))
         {
             return false;
@@ -331,11 +365,22 @@ public static class NameInputCapture
                     return false;
                 }
 
+                if (descriptor.Kind == NameGridCellKind.LocalizedAction &&
+                    string.IsNullOrWhiteSpace(localizedActionLabel))
+                {
+                    // The one cell whose visible text is localized rather than an
+                    // audited glyph. Announcing it without its label would tell the
+                    // player less than the screen shows, so stop here instead.
+                    error = $"Name Entry focused its localized action cell ({page},{row},{column}) " +
+                        "without a captured localized label.";
+                    return false;
+                }
+
                 var label = descriptor.Kind switch
                 {
                     NameGridCellKind.Empty => "Empty",
                     NameGridCellKind.Delete => "Delete",
-                    NameGridCellKind.LocalizedAction => localizedActionLabel,
+                    NameGridCellKind.LocalizedAction => localizedActionLabel!,
                     _ => rawText,
                 };
                 focused = new NameGridCellSnapshot(page, row, column, rawText, new string(label.AsSpan()), descriptor.Kind);
@@ -676,7 +721,7 @@ public static class NameInputCapture
         IReadableMemory memory,
         nuint imageBase,
         nuint address,
-        uint expectedBodyRva,
+        uint expectedInvokeRva,
         string name,
         out nuint target,
         out string error)
@@ -684,9 +729,9 @@ public static class NameInputCapture
         if (!TryReadPointer(memory, address, out target) || target == 0 ||
             !TryReadPointer(memory, target, out var vtable) || vtable == 0 ||
             !TryReadPointer(memory, vtable + 8, out var method) ||
-            method != imageBase + expectedBodyRva)
+            method != imageBase + expectedInvokeRva)
         {
-            error = $"Name Entry {name} closure target/vtable/_Do_call is null, unreadable, or not the audited exact-build body.";
+            error = $"Name Entry {name} closure target/vtable/_Do_call is null, unreadable, or not the audited exact-build thunk.";
             return false;
         }
         error = string.Empty;

@@ -25,13 +25,11 @@ public sealed record ModeSelectRowPresentation(
 public sealed record ModeSelectPresented(
     IReadOnlyList<ModeSelectRowPresentation> Rows,
     string StartLabel,
-    string LowerHelp,
     int CompositeFocus) : NewGameAccessibilityEvent;
 
 public sealed record ModeSelectChanged(
     IReadOnlyList<ModeSelectRowPresentation> Rows,
     string StartLabel,
-    string LowerHelp,
     int CompositeFocus) : NewGameAccessibilityEvent;
 
 public sealed record ModeSelectActivated(string Label) : NewGameAccessibilityEvent;
@@ -239,7 +237,6 @@ public sealed class NewGameNarrator
         if (!TryFormatMode(
                 presented.Rows,
                 presented.StartLabel,
-                presented.LowerHelp,
                 presented.CompositeFocus,
                 out var focusText,
                 out var error))
@@ -262,7 +259,6 @@ public sealed class NewGameNarrator
         if (!TryFormatMode(
                 changed.Rows,
                 changed.StartLabel,
-                changed.LowerHelp,
                 changed.CompositeFocus,
                 out var focusText,
                 out var error))
@@ -303,7 +299,6 @@ public sealed class NewGameNarrator
     private static bool TryFormatMode(
         IReadOnlyList<ModeSelectRowPresentation>? rows,
         string startLabel,
-        string lowerHelp,
         int compositeFocus,
         out string text,
         out string error)
@@ -318,16 +313,15 @@ public sealed class NewGameNarrator
                 string.IsNullOrWhiteSpace(row.Label) ||
                 string.IsNullOrWhiteSpace(row.Value) ||
                 string.IsNullOrWhiteSpace(row.Help)) ||
-            string.IsNullOrWhiteSpace(startLabel) ||
-            string.IsNullOrWhiteSpace(lowerHelp))
+            string.IsNullOrWhiteSpace(startLabel))
         {
-            error = "Mode Select contains a null or blank label, value, help, Start label, or lower help.";
+            error = "Mode Select contains a null or blank label, value, help, or Start label.";
             return false;
         }
 
         if (compositeFocus == 30)
         {
-            text = $"{startLabel}, 4 of 4. {lowerHelp}";
+            text = $"{startLabel}, 4 of 4";
             error = string.Empty;
             return true;
         }
