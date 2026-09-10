@@ -43,4 +43,8 @@ Version **0.2.0** was deployed on September 9, 2026. Deployment verification pas
 
 The user will operate the game. No Computer Use or synthetic game input is part of this validation.
 
-After deployment, launch through Steam and check Settings entry and category/value navigation. Open Screen Size, cancel once, reopen and select a different size, then navigate Settings and return to the title menu. Repeat Settings entry and restore the original size. Record the last spoken line and selected size if output stops. Live narration after resolution changes remains unverified until this player test is reported and correlated with the new runtime log.
+The user confirmed on September 9 that the main menu, Settings and its options, Extras, and the quit Yes/No confirmation all read correctly. They also confirmed that speech continued after changing resolution and that the game did not freeze.
+
+The corresponding runtime log is `%APPDATA%\Reloaded-Mod-Loader-II\Logs\2026-09-09 23.13.03 ~ Chrono Trigger.txt`. It records Screen Size as `1280x720 [16:9]` at 18:14:22, then `3840x2160 [16:9]` at 18:15:11, a reopened selector focused on that value at 18:15:21, and subsequent Settings, title-menu, Extras, and quit-confirmation announcements through 18:17:27. This corroborates narration continuity across the display change. The user's report establishes that the announcements were audible and the game remained responsive; the log alone does not establish those facts.
+
+The Settings/resolution player check is complete. New Game and the opening gameplay scene are the next verification scope; this report does not claim live coverage of gameplay or unlocked Extras content.
