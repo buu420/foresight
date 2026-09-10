@@ -6,6 +6,9 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 public readonly record struct FieldViewport(int Left, int Top, int Right, int Bottom)
 {
     public bool Contains(int fineX, int fineY) => fineX >= Left && fineX < Right && fineY >= Top && fineY < Bottom;
+
+    public bool Intersects(int left, int top, int right, int bottom) =>
+        left < right && top < bottom && left < Right && right > Left && top < Bottom && bottom > Top;
 }
 
 public sealed record FieldTreasure(int Index, int FineX, int FineY);

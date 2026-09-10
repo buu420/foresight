@@ -76,9 +76,12 @@ special map rules can still interrupt an otherwise valid static terrain route.
 
 ## Guide and catalog bindings
 
-Reference: [Chrono Trigger Guide and Walkthrough by vinheim and Bkstunt_31](https://gamefaqs.gamespot.com/snes/563538-chrono-trigger/faqs/64344),
-version 1.6, Overture (vb501) and The Millennial Fair (vb502). The exact guide was
-read from the user's open Chrome tab after direct HTTP access returned 403.
+Reference: [Chrono Trigger Guide and Walkthrough by vinheim and Bkstunt_31](https://gamefaqs.gamespot.com/pc/233789-chrono-trigger/faqs/64344),
+version 1.6, Overture (vb501) and The Millennial Fair (vb502). The user supplied
+both the SNES listing and this PC listing. Both were read from their open Chrome
+tabs after direct web access failed. The PC page still identifies the underlying
+guide as the DS edition; PC-specific behavior is checked against the installed
+executable and resources rather than inferred from the listing's platform.
 
 The opening guide describes going downstairs, speaking with Mother, and leaving
 for the fair. It later describes Lucca's telepod. Those facts guide the catalog;

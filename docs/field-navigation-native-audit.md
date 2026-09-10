@@ -19,6 +19,11 @@ emulated behavior was treated as a lead, not a substitute for the installed bina
 - F+11EC/11F0/11F4 identify the three party actors in index*2 encoding; bit80
   means empty. 1760B0 excludes all three, actor zero, removed actors (class+40
   bit80), zero actor+20, and zero byte actor+152 from activation candidates.
+  This confirm-action filter is not a visibility test. Version 0.3.2 applies it
+  to Interactable Objects; People includes drawn, usable non-party actors of a
+  known, non-removed class even when they have no action. The exact role of the
+  two activation fields remains incompletely mapped; no claim that they are
+  always zero for ordinary NPCs is supported by the static audit.
 - Actor+D0 is draw mode; actor+D8 is load state. Actor+40 is class, +44 the
   class-local visual index, and +08 packed render priority, not a collision box.
   Opcode81's inline write at162A80 proves PC-as-NPC class3. NPC class4 and enemy
@@ -58,6 +63,9 @@ emulated behavior was treated as a lead, not a substitute for the installed bina
   and173DD0/173D60 update phases M+1A8/1B4. 15DFA0 uses these bounds. This pass
   uses that native window conservatively; extra widescreen margins are a known
   coverage gap. Desktop resolution never supplies route coordinates.
+  Version 0.3.2 discovers exit and chest tiles when their rectangles overlap
+  this window. Testing only their centers omitted the partly visible bedroom
+  stairs. Entirely unseen extensions of an exit remain undiscovered.
 
 ## Scope and validation boundaries
 

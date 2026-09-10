@@ -9,9 +9,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private string? scene;
     private string? lastFailure;
+    private string? lastInventory;
     private bool storyUnavailable;
 
-    public void Reset() { discovered.Clear(); scene = null; }
+    public void Reset() { discovered.Clear(); scene = null; lastInventory = null; }
 
     public NavigationFrame? Capture(nint engine)
     {
@@ -41,8 +42,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var activeIds = new HashSet<string>();
         foreach (var actor in field.Actors)
         {
-            if (!actor.IsUsable || !actor.IsDrawn || !actor.IsActivationCandidate || actor.Index == 0) continue;
+            if (!actor.IsUsable || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
+                (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
+            // People includes visible characters without a talk action, such as
+            // Crono's cat. The native confirm filter only gates interactable objects.
+            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) : null;
@@ -52,18 +57,21 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             var position = Position(chest.FineX, chest.FineY);
             Add($"chest:{chest.Index}", "Treasure chest", NavigationCategory.Objects, position,
-                Approach(position), viewport.Contains(position.X, position.Y));
+                Approach(position), TileVisible(chest.FineX / 256, chest.FineY / 256));
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
+        var exitCellCount = 0;
         for (var y = 0; y < map.ExitHeight; y++)
         for (var x = 0; x < map.ExitWidth; x++)
         {
             var id = map.ExitCells[y * map.ExitWidth + x];
             if (id >= 128) continue;
+            exitCellCount++;
             if (!exitGroups.TryGetValue(id, out var points)) exitGroups[id] = points = [];
-            // Keep the exit's discovered footprint: an off-screen extension is not a new target.
+            // A partly drawn exit tile is visible even when its center is beyond
+            // the camera edge. Entirely off-screen extensions remain undiscovered.
             var px = x * 256 + 128; var py = y * 256 + 128;
-            if (viewport.Contains(px, py)) points.Add(Position(px, py));
+            if (TileVisible(x, y)) points.Add(Position(px, py));
         }
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
@@ -89,9 +97,32 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         if (field.SceneIdCoherent) targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, targets));
+        ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), graph, 256);
+
+        void ReportInventory()
+        {
+            var inventory = $"people={targets.Count(t => t.Category == NavigationCategory.People)}; " +
+                $"exits={targets.Count(t => t.Category == NavigationCategory.Exits)}; " +
+                $"objects={targets.Count(t => t.Category == NavigationCategory.Objects)}; " +
+                $"storyEvents={targets.Count(t => t.Category == NavigationCategory.StoryEvents)}; " +
+                $"actors={field.Actors.Count}; usable={field.Actors.Count(a => a.IsUsable)}; " +
+                $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
+                $"exitCells={exitCellCount}; visibleExitCells={exitGroups.Sum(pair => pair.Value.Count)}; " +
+                $"renderedChests={treasures.Count}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
+                $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}";
+            if (inventory == lastInventory) return;
+            lastInventory = inventory;
+            diagnostic($"Navigation inventory: scene={field.SceneId}; {inventory}; viewport={viewport}.");
+            // Raw field facts stay in the diagnostic log. Bound the detail and only
+            // emit it when inventory changes, including the first read of an area.
+            diagnostic("Navigation actor facts: " + string.Join(" | ", field.Actors.Take(32).Select(a =>
+                $"id={a.Index},class=0x{a.ClassTag:X},visual=0x{a.VisualIndex:X},draw=0x{a.DrawMode:X}," +
+                $"loaded={a.LoadedFlag},usable={a.IsUsable},party={a.IsPartyMember}," +
+                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},pos=({a.FineX},{a.FineY})")) + ".");
+        }
 
         NavigationPoint Position(int x, int y)
         {
@@ -100,6 +131,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var region = FieldCollisionRules.Region(map.CollisionShapes[index], map.CollisionLayers[index], x, y);
             return new(x, y, region.NeutralMask == 0 && region.Layer != 0 ? region.Layer : player.Layer);
         }
+        bool TileVisible(int x, int y) => viewport.Intersects(x * 256, y * 256, (x + 1) * 256, (y + 1) * 256);
         double Distance(NavigationPoint p) => Math.Abs((double)p.X - player.X) + Math.Abs((double)p.Y - player.Y);
         bool StillExitGoal(NavigationPoint p, int id) => graph.ExitAt(p.X, p.Y) == id &&
             graph.TryPosition(p.X, p.Y, p.Layer, out var current) && current == p;
