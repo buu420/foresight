@@ -29,10 +29,10 @@ public sealed class TopMenuHookSetTests
 
         harness.Installer.PrepareAll(harness.Build, harness.Boundary);
 
-        Assert.Equal(37, harness.Set.RequiredHookIds.Count);
+        Assert.Equal(38, harness.Set.RequiredHookIds.Count);
         Assert.Equal(harness.Set.RequiredHookIds, harness.Factory.Created.Select(item => item.Id));
         Assert.Equal(10, harness.Factory.FunctionDetours.Count);
-        Assert.Equal(27, harness.Factory.Probes.Count);
+        Assert.Equal(28, harness.Factory.Probes.Count);
         Assert.All(harness.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
         Assert.Empty(harness.Dispatcher.Events);
         Assert.Empty(harness.Dispatcher.Failures);
@@ -77,8 +77,28 @@ public sealed class TopMenuHookSetTests
         Assert.Empty(harness.Dispatcher.Events);
         Assert.Single(harness.Dispatcher.Failures);
         Assert.Contains("marker", harness.Dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(harness.Dispatcher.Diagnostics, line =>
+            line.Contains("Top-menu unmarked label") && line.Contains("style=Classic") &&
+            line.Contains("text=\"12:34\""));
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuBuilder]);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+    }
+
+    [Fact]
+    public void MissingLabelDiagnosticFailureCannotSkipTheNativeCallOrItsCoverageError()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness, omitLabelMarker: true);
+        harness.Dispatcher.ThrowOnDiagnostic = true;
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Contains("marker", harness.Dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+        Assert.False(harness.Boundary.IsFaulted);
     }
 
     [Fact]
@@ -111,6 +131,87 @@ public sealed class TopMenuHookSetTests
         Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
         Assert.Empty(harness.Dispatcher.Failures);
         Assert.Equal(caption.Length == 0 ? 1 : 2, harness.Capture.Session!.Utf8Returns.Count);
+    }
+
+    [Theory]
+    [InlineData(TopMenuStyle.Classic)]
+    [InlineData(TopMenuStyle.Touch)]
+    public void EmptyStatusLineAllocationsPreserveTheRenderedLinesWithoutAddingBlankSpeech(TopMenuStyle style)
+    {
+        var harness = CreateHarness(style);
+        ConfigureSuccessfulBuilder(harness);
+        harness.Factory.SetOriginal<StatusBarFormatScopeDelegate>(HookId.StatusBarFormatScope, (_, _, _) =>
+        {
+            for (var line = 0; line < 2; line++)
+            {
+                harness.Probe(HookId.StatusBarEmptyLineLabelCallSite);
+                harness.RenderLabel("");
+                harness.Probe(HookId.StatusBarGlyphRendererCallSite);
+                harness.RenderStatus($"Line {line + 1}");
+            }
+        });
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Diagnostics);
+        var presented = Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(["Party status", "12:34", "12345 G"], presented.StatusDetails);
+        Assert.Single(harness.Capture.Session!.Utf8Returns);
+        Assert.Equal(2, harness.Capture.Session.Status!.RenderedReturns.Count);
+        Assert.True(harness.Capture.Session.Status.Completed);
+        Assert.Equal(3, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("Unexpected")]
+    public void EmptyStatusLineMarkerCannotSilenceNonemptyNativeText(string text)
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness, allocatedStatusLabel: text);
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Contains("must be empty", Assert.Single(harness.Dispatcher.Failures));
+        Assert.Equal(2, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+    }
+
+    [Fact]
+    public void EmptyStatusLineMarkerIsRejectedOutsideTheOwnedFormatter()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness, labelProbe: HookId.StatusBarEmptyLineLabelCallSite);
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Contains("outside its owned formatting scope", Assert.Single(harness.Dispatcher.Failures));
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+    }
+
+    [Fact]
+    public void StatusLineAllocationOutsideAnyTopMenuBuildPassesThroughWithoutAStaleMarker()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.PrepareAndActivate();
+
+        harness.Probe(HookId.StatusBarEmptyLineLabelCallSite);
+        harness.RenderLabel("Other screen");
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Diagnostics);
+
+        harness.BuildMenu();
+
+        Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(2, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
     }
 
     [Fact]
@@ -546,7 +647,8 @@ public sealed class TopMenuHookSetTests
         bool omitRendererMarker = false,
         HookId? labelProbe = null,
         bool withAdditionalLabels = false,
-        string? initialCaption = null)
+        string? initialCaption = null,
+        string? allocatedStatusLabel = null)
     {
         void Body()
         {
@@ -589,6 +691,11 @@ public sealed class TopMenuHookSetTests
         }
         harness.Factory.SetOriginal<StatusBarFormatScopeDelegate>(HookId.StatusBarFormatScope, (_, _, _) =>
         {
+            if (allocatedStatusLabel is not null)
+            {
+                harness.Probe(HookId.StatusBarEmptyLineLabelCallSite);
+                harness.RenderLabel(allocatedStatusLabel);
+            }
             if (!omitRendererMarker)
             {
                 harness.Probe(HookId.StatusBarGlyphRendererCallSite);
@@ -996,10 +1103,17 @@ public sealed class TopMenuHookSetTests
         public int Generation => 0;
         public List<AccessibilityEvent> Events { get; } = [];
         public List<string> Failures { get; } = [];
+        public List<string> Diagnostics { get; } = [];
+        public bool ThrowOnDiagnostic { get; set; }
         public void Attach(IRuntimePrismSession session) { }
         public void Detach(IRuntimePrismSession session) { }
         public void Publish(AccessibilityEvent accessibilityEvent) => Events.Add(accessibilityEvent);
         public void ReportCoverageFailure(string message) => Failures.Add(message);
+        public void RecordDiagnostic(string message)
+        {
+            if (ThrowOnDiagnostic) throw new InvalidOperationException("test diagnostic failure");
+            Diagnostics.Add(message);
+        }
     }
 
     private sealed class RecordingLog : IModLog { public void Info(string message) { } public void Error(string message) { } }

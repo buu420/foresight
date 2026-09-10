@@ -295,6 +295,8 @@ public static class GameVersionCatalog
             "Classic top-menu context label call site", 0x1D0ECE, "E8 DD F1 06 00"),
         CreateAssemblyCallSite(HookId.StatusBarHiddenLabelCallSite,
             "StatusBar hidden initial label call site", 0x22EFA1, "E8 0A 11 01 00"),
+        CreateAssemblyCallSite(HookId.StatusBarEmptyLineLabelCallSite,
+            "StatusBar empty line label call site", 0x22F2D7, "E8 D4 0D 01 00"),
         CreateAssemblyCallSite(HookId.TouchStatusBarInitialLabelCallSite,
             "Touch StatusBar initial label call site", 0x22ECE6, "E8 C5 13 01 00"),
         CreateAssemblyCallSite(HookId.ClassicTopMenuCaptionLabelCallSite,

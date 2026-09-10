@@ -104,6 +104,7 @@ public enum HookId
     ClassicTopMenuSecondFooterLabelCallSite,
     ClassicTopMenuContextLabelCallSite,
     StatusBarHiddenLabelCallSite,
+    StatusBarEmptyLineLabelCallSite,
     TouchStatusBarInitialLabelCallSite,
     FieldOpcodeDispatcher,
     ClassicTopMenuCaptionLabelCallSite,

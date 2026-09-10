@@ -155,6 +155,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         Label(HookId.ClassicTopMenuSecondFooterLabelCallSite, StyleMask.Classic),
         Label(HookId.ClassicTopMenuContextLabelCallSite, StyleMask.Classic),
         new(HookId.StatusBarHiddenLabelCallSite, ProbeTarget.HiddenLabel, StyleMask.Both),
+        new(HookId.StatusBarEmptyLineLabelCallSite, ProbeTarget.EmptyStatusLineLabel, StyleMask.Both),
         new(HookId.TouchStatusBarInitialLabelCallSite, ProbeTarget.OptionalLabel, StyleMask.Touch),
         Label(HookId.ClassicTopMenuCaptionLabelCallSite, StyleMask.Classic),
         Label(HookId.ClassicTopMenuMemberNameLabelCallSite, StyleMask.Classic),
@@ -648,8 +649,12 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             build?.AddError($"Native top-menu text-label factory failed: {FormatException(exception)}");
             throw;
         }
+        if (build is not null && marker is null)
+        {
+            RecordUnmarkedLabelDiagnostic(build, text, fontSize, returned);
+        }
         if (build is null || marker is null || marker.Value.Target is not
-            (ProbeTarget.Label or ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel))
+            (ProbeTarget.Label or ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel or ProbeTarget.EmptyStatusLineLabel))
         {
             return returned;
         }
@@ -666,9 +671,25 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             {
                 return returned;
             }
+            if (marker.Value.Target == ProbeTarget.EmptyStatusLineLabel &&
+                (build.Status is null || build.Status.Disposed))
+            {
+                build.AddError("An empty StatusBar line label was allocated outside its owned formatting scope.");
+                return returned;
+            }
             if (!stringReader.TryRead((nuint)text, out var value, out var diagnostic))
             {
                 build.AddError($"An audited top-menu UTF-8 label is unreadable or blank: {diagnostic}");
+                return returned;
+            }
+            if (marker.Value.Target == ProbeTarget.EmptyStatusLineLabel)
+            {
+                // RVA 0x22F2D7 allocates an empty label before the actual line is
+                // formatted. Its text is captured separately at RVA 0x22F3B8.
+                if (value.Length != 0)
+                {
+                    build.AddError("A newly allocated StatusBar line label must be empty before its rendered text is assigned.");
+                }
                 return returned;
             }
             if (string.IsNullOrWhiteSpace(value))
@@ -689,6 +710,23 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             build.AddError($"Top-menu UTF-8 capture failed after the native label call: {FormatException(exception)}");
         }
         return returned;
+    }
+
+    private void RecordUnmarkedLabelDiagnostic(BuildContext build, nint text, int fontSize, nint returned)
+    {
+        // Keep unknown text out of speech, but retain bounded evidence for the
+        // next native audit instead of repeating an error with no identifying data.
+        if (!build.TryTakeUnmarkedLabelDiagnostic()) return;
+        try
+        {
+            var readable = stringReader.TryRead((nuint)text, out var value, out _);
+            var preview = readable ? value[..Math.Min(value.Length, 160)] : "<unreadable>";
+            dispatcher.RecordDiagnostic($"Top-menu unmarked label: style={build.Style}; " +
+                $"root=0x{build.Root:X8}; textAddress=0x{(nuint)text:X8}; " +
+                $"label=0x{(nuint)returned:X8}; fontSize={fontSize}; " +
+                $"text={System.Text.Json.JsonSerializer.Serialize(preview)}");
+        }
+        catch (Exception) { /* Diagnostic failures cannot affect a completed native call. */ }
     }
 
     private void HandleStatusFormat(
@@ -1302,7 +1340,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             return null;
         }
         var compatibleLabel = expectedTarget == ProbeTarget.Label &&
-            marker.Value.Target is ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel;
+            marker.Value.Target is ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel or ProbeTarget.EmptyStatusLineLabel;
         if (marker.Value.Epoch != build.Epoch || (marker.Value.Target != expectedTarget && !compatibleLabel))
         {
             build.AddError(
@@ -1547,6 +1585,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         private readonly List<Binding> bindings = [];
         private readonly List<FocusObservation> focus = [];
         private readonly List<string> errors = [];
+        private int unmarkedLabelDiagnostics;
 
         public int Epoch { get; } = epoch;
         public int OwnerThreadId { get; } = ownerThreadId;
@@ -1560,6 +1599,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         public IReadOnlyList<Binding> Bindings { get { lock (gate) return bindings.ToArray(); } }
         public IReadOnlyList<FocusObservation> Focus { get { lock (gate) return focus.ToArray(); } }
         public IReadOnlyList<string> Errors { get { lock (gate) return errors.ToArray(); } }
+        public bool TryTakeUnmarkedLabelDiagnostic() => Interlocked.Increment(ref unmarkedLabelDiagnostics) <= 8;
 
         public bool AddConstructed(nuint control)
         {
@@ -1643,6 +1683,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         Label,
         HiddenLabel,
         OptionalLabel,
+        EmptyStatusLineLabel,
         Renderer,
         Rejected,
     }

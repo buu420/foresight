@@ -89,6 +89,7 @@ public sealed class GameVersionCatalogTests
         { HookId.ClassicTopMenuSecondFooterLabelCallSite, "Classic top-menu second footer label call site", 0x1D0E00, 0x1D0E05, 0x2400B0, "E8ABF20600" },
         { HookId.ClassicTopMenuContextLabelCallSite, "Classic top-menu context label call site", 0x1D0ECE, 0x1D0ED3, 0x2400B0, "E8DDF10600" },
         { HookId.StatusBarHiddenLabelCallSite, "StatusBar hidden initial label call site", 0x22EFA1, 0x22EFA6, 0x2400B0, "E80A110100" },
+        { HookId.StatusBarEmptyLineLabelCallSite, "StatusBar empty line label call site", 0x22F2D7, 0x22F2DC, 0x2400B0, "E8D40D0100" },
         { HookId.TouchStatusBarInitialLabelCallSite, "Touch StatusBar initial label call site", 0x22ECE6, 0x22ECEB, 0x2400B0, "E8C5130100" },
         { HookId.ClassicTopMenuCaptionLabelCallSite, "Classic top-menu caption label call site", 0x1D1799, 0x1D179E, 0x2400B0, "E812E90600" },
         { HookId.ClassicTopMenuMemberNameLabelCallSite, "Classic top-menu member-name label call site", 0x23B1CB, 0x23B1D0, 0x2400B0, "E8E04E0000" },
@@ -150,12 +151,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredTwentyUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredTwentyOneUniqueContracts()
     {
-        Assert.Equal(120, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(120, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(120, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(120, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(121, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(121, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(121, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(121, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

@@ -103,3 +103,8 @@ The independent installed-file record is `v027-installed-verification.json` in
 the research directory. The previous installation is preserved at
 `X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260910-131227`.
 The player replay remains pending; automatic intro descriptions remain disabled.
+
+Follow-up: the player replayed using Resume and encountered one remaining
+unmarked-label error at 14:47:38. Resume did not arm the New Game recorder.
+See `2026-09-10-status-line-allocation-0.2.8.md` for the next correction and its
+deployment; the intro descriptions remain pending.
