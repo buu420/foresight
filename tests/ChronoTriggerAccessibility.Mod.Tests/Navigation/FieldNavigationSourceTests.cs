@@ -48,6 +48,46 @@ public sealed class FieldNavigationSourceTests
         var second = source.Build(field with { LeadPlayer = Actor(1, 192, 128, party: true) }, map, new(0, 0, 1024, 1024), []);
         Assert.Equal(256, first.UnitsPerTile);
         Assert.Equal(Assert.Single(first.Targets).ApproachPoints, Assert.Single(second.Targets).ApproachPoints);
+        Assert.All(Assert.Single(first.Targets).ApproachPoints, goal =>
+        {
+            Assert.InRange(goal.X % 256, 64, 192);
+            Assert.InRange(goal.Y % 256, 64, 192);
+        });
+    }
+
+    [Fact]
+    public void LargeExitKeepsItsDiscoveredApproachesAcrossPlayerAndCameraMovement()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var field = Field(Actor(1, 128, 128, party: true));
+        var map = Map(); Array.Fill(map.ExitCells, (byte)0);
+        var first = Assert.Single(source.Build(field, map, new(0, 0, 1024, 1024), []).Targets);
+        Assert.Equal(64, first.ApproachPoints.Count);
+        var moved = field with { LeadPlayer = Actor(1, 960, 960, party: true) };
+        var second = Assert.Single(source.Build(moved, map, new(512, 512, 1024, 1024), []).Targets);
+        Assert.Equal(first.ApproachPoints, second.ApproachPoints);
+        map.ExitCells[0] = 128;
+        var changed = Assert.Single(source.Build(moved, map, new(0, 0, 1024, 1024), []).Targets);
+        Assert.DoesNotContain(changed.ApproachPoints, p => p.X < 256 && p.Y < 256);
+    }
+
+    [Fact]
+    public void OpeningLabelsAndStoryEventsRemainBoundToVisibleNativeRecords()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var mother = Actor(15, 512, 256) with { VisualIndex = 0x25 };
+        var field = Field(Actor(1, 128, 128, party: true), mother) with { SceneId = 1 };
+        var frame = source.Build(field, Map(), new(0, 0, 1024, 1024), [], new(3, false));
+        Assert.Equal("Mother", Assert.Single(frame.Targets, t => t.Category == NavigationCategory.People).Label);
+        Assert.Equal("Talk with Mother", Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents).Label);
+        var hidden = field with { Actors = [field.Actors[0], mother with { DrawMode = 0 }] };
+        Assert.Empty(source.Build(hidden, Map(), new(0, 0, 1024, 1024), [], new(3, false)).Targets);
+        var otherAppearance = field with { Actors = [field.Actors[0], mother with { VisualIndex = 0x4C }] };
+        Assert.DoesNotContain(source.Build(otherAppearance, Map(), new(0, 0, 1024, 1024), [], new(3, false)).Targets,
+            t => t.Label == "Mother" || t.Category == NavigationCategory.StoryEvents);
+        var machine = Field(Actor(1, 128, 128, party: true), Actor(11, 512, 256) with { VisualIndex = 0x63 }) with { SceneId = 8 };
+        var telepod = Assert.Single(source.Build(machine, Map(), new(0, 0, 1024, 1024), []).Targets);
+        Assert.Equal("Telepod", telepod.Label); Assert.Equal(NavigationCategory.Objects, telepod.Category);
     }
 
     private static FieldActorSnapshot Actor(int index, int x, int y, bool party = false) =>

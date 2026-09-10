@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.0 adds an initial field-navigation pass to startup, New Game setup, Settings, Extras, field dialogue, and top-menu accessibility. Main menus, Settings, Extras, quit confirmation, and New Game through first control were previously verified by the player. The latest menu-test log contained no accessibility errors. Intro audio descriptions are still pending.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.1 repairs the initial navigation pass with counted directions, body clearance, and opening Story Events. Main menus, Settings, Extras, quit confirmation, and New Game through first control were previously verified by the player. Intro audio descriptions are still pending.
 
 Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Combat, the overworld, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
 
@@ -10,17 +10,21 @@ Use these keys while controlling the party in a local field area, starting with 
 
 | Keys | Action |
 |---|---|
-| U / O | Previous / next category: People, Exits, Interactable Objects |
+| U / O | Previous / next category: People, Exits, Interactable Objects, Story Events |
 | J / L | Previous / next destination |
-| K | Repeat the selected destination, direction, and distance |
-| I | Start spoken route guidance while you move |
+| K | Repeat the destination and remaining route, or its direction and distance when idle |
+| I | Start counted spoken directions while you move |
 | P | Start or stop automatic walking |
 
 Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object, use K to hear its direction, face it, and press the game's confirm button yourself.
 
+The local maps are 2D. One navigation step means one 16-pixel map tile, not one key press. Directions use left, right, up, and down: for example, "Left 3 steps, then down 2 steps." Partial tiles use quarter steps. Guidance announces turns; K repeats the remaining instructions. Routes prefer fewer turns among equally short paths, and walking follows cardinal edges with the native body clearance.
+
 Targets come from the native interaction flags, current exit grid, and rendered unopened chests. People includes creatures such as cats. Appearance labels are deliberately general where the game supplies no name. Previously seen targets retain their last seen positions when outside the current view; hidden pickups and chest contents are not listed. Discovery is kept for the current field visit. The first pass uses the native camera window conservatively and may omit targets at the outer widescreen margins. The overworld and every field's special movement rules have not been implemented or tested.
 
-For the first live check, use O to find Exits, K to repeat, and I for guidance. Then test P, stop it with P, and verify that a direction key or opening the menu also stops it. The new navigation code has only been tested offline so far.
+Story Events initially cover Crono's bedroom and kitchen: downstairs, the first conversation with Mother, then leaving for the fair. They use the current story counter and conversation flag, and require an already visible or discovered target. The opening catalog also names Mother's ordinary appearance, the house's exits, and the visible telepod machine. Later story objectives still need to be mapped. Research and guide attribution are in [navigation-counted-guidance.md](docs/navigation-counted-guidance.md).
+
+The first live navigation test exposed repeated directions and blocked walking. These repairs have passed offline tests, including walking replays and execution of the actual native movement dispatcher in an emulator; they still need a new in-game test. Start in Crono's room, select Stairs downstairs under Exits, press I, then test P. Check K, P to stop, manual override, and opening the menu. Navigation commands, active positions at most four times a second, and stop reasons are recorded in the Reloaded log. Moving actors and special field mechanics may still interrupt routes.
 
 It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 

@@ -56,10 +56,28 @@ public sealed class FieldNavigationRuntimeTests
         h.Tick(); Assert.Equal(1, h.Captures);
     }
 
+    [Fact]
+    public void LogsRequestedRoutesAndThrottledProgressIncludingTheBlockedPosition()
+    {
+        var h = new Harness(); h.Enable();
+        for (var i = 0; i < 40; i++) h.Tick();
+        Assert.Empty(h.Diagnostics);
+        h.Press('P');
+        Assert.Contains(h.Diagnostics, s => s.Contains("command=ToggleWalk") && s.Contains("player=(0,0,1)") &&
+            s.Contains("target=person") && s.Contains("goal=(16,0,1)") && s.Contains("pad=0x100"));
+        for (var i = 0; i < 100; i++) h.Tick();
+        Assert.Contains(h.Diagnostics, s => s.Contains("movement is blocked") && s.Contains("player=(0,0,1)"));
+        Assert.InRange(h.Diagnostics.Count, 3, 10);
+        var count = h.Diagnostics.Count;
+        for (var i = 0; i < 40; i++) h.Tick();
+        Assert.Equal(count, h.Diagnostics.Count);
+    }
+
     private sealed class Harness
     {
         public HashSet<int> Keys { get; } = [];
         public List<string> Speech { get; } = [];
+        public List<string> Diagnostics { get; } = [];
         public bool Foreground = true;
         public bool FailCapture;
         public long Now;
@@ -73,7 +91,7 @@ public sealed class FieldNavigationRuntimeTests
             var point = new NavigationPoint(16, 0, 1);
             return new("room", true, new(0, 0, 1), [new("person", "Person", NavigationCategory.People,
                 point, [point], true, false)], new Line());
-        }, new(Keys.Contains, () => Foreground), () => Foreground, () => Now, Speech.Add, _ => { });
+        }, new(Keys.Contains, () => Foreground), () => Foreground, () => Now, Speech.Add, Diagnostics.Add);
         public void Enable() { Runtime.Enable(); Tick(); }
         public uint Tick(uint input = 0) { Now += 16; return Runtime.OnInput(Engine, input); }
         public uint Press(int key) { Keys.Clear(); Tick(); Keys.Add(key); var value = Tick(); Keys.Clear(); return value; }

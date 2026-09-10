@@ -14,6 +14,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private nint engine;
     private long lastCall = -1;
     private long lastObservation = -1;
+    private long lastDiagnostic = -1;
+    private string lastRouteState = "none";
 
     public void Enable()
     {
@@ -29,6 +31,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     {
         lock (gate)
         {
+            if (controller.IsActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
             Emit(controller.Cancel(reason));
             keyboard.Suspend();
         }
@@ -86,6 +89,16 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     }
                     result = controller.Handle(command, frame, now);
                     speech.AddRange(result.Speech);
+                }
+                if (commands.Count != 0 || speech.Count != 0 ||
+                    (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
+                {
+                    if (controller.IsActive || commands.Count != 0) lastRouteState = controller.DiagnosticState;
+                    diagnostic($"Navigation: command={string.Join(",", commands)}; scene={frame.Scene}; " +
+                        $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
+                        $"input=0x{originalPad:X}; pad=0x{DirectionBits(result.Direction):X}; " +
+                        $"guiding={result.Guiding}; walking={result.AutoWalking}; {string.Join(" ", speech)}");
+                    lastDiagnostic = now;
                 }
                 if (speech.Count != 0) speak(string.Join(" ", speech));
                 lastCall = clock();

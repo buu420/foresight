@@ -22,6 +22,8 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGrap
     }
 
     public bool IsTerminal(NavigationPoint point) => ExitAt(point.X, point.Y) >= 0;
+    public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) =>
+        ExitAt(point.X, point.Y) is var id && id >= 0 && id == ExitAt(goal.X, goal.Y);
 
     public int ExitAt(int x, int y)
     {
@@ -51,7 +53,20 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGrap
         for (var done = 0; done < distance;)
         {
             done = Math.Min(distance, done + 16);
-            if (!TryPosition(from.X + dx * done, from.Y + dy * done, next.Layer, out next)) return false;
+            var x = from.X + dx * done; var y = from.Y + dy * done;
+            // 175E90 dispatches cardinal movement to 175F70/176780 (horizontal)
+            // and 176810/176AE0 (vertical). Before committing the foot's layer,
+            // 175EE0 checks the two leading corners, seven pixels from the foot.
+            // Probe results must not themselves change the physical player layer.
+            var probeY = dy < 0 ? y - 112 : y;
+            if (dx != 0)
+            {
+                if (!TryPosition(x + dx * 112, y, next.Layer, out _) ||
+                    !TryPosition(x + dx * 112, y - 112, next.Layer, out _)) return false;
+            }
+            else if (!TryPosition(x - 112, probeY, next.Layer, out _) ||
+                     !TryPosition(x + 112, probeY, next.Layer, out _)) return false;
+            if (!TryPosition(x, y, next.Layer, out next)) return false;
         }
         return distance > 0;
     }

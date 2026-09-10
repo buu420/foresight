@@ -9,6 +9,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private string? scene;
     private string? lastFailure;
+    private bool storyUnavailable;
 
     public void Reset() { discovered.Clear(); scene = null; }
 
@@ -19,11 +20,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         if (!FieldEnvironmentCapture.TryViewport(memory, field, out var viewport)) return Failed("Native camera bounds are unavailable.");
         if (!FieldEnvironmentCapture.TryTreasures(memory, field, map, out var treasures)) return Failed("Native treasure visibility state is unavailable.");
         lastFailure = null;
-        return Build(field, map, viewport, treasures);
+        var story = FieldStoryCapture.Capture(memory, field);
+        if (story is null && !storyUnavailable) diagnostic("Navigation story context is unavailable; field targets remain usable.");
+        storyUnavailable = story is null;
+        return Build(field, map, viewport, treasures, story);
     }
 
     public NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldViewport viewport,
-        IReadOnlyList<FieldTreasure> treasures)
+        IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null)
     {
         var identity = $"{field.Engine:X8}:{field.SceneId}";
         if (scene != identity)
@@ -41,7 +45,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var description = FieldVisualLabels.Describe(actor);
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
-            Add(id, description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y));
+            var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) : null;
+            Add(id, label ?? description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y));
         }
         foreach (var chest in treasures)
         {
@@ -66,15 +71,24 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (points.Count == 0)
             {
                 activeIds.Add(key);
-                if (discovered.TryGetValue(key, out var old)) targets.Add(old with { Visible = false, Discovered = true });
+                if (discovered.TryGetValue(key, out var old)) targets.Add(old with
+                {
+                    Visible = false, Discovered = true,
+                    ApproachPoints = old.ApproachPoints.Where(p => StillExitGoal(p, id)).ToArray(),
+                });
                 continue;
             }
             var position = points.OrderBy(Distance).First();
-            var approaches = points.SelectMany(p => ExitApproach(p)).Distinct().OrderBy(Distance).Take(64)
+            // Preserve discovered approaches while the exit still owns their cells.
+            // Re-ranking a large exit by the moving player evicts a routed goal.
+            var retained = discovered.TryGetValue(key, out var knownExit)
+                ? knownExit.ApproachPoints.Where(p => StillExitGoal(p, id)) : [];
+            var approaches = retained.Concat(points.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
-            Add(key, "Exit", NavigationCategory.Exits, position, approaches, true);
+            Add(key, OpeningStoryTargets.ExitLabel(field.SceneId, id), NavigationCategory.Exits, position, approaches, true);
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
+        if (field.SceneIdCoherent) targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, targets));
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), graph, 256);
@@ -87,6 +101,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             return new(x, y, region.NeutralMask == 0 && region.Layer != 0 ? region.Layer : player.Layer);
         }
         double Distance(NavigationPoint p) => Math.Abs((double)p.X - player.X) + Math.Abs((double)p.Y - player.Y);
+        bool StillExitGoal(NavigationPoint p, int id) => graph.ExitAt(p.X, p.Y) == id &&
+            graph.TryPosition(p.X, p.Y, p.Layer, out var current) && current == p;
         IEnumerable<NavigationPoint> At(int x, int y)
         {
             for (var layer = 1; layer <= 3; layer++)
@@ -101,8 +117,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IEnumerable<NavigationPoint> ExitApproach(NavigationPoint p)
         {
-            for (var x = p.X / 256 * 256; x < p.X / 256 * 256 + 256; x += 64)
-            for (var y = p.Y / 256 * 256; y < p.Y / 256 * 256 + 256; y += 64)
+            // Stay farther inside than the two-pixel arrival radius, so reaching
+            // the approach cannot stop walking before the actual exit cell.
+            for (var x = p.X / 256 * 256 + 64; x < p.X / 256 * 256 + 256; x += 64)
+            for (var y = p.Y / 256 * 256 + 64; y < p.Y / 256 * 256 + 256; y += 64)
                 foreach (var point in At(x, y)) yield return point;
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,

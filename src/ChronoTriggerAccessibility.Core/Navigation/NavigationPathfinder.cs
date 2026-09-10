@@ -4,6 +4,7 @@ public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Rout
 
 public static class NavigationPathfinder
 {
+    private readonly record struct SearchNode(NavigationPoint Point, int XDirection, int YDirection);
     public static IReadOnlyList<NavigationPoint>? Find(INavigationGraph graph, NavigationPoint start,
         IReadOnlyList<NavigationPoint> goals, int maximumVisited = 65536) => Search(graph, start, goals, maximumVisited).Route;
 
@@ -16,34 +17,44 @@ public static class NavigationPathfinder
         if (goals.Count == 0) return new(null, false);
         if (goals.Count > 64) return new(null, true);
         var destinations = goals.ToHashSet();
-        var previous = new Dictionary<NavigationPoint, NavigationPoint> { [start] = start };
-        var costs = new Dictionary<NavigationPoint, double> { [start] = 0 };
-        var closed = new HashSet<NavigationPoint>();
-        var queue = new PriorityQueue<NavigationPoint, double>();
-        queue.Enqueue(start, Estimate(start));
+        var first = new SearchNode(start, 0, 0);
+        var previous = new Dictionary<SearchNode, SearchNode> { [first] = first };
+        var costs = new Dictionary<SearchNode, (double Distance, int Turns)> { [first] = (0, 0) };
+        var closed = new HashSet<SearchNode>();
+        // Retain heading as part of search state so equal-length paths can prefer
+        // fewer turns without discarding a better approach to a later junction.
+        var queue = new PriorityQueue<SearchNode, (double Total, int Turns, double Remaining, long Order)>();
+        long order = 0;
+        queue.Enqueue(first, (Estimate(start), 0, Estimate(start), order++));
         while (queue.TryDequeue(out var current, out _))
         {
             if (!closed.Add(current)) continue;
-            if (destinations.Contains(current))
+            if (destinations.Contains(current.Point))
             {
-                var path = new List<NavigationPoint> { current };
-                while (current != start) { current = previous[current]; path.Add(current); }
+                var path = new List<NavigationPoint> { current.Point };
+                while (current != first) { current = previous[current]; path.Add(current.Point); }
                 path.Reverse();
                 return new(path.AsReadOnly(), false);
             }
-            if (current != start && graph.IsTerminal(current)) continue;
+            if (current != first && graph.IsTerminal(current.Point) &&
+                !goals.Any(goal => graph.IsSameTerminal(current.Point, goal))) continue;
             // A local movement graph has a bounded number of neighbouring positions.
             var neighbours = 0;
-            foreach (var next in graph.Neighbours(current))
+            foreach (var point in graph.Neighbours(current.Point))
             {
                 if (++neighbours > 16) return new(null, true);
+                var dx = Math.Sign((long)point.X - current.Point.X);
+                var dy = Math.Sign((long)point.Y - current.Point.Y);
+                var next = new SearchNode(point, dx, dy);
                 if (closed.Contains(next)) continue;
-                var cost = costs[current] + Distance(current, next);
-                if (costs.TryGetValue(next, out var oldCost) && cost >= oldCost) continue;
+                var turn = current != first && (dx != current.XDirection || dy != current.YDirection) ? 1 : 0;
+                var cost = (Distance: costs[current].Distance + Distance(current.Point, point), Turns: costs[current].Turns + turn);
+                if (costs.TryGetValue(next, out var oldCost) && cost.CompareTo(oldCost) >= 0) continue;
                 if (!previous.ContainsKey(next) && previous.Count >= maximumVisited) return new(null, true);
                 previous[next] = current;
                 costs[next] = cost;
-                queue.Enqueue(next, cost + Estimate(next));
+                var estimate = Estimate(point);
+                queue.Enqueue(next, (cost.Distance + estimate, cost.Turns, estimate, order++));
             }
         }
         return new(null, false);

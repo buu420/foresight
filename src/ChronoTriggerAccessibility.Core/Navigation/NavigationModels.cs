@@ -1,6 +1,6 @@
 namespace ChronoTriggerAccessibility.Core.Navigation;
 
-public enum NavigationCategory { People, Exits, Objects }
+public enum NavigationCategory { People, Exits, Objects, StoryEvents }
 public enum NavigationCommand { PreviousCategory, NextCategory, PreviousTarget, NextTarget, Repeat, Guide, ToggleWalk }
 public enum NavigationDirection { None, North, South, West, East, NorthWest, NorthEast, SouthWest, SouthEast }
 
@@ -10,6 +10,7 @@ public interface INavigationGraph
 {
     IEnumerable<NavigationPoint> Neighbours(NavigationPoint point);
     bool IsTerminal(NavigationPoint point) => false;
+    bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => point == goal;
 }
 
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,

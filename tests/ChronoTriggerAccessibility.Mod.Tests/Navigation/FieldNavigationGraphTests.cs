@@ -8,6 +8,17 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class FieldNavigationGraphTests
 {
     [Fact]
+    public void PlayerBodyCannotClipTheWallAboveAnOtherwiseWalkableFootPoint()
+    {
+        var map = Map(3, 2); map.CollisionLayers[1] = 0;
+        var graph = new FieldNavigationGraph(map);
+        var foot = new NavigationPoint(320, 256, 1);
+        Assert.True(graph.TryPosition(384, 256, 1, out _));
+        Assert.DoesNotContain(new NavigationPoint(384, 256, 1), graph.Neighbours(foot));
+        Assert.Contains(new NavigationPoint(384, 384, 1), graph.Neighbours(new(320, 384, 1)));
+    }
+
+    [Fact]
     public void FineCoordinatesJoinTheGridWithoutLosingTheNativeFootPosition()
     {
         var graph = new FieldNavigationGraph(Map(2, 2));
@@ -34,7 +45,8 @@ public sealed class FieldNavigationGraphTests
         Assert.DoesNotContain(path, p => p.X / 256 == 1 && p.Y / 256 == 0);
         map.ExitCells[4] = 0;
         Assert.Null(NavigationPathfinder.Find(graph, new(128, 128, 1), [new(640, 128, 1)]));
-        Assert.NotNull(NavigationPathfinder.Find(graph, new(128, 128, 1), [new(256, 256, 1)]));
+        Assert.Null(NavigationPathfinder.Find(graph, new(128, 128, 1), [new(256, 256, 1)]));
+        Assert.NotNull(NavigationPathfinder.Find(graph, new(128, 128, 1), [new(384, 384, 1)]));
     }
 
     [Fact]

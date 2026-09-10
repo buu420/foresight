@@ -24,7 +24,7 @@ public sealed class NavigationTests
         Assert.Contains("Villager", Say(controller.Handle(NavigationCommand.NextTarget, frame, 1)));
         Assert.Contains("Mother", Say(controller.Handle(NavigationCommand.NextTarget, frame, 2)));
         Assert.Contains("Villager", Say(controller.Handle(NavigationCommand.PreviousTarget, frame, 3)));
-        Assert.Contains("Interactable Objects", Say(controller.Handle(NavigationCommand.PreviousCategory, frame, 4)));
+        Assert.Contains("Story Events", Say(controller.Handle(NavigationCommand.PreviousCategory, frame, 4)));
         Assert.Contains("People", Say(controller.Handle(NavigationCommand.NextCategory, frame, 5)));
         Assert.Contains("Stairs", Say(controller.Handle(NavigationCommand.NextCategory, frame, 6)));
     }
@@ -49,7 +49,7 @@ public sealed class NavigationTests
         Assert.True(guide.Guiding);
         Assert.False(guide.AutoWalking);
         Assert.Equal(NavigationDirection.None, guide.Direction);
-        Assert.Contains("south", Say(guide));
+        Assert.Contains("Down", Say(guide));
         var walk = controller.Handle(NavigationCommand.ToggleWalk, frame, 1);
         Assert.True(walk.AutoWalking);
         Assert.Equal(NavigationDirection.South, walk.Direction);
@@ -149,15 +149,15 @@ public sealed class NavigationTests
     }
 
     [Fact]
-    public void NativeFixedPointUsesTileDistanceAndOnePixelArrivalTolerance()
+    public void NativeFixedPointUsesTileDistanceAndTwoPixelArrivalTolerance()
     {
         var controller = new NavigationController();
         var frame = new NavigationFrame("room", true, P(0, 0),
             [Target("Exit", NavigationCategory.People, P(256, 0))], new NativeLine(), 256);
-        Assert.Contains("1 tiles away", Say(controller.Handle(NavigationCommand.Repeat, frame, 0)));
+        Assert.Contains("1 step away", Say(controller.Handle(NavigationCommand.Repeat, frame, 0)));
         Assert.True(controller.Handle(NavigationCommand.ToggleWalk, frame, 1).AutoWalking);
-        Assert.True(controller.Update(frame with { Player = P(224, 0) }, 2).AutoWalking);
-        Assert.Contains("Arrived", Say(controller.Update(frame with { Player = P(248, 0) }, 3)));
+        Assert.True(controller.Update(frame with { Player = P(208, 0) }, 2).AutoWalking);
+        Assert.Contains("Arrived", Say(controller.Update(frame with { Player = P(224, 0) }, 3)));
     }
 
     [Fact]
