@@ -298,7 +298,7 @@ public sealed class NameInputCaptureTests
     }
 
     [Fact]
-    public void CorrelatesConfirmationLabelsToActualManagerKeysAndSubstitutesTheFullName()
+    public void CorrelatesConfirmationLabelsToActualManagerKeysAndPreservesRenderedPrompt()
     {
         var choices = new NameConfirmationChoiceObservation[]
         {
@@ -307,9 +307,9 @@ public sealed class NameInputCaptureTests
         };
 
         Assert.True(NameInputCapture.TryCreateConfirmation(
-            "Begin as <NAME>?", "Crono", choices, initialManagerKey: 1,
+            "Begin as\nCrono?", "Crono", choices, initialManagerKey: 1,
             out var confirmation, out var error), error);
-        Assert.Equal("Begin as Crono?", confirmation.Prompt);
+        Assert.Equal("Begin as\nCrono?", confirmation.Prompt);
         Assert.Equal(new[] { "Localized choice A", "Localized choice B" },
             confirmation.Choices.Select(choice => choice.Label));
         Assert.Equal(1, confirmation.SelectedIndex);
@@ -320,24 +320,35 @@ public sealed class NameInputCaptureTests
             NameInputCapture.ConfirmationChoiceTextKeys);
 
         Assert.False(NameInputCapture.TryCreateConfirmation(
-            "Begin?", "Crono", choices, 1, out _, out var placeholderError));
-        Assert.Contains("<NAME>", placeholderError, StringComparison.Ordinal);
+            " ", "Crono", choices, 1, out _, out var promptError));
+        Assert.Contains("rendered", promptError, StringComparison.Ordinal);
         Assert.False(NameInputCapture.TryCreateConfirmation(
-            "Begin as <NAME>?", "Crono", choices, 0, out _, out var focusError));
+            "Begin as Crono?", "Crono", choices, 0, out _, out var focusError));
         Assert.Contains("initial", focusError, StringComparison.OrdinalIgnoreCase);
         Assert.False(NameInputCapture.TryCreateConfirmation(
-            "Begin as <NAME>?", "Crono", [choices[0], choices[0]], 1,
+            "Begin as Crono?", "Crono", [choices[0], choices[0]], 1,
             out _, out var duplicateError));
         Assert.Contains("duplicate", duplicateError, StringComparison.OrdinalIgnoreCase);
 
         var nullException = Record.Exception(() =>
         {
             Assert.False(NameInputCapture.TryCreateConfirmation(
-                "Begin as <NAME>?", "Crono", [null!, choices[0]], 1,
+                "Begin as Crono?", "Crono", [null!, choices[0]], 1,
                 out _, out var nullError));
             Assert.Contains("null", nullError, StringComparison.OrdinalIgnoreCase);
         });
         Assert.Null(nullException);
+    }
+
+    [Fact]
+    public void RenderedConfirmationTextIsNeverSubstitutedAgain()
+    {
+        Assert.True(NameInputCapture.TryCreateConfirmation(
+            "Crono, <NAME>?", "Crono",
+            [new(0, 0xB000, "Yes"), new(1, 0xB100, "No")], 1,
+            out var confirmation, out var error), error);
+
+        Assert.Equal("Crono, <NAME>?", confirmation.Prompt);
     }
 
     [Fact]

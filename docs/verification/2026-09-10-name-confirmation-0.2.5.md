@@ -1,5 +1,11 @@
 # Name confirmation diagnostic build 0.2.5
 
+Follow-up: the player's 11:56:27 trace captured the prompt window and both choices
+as three controls with three labels under two managers. The prompt loop renders
+lines, not individual name characters. See the
+[0.2.6 repair and verification](2026-09-10-name-confirmation-0.2.6.md).
+The text below records the original diagnostic delivery state.
+
 The player's 0.2.4 run correctly announced the current name, Crono, and the
 four naming actions. Pressing Accept still failed at the guard requiring two
 constructed CustomButtons and two correlated rendered labels. The log was

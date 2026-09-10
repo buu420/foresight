@@ -1,5 +1,10 @@
 # Name field and Accept confirmation audit
 
+The current-name field findings below remain valid. The confirmation analysis
+is superseded by the [live prompt-window audit](2026-09-10-confirmation-prompt-window.md):
+the native builder creates a prompt-window control before its two choices, and
+the earlier loop described as name characters actually renders prompt lines.
+
 The player's 0.2.3 run in `2026-09-10 15.42.30 ~ Chrono Trigger.txt` spoke
 "Current name: empty" on entry, then "A name is required" on Accept at 10:43:09.
 The game proceeded to build a confirmation, where capture reported a second

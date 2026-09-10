@@ -41,6 +41,9 @@ public sealed class NewGameHookSetTests
     private const nuint ConfirmationControl1 = 0xC5100;
     private const nuint ConfirmationState0 = 0xC6000;
     private const nuint ConfirmationState1 = 0xC6100;
+    private const nuint ConfirmationBackdropManager = 0xC7000;
+    private const nuint ConfirmationBackdropControl = 0xC7100;
+    private const nuint ConfirmationBackdropState = 0xC7200;
 
     private static readonly HookId[] ExpectedDedicatedHooks =
     [
@@ -1654,6 +1657,88 @@ public sealed class NewGameHookSetTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfirmationReadsRenderedPromptAndTwoChoicesWithSeparateBackdropManager(bool multipleLines)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        memory.AddHeapString(ConfirmationTextAddress(0), 0xD3000,
+                multipleLines ? "Is \"<NAME>\"\\correct?" : "Is \"<NAME>\" correct?")
+            .AddHeapString(ConfirmationTextAddress(3), 0xD3100, multipleLines ? "Is \"Crono\"" : "Is \"Crono\" correct?")
+            .AddInlineString(ConfirmationTextAddress(4), "correct?");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var forwarded = new List<uint[]>();
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false,
+            promptLines: multipleLines
+                ? [(nint)ConfirmationTextAddress(3), (nint)ConfirmationTextAddress(4)]
+                : [(nint)ConfirmationTextAddress(3)]);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Empty(dispatcher.Failures);
+        Assert.Equal(words, Assert.Single(forwarded));
+        var confirmation = Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal(multipleLines ? "Is \"Crono\"\ncorrect?" : "Is \"Crono\" correct?", confirmation.Prompt);
+        Assert.Equal(new[] { "Yes", "No" }, confirmation.Choices);
+        Assert.Equal(1, confirmation.SelectedIndex);
+        dispatcher.Events.Clear();
+        set.AfterFocusSet((nint)ConfirmationBackdropManager, 0);
+        Assert.Empty(dispatcher.Events);
+        memory.AddInt32(ConfirmationManager + NewGameHookSet.ManagerFocusKeyOffset, 0);
+        set.AfterFocusSet((nint)ConfirmationManager, 0);
+        Assert.Equal(new NameConfirmationFocused("Yes", 0, 2), Assert.Single(dispatcher.Events));
+    }
+
+    [Theory]
+    [InlineData("missing-prompt")]
+    [InlineData("unreadable-prompt")]
+    [InlineData("blank-prompt")]
+    [InlineData("wrong-backdrop-control")]
+    [InlineData("wrong-backdrop-focus")]
+    public void ConfirmationRejectsIncompletePromptOrUncorrelatedBackdrop(string failure)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        if (failure == "unreadable-prompt") memory.Remove(ConfirmationTextAddress(3));
+        if (failure == "blank-prompt") memory.AddInlineString(ConfirmationTextAddress(3), " ");
+        if (failure == "wrong-backdrop-control")
+            memory.AddPointer(ConfirmationBackdropState + NewGameHookSet.FocusableStateControlOffset, ConfirmationControl0);
+        if (failure == "wrong-backdrop-focus")
+            memory.AddInt32(ConfirmationBackdropManager + NewGameHookSet.ManagerFocusKeyOffset, 1);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var forwarded = new List<uint[]>();
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false,
+            promptLines: failure == "missing-prompt" ? [] : null);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Equal(words, Assert.Single(forwarded));
+        Assert.Single(dispatcher.Failures);
+        Assert.Empty(dispatcher.Events);
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 1)]
     [InlineData(2, 1)]
@@ -1679,12 +1764,12 @@ public sealed class NewGameHookSetTests
             (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
 
         var failure = Assert.Single(dispatcher.Failures);
-        Assert.Contains($"Captured {constructors} controls and {rendered} rendered labels", failure);
+        Assert.Contains($"Captured {constructors + 1} controls and {rendered} rendered labels", failure);
         Assert.Empty(dispatcher.Events);
         var trace = Assert.Single(dispatcher.Diagnostics);
-        Assert.Contains($"constructed={constructors}; rendered={rendered}", trace);
+        Assert.Contains($"constructed={constructors + 1}; rendered={rendered}", trace);
         Assert.Contains("nativeReturned=True", trace);
-        Assert.Contains("bindings=2; focus=1; errors=0", trace);
+        Assert.Contains("bindings=3; focus=2; errors=0", trace);
         Assert.Contains("23/DA", trace);
         Assert.Contains("event=OpeTextResolver", trace);
         Assert.Contains("event=FocusSet", trace);
@@ -1730,7 +1815,7 @@ public sealed class NewGameHookSetTests
         Assert.Contains("scopeMatch=False; scope=none", trace);
         Assert.Contains("receiver=0xDEAD", trace);
         Assert.Contains("event=TextManagerGetMsg", trace);
-        Assert.Contains("constructed=2; rendered=2", trace);
+        Assert.Contains("constructed=3; rendered=2", trace);
     }
 
     [Theory]
@@ -2662,11 +2747,14 @@ public sealed class NewGameHookSetTests
     {
         memory
             .AddInt32(ConfirmationManager + NewGameHookSet.ManagerFocusKeyOffset, 1)
+            .AddInt32(ConfirmationBackdropManager + NewGameHookSet.ManagerFocusKeyOffset, 0)
             .AddInlineString(ConfirmationTextAddress(0), "Use <NAME>?")
             .AddInlineString(ConfirmationTextAddress(1), "Yes")
-            .AddInlineString(ConfirmationTextAddress(2), "No");
+            .AddInlineString(ConfirmationTextAddress(2), "No")
+            .AddInlineString(ConfirmationTextAddress(3), "Use Crono?");
         AddFocusableState(memory, ConfirmationState0, ConfirmationControl0);
         AddFocusableState(memory, ConfirmationState1, ConfirmationControl1);
+        AddFocusableState(memory, ConfirmationBackdropState, ConfirmationBackdropControl);
         if (includeExtraState)
         {
             AddFocusableState(memory, 0xC6200, 0xC5200);
@@ -2680,7 +2768,8 @@ public sealed class NewGameHookSetTests
         bool extraBinding,
         bool useTextManager = false,
         bool observeChoiceText = true,
-        Action<nint>? renderLabel = null)
+        Action<nint>? renderLabel = null,
+        IReadOnlyList<nint>? promptLines = null)
     {
         factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
             (scene, word0, word1, word2, word3, length, capacity) =>
@@ -2691,6 +2780,7 @@ public sealed class NewGameHookSetTests
                 var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
                 var binder = factory.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder);
 
+                EmitConfirmationBackdropAndPrompt(factory, set, promptLines);
                 constructor((nint)ConfirmationControl0);
                 if (useTextManager)
                 {
@@ -2717,7 +2807,6 @@ public sealed class NewGameHookSetTests
                 if (renderLabel is not null) renderLabel((nint)ConfirmationTextAddress(2));
                 else ((ISharedNativeHookObserver)set).AfterMenuTextLabelFactory(
                     0xD9020, (nint)ConfirmationTextAddress(2), 0xD9030, 12, 0xD9200);
-                resolver(0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState0, 0);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState1, 1);
                 if (extraBinding)
@@ -2728,6 +2817,20 @@ public sealed class NewGameHookSetTests
             });
     }
 
+    private static void EmitConfirmationBackdropAndPrompt(
+        RecordingHookFactory factory, NewGameHookSet set, IReadOnlyList<nint>? promptLines = null)
+    {
+        factory.GetDetour<NsMenuCustomButtonConstructorDelegate>(HookId.NsMenuCustomButtonConstructor)(
+            (nint)ConfirmationBackdropControl);
+        factory.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder)(
+            (nint)ConfirmationBackdropManager, (nint)ConfirmationBackdropState, 0);
+        set.AfterFocusSet((nint)ConfirmationBackdropManager, 0);
+        factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver)(
+            0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
+        foreach (var text in promptLines ?? [(nint)ConfirmationTextAddress(3)])
+            set.AfterMenuTextLabelFactory(1, text, 2, 12, 3);
+    }
+
     private static void ConfigureDiagnosticConfirmation(
         RecordingHookFactory factory, NewGameHookSet set, TestMemory memory,
         int constructors, int rendered, Action? beforeChoices = null)
@@ -2735,11 +2838,7 @@ public sealed class NewGameHookSetTests
         factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
             (_, _, _, _, _, _, _) =>
             {
-                var resolver = factory.GetDetour<OpeTextResolverDelegate>(HookId.OpeTextResolver);
-                resolver(0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
-                // Native name-character labels precede both choices, and also use font 12.
-                for (var index = 0; index < 5; index++)
-                    set.AfterMenuTextLabelFactory(1, (nint)ConfirmationTextAddress(0), 2, 12, 3);
+                EmitConfirmationBackdropAndPrompt(factory, set);
                 beforeChoices?.Invoke();
                 for (var index = 0; index < 2; index++)
                 {

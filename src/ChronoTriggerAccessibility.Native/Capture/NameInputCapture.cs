@@ -461,7 +461,7 @@ public static class NameInputCapture
     }
 
     public static bool TryCreateConfirmation(
-        string promptTemplate,
+        string renderedPrompt,
         string name,
         IReadOnlyList<NameConfirmationChoiceObservation>? observations,
         int initialManagerKey,
@@ -469,13 +469,9 @@ public static class NameInputCapture
         out string error)
     {
         confirmation = null!;
-        const string placeholder = "<NAME>";
-        if (string.IsNullOrWhiteSpace(promptTemplate) ||
-            promptTemplate.IndexOf(placeholder, StringComparison.Ordinal) < 0 ||
-            promptTemplate.IndexOf(placeholder, StringComparison.Ordinal) !=
-            promptTemplate.LastIndexOf(placeholder, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(renderedPrompt))
         {
-            error = "The localized confirmation prompt must contain exactly one <NAME> placeholder.";
+            error = "The rendered confirmation prompt is missing or blank.";
             return false;
         }
 
@@ -528,7 +524,7 @@ public static class NameInputCapture
             .ToArray();
         var selectedIndex = Array.FindIndex(choices, choice => choice.ManagerKey == initialManagerKey);
         confirmation = new NameConfirmationSnapshot(
-            promptTemplate.Replace(placeholder, name, StringComparison.Ordinal),
+            new string(renderedPrompt.AsSpan()),
             new ReadOnlyCollection<NameConfirmationChoice>(choices),
             selectedIndex);
         error = string.Empty;

@@ -241,29 +241,50 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         {
             return;
         }
-        // The name-character labels precede both CustomButtons. Each button then
-        // receives exactly one rendered label at RVA 0x2C36F5 before the next ctor.
+        // The builder first creates a prompt window with its own one-key
+        // manager. It then renders the prompt lines, before constructing Yes/No.
         if (scope.ConstructedControls.Count == 0)
         {
             return;
         }
         try
         {
+            if (returned == 0 || fontSize != 12)
+            {
+                scope.Errors.Add("Confirmation label factory did not return the audited non-null font-12 label.");
+                return;
+            }
+            if (!stringReader.TryRead((nuint)text, out var label, out var error))
+            {
+                scope.Errors.Add($"Confirmation rendered text is unreadable: {error}");
+                return;
+            }
+            if (scope.ConstructedControls.Count == 1)
+            {
+                if (!TryResolveConfirmationBackdrop(scope, out _, out _, out var backdropError) ||
+                    !scope.Text.ContainsKey(NameInputCapture.ConfirmationPromptTextKey))
+                {
+                    scope.Errors.Add($"Confirmation prompt has no correlated backdrop and localized source: {backdropError}");
+                    return;
+                }
+                if (scope.ConfirmationPromptLines.Count >= 64)
+                {
+                    scope.Errors.Add("Confirmation prompt exceeded the bounded rendered-line capture.");
+                    return;
+                }
+                scope.ConfirmationPromptLines.Add(new string(label.AsSpan()));
+                scope.PendingConfirmationControl = 0;
+                return;
+            }
             var control = scope.PendingConfirmationControl;
             if (control == 0)
             {
                 scope.Errors.Add("Confirmation rendered another label without a pending choice control.");
                 return;
             }
-            if (returned == 0 || fontSize != 12)
+            if (string.IsNullOrWhiteSpace(label))
             {
-                scope.Errors.Add("Confirmation choice label factory did not return the audited non-null font-12 label.");
-                return;
-            }
-            if (!stringReader.TryRead((nuint)text, out var label, out var error) ||
-                string.IsNullOrWhiteSpace(label))
-            {
-                scope.Errors.Add($"Confirmation rendered choice text is unreadable or blank: {error}");
+                scope.Errors.Add("Confirmation rendered choice text is blank.");
                 return;
             }
             if (scope.ConfirmationLocalizedLabels.TryGetValue(control, out var localized) &&
@@ -1457,18 +1478,19 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             return;
         }
         if (scope.PendingConfirmationControl != 0 ||
-            scope.ConstructedControls.Count != 2 ||
-            scope.ConfirmationControlLabels.Count != 2)
+            scope.ConstructedControls.Count != 3 ||
+            scope.ConfirmationControlLabels.Count != 2 ||
+            scope.ConfirmationPromptLines.Count == 0)
         {
             FailCoverage(
-                "Name confirmation did not produce exactly two CustomButton controls with correlated rendered labels. " +
+                "Name confirmation requires one backdrop, two choices, and the rendered prompt. " +
                 $"Captured {scope.ConstructedControls.Count} controls and {scope.ConfirmationControlLabels.Count} rendered labels; " +
                 $"a label is pending: {scope.PendingConfirmationControl != 0}.");
             return;
         }
-        if (!TryGetScopeText(scope, NameInputCapture.ConfirmationPromptTextKey, out var prompt))
+        if (!TryResolveConfirmationBackdrop(scope, out var backdropManager, out var backdropControl, out var backdropError))
         {
-            FailCoverage("Name confirmation localized prompt template is missing.");
+            FailCoverage($"Name confirmation backdrop correlation failed: {backdropError}");
             return;
         }
         if (!TryResolveExactKeyManager(
@@ -1481,10 +1503,12 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             FailCoverage($"Name confirmation manager-key correlation failed: {managerError}");
             return;
         }
-        if (!controlsByKey.Values.ToHashSet().SetEquals(scope.ConstructedControls))
+        if (manager == backdropManager || scope.Bindings.Count != 3 ||
+            controlsByKey.Values.Contains(backdropControl) ||
+            !controlsByKey.Values.Append(backdropControl).ToHashSet().SetEquals(scope.ConstructedControls))
         {
             FailCoverage(
-                "Name confirmation manager keys 0/1 do not exactly match the two constructed localized controls.");
+                "Name confirmation managers do not exactly partition the backdrop and two constructed choice controls.");
             return;
         }
         var focus = scope.FocusObservations.Where(item => item.Manager == manager).ToArray();
@@ -1504,7 +1528,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             observations.Add(new NameConfirmationChoiceObservation(key, controlsByKey[key], label));
         }
         if (!NameInputCapture.TryCreateConfirmation(
-                prompt,
+                string.Join("\n", scope.ConfirmationPromptLines),
                 name,
                 observations,
                 focus[0].Key,
@@ -1526,6 +1550,31 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 .Select(choice => new string(choice.Label.AsSpan()))
                 .ToArray()),
             confirmation.SelectedIndex));
+    }
+
+    private static bool TryResolveConfirmationBackdrop(
+        CaptureScope scope, out nuint manager, out nuint control, out string error)
+    {
+        manager = 0;
+        control = scope.ConstructedControls.Count > 0 ? scope.ConstructedControls[0] : 0;
+        var firstControl = control;
+        var bindings = scope.Bindings.Where(item => item.Control == firstControl).ToArray();
+        if (firstControl == 0 || bindings.Length != 1 || bindings[0].Key != 0 || bindings[0].Manager == 0)
+        {
+            error = "The first constructed control requires exactly one manager-key 0 binding.";
+            return false;
+        }
+        var candidate = bindings[0].Manager;
+        var focus = scope.FocusObservations.Where(item => item.Manager == candidate).ToArray();
+        if (scope.Bindings.Count(item => item.Manager == candidate) != 1 ||
+            focus.Length != 1 || focus[0].Key != 0)
+        {
+            error = "The backdrop requires a separate one-key manager with one authoritative focus on key 0.";
+            return false;
+        }
+        manager = candidate;
+        error = string.Empty;
+        return true;
     }
 
     private void PublishModeChange(nuint scene)
@@ -2311,6 +2360,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                 $"bindings={scope.Bindings.Count}; focus={scope.FocusObservations.Count}; errors={scope.Errors.Count}; " +
                 $"controls=[{string.Join(",", scope.ConstructedControls.Take(8).Select(control => $"0x{control:X}"))}]; " +
                 $"labels=[{string.Join(",", scope.ConfirmationControlLabels.Take(8).Select(pair => $"0x{pair.Key:X}:{TraceText(pair.Value)}"))}]; " +
+                $"promptLines=[{string.Join(",", scope.ConfirmationPromptLines.Take(8).Select(TraceText))}]; " +
                 $"keys=[{string.Join(",", scope.Text.Keys.Take(16).Select(key => $"{key.Bank:X}/{key.MessageId:X}"))}]; " +
                 $"bound=[{string.Join(",", scope.Bindings.Take(8).Select(item => $"0x{item.Manager:X}/{item.Key}/0x{item.Control:X}"))}]; " +
                 $"focused=[{string.Join(",", scope.FocusObservations.Take(8).Select(item => $"0x{item.Manager:X}/{item.Key}"))}]; " +
@@ -2633,7 +2683,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             lock (gate)
             {
                 finished = true;
-                return "Name confirmation trace (0.2.5):" + Environment.NewLine +
+                return "Name confirmation trace (0.2.6):" + Environment.NewLine +
                     string.Join(Environment.NewLine, entries.Select((entry, index) => $"{index + 1}: {entry}")) +
                     Environment.NewLine + $"Summary: {summary}; dropped={dropped}";
             }
@@ -2653,6 +2703,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         public List<nuint> ConstructedControls { get; } = [];
         public Dictionary<nuint, string> ConfirmationControlLabels { get; } = [];
         public Dictionary<nuint, string> ConfirmationLocalizedLabels { get; } = [];
+        public List<string> ConfirmationPromptLines { get; } = [];
         public List<string> Errors { get; } = [];
         public nuint PendingConfirmationControl { get; set; }
     }
