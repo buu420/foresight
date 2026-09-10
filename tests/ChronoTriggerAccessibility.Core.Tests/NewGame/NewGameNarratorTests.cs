@@ -155,12 +155,14 @@ public sealed class NewGameNarratorTests
         Assert.Equal("Name is empty.",
             Assert.Single(narrator.Apply(new NewGameNameChanged(string.Empty))).Text);
 
-        Assert.Equal("Defaults, 1 of 3",
-            Assert.Single(narrator.Apply(new NameActionFocused("Defaults", 0, 3))).Text);
+        Assert.Equal("Defaults, 1 of 4",
+            Assert.Single(narrator.Apply(new NameActionFocused("Defaults", 0, 4))).Text);
         Assert.Equal("Defaults selected.",
             Assert.Single(narrator.Apply(new NameActionActivated("Defaults"))).Text);
-        Assert.Equal("Accept, 2 of 3",
-            Assert.Single(narrator.Apply(new NameActionFocused("Accept", 1, 3))).Text);
+        Assert.Equal("Accept, 2 of 4",
+            Assert.Single(narrator.Apply(new NameActionFocused("Accept", 1, 4))).Text);
+        Assert.Equal("Character grid, 4 of 4",
+            Assert.Single(narrator.Apply(new NameActionFocused("Character grid", 3, 4))).Text);
         Assert.Equal("A name is required.",
             Assert.Single(narrator.Apply(new EmptyNameRejected())).Text);
 
@@ -207,32 +209,37 @@ public sealed class NewGameNarratorTests
         narrator.Apply(new NameEntryPresented(
             "Enter a name", "Crono", "Use the character grid or keyboard name entry"));
         Assert.Equal(
-            "Name text field, 3 of 3",
+            "Name text field, 3 of 4",
             Assert.Single(narrator.Apply(
-                new NameActionFocused("Name text field", 2, 3))).Text);
+                new NameActionFocused("Name text field", 2, 4))).Text);
         narrator.Apply(new KeyboardNameEntryFocused("Crono"));
 
         var closed = narrator.Apply(new NameAccessibilityBatch(
         [
             new KeyboardNameEntryClosed("Crono"),
-            new NameActionFocused("Name text field", 2, 3),
+            new NameActionFocused("Name text field", 2, 4),
         ]));
 
         Assert.Equal(
-            ["Keyboard name entry closed. Current name: Crono.", "Name text field, 3 of 3"],
+            ["Keyboard name entry closed. Current name: Crono.", "Name text field, 3 of 4"],
             closed.Select(item => item.Text));
         Assert.Equal([true, false], closed.Select(item => item.Interrupt));
     }
 
-    [Fact]
-    public void TwoKeyNameActionFocusFailsClosedBecauseRuntimeManagerHasExactlyThreeControls()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(5)]
+    public void WrongNameActionCountFailsClosedBecauseRuntimeManagerHasExactlyFourControls(int count)
     {
         var narrator = new NewGameNarrator();
         narrator.Apply(new NameEntryPresented(
             "Enter a name", "Crono", "Use shown characters"));
 
         var failure = Assert.Single(narrator.Apply(
-            new NameActionFocused("Accept", 1, 2)));
+            new NameActionFocused("Accept", 1, count)));
 
         Assert.Contains("exact control correlation", failure.Text, StringComparison.OrdinalIgnoreCase);
         Assert.StartsWith("Chrono Trigger accessibility stopped:", failure.Text, StringComparison.Ordinal);

@@ -1293,7 +1293,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             return;
         }
         if (!TryResolveExactKeyManager(
-                scope.Bindings, 3, out var manager, out var controls, out var managerError))
+                scope.Bindings, 4, out var manager, out var controls, out var managerError))
         {
             FailCoverage($"Name Entry main-action correlation failed: {managerError}");
             return;
@@ -1313,13 +1313,16 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         [
             .. actions,
             new NameActionSnapshot(2, controls[2], "Name text field"),
+            // The native softkeyicon.png button has no text label. Its callback
+            // opens/closes the character grid; it is a distinct fourth control.
+            new NameActionSnapshot(3, controls[3], "Character grid"),
         ]);
 
         var matchingFocus = scope.FocusObservations
             .Where(item => item.Manager == manager)
             .ToArray();
         if (matchingFocus.Length > 1 ||
-            (matchingFocus.Length == 1 && matchingFocus[0].Key is < 0 or > 2))
+            (matchingFocus.Length == 1 && matchingFocus[0].Key is < 0 or > 3))
         {
             FailCoverage("Name Entry main-action manager has ambiguous or invalid construction-time focus.");
             return;
@@ -1328,7 +1331,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         if (!snapshot.GridActive && initialActionKey is null)
         {
             if (!TryReadInt32(manager + ManagerFocusKeyOffset, out var managerKey) ||
-                managerKey is < 0 or > 2)
+                managerKey is < 0 or > 3)
             {
                 FailCoverage(
                     "Name Entry grid is inactive and its main-action manager has no authoritative initial focus.");
@@ -1709,7 +1712,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             var action = activeNameActions.SingleOrDefault(item => item.ActionId == 2);
             if (activeNameScene != scene || activeNameManager != target ||
                 activeDirectEntryOwner != owner || activeDirectEntryTarget != target ||
-                action is null || activeNameActions.Count != 3)
+                action is null || activeNameActions.Count != 4)
             {
                 FailCoverage(
                     "Name direct-entry close no longer matches its active scene and key-2 control.");
@@ -1724,7 +1727,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             new ReadOnlyCollection<NewGameAccessibilityEvent>(
             [
                 new KeyboardNameEntryClosed(snapshot.Name),
-                new NameActionFocused(actionLabel, 2, 3),
+                new NameActionFocused(actionLabel, 2, 4),
             ])));
     }
 
@@ -1733,13 +1736,16 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         nuint[] expectedControls;
         lock (stateGate)
         {
-            if (activeNameActions.Count != 3 ||
+            if (activeNameActions.Count != 4 ||
                 activeNameActions.Where((item, index) => item.ActionId != index).Any())
             {
-                error = "Name direct-entry close has no exact three-action correlation.";
+                error = "Name direct-entry close has no exact four-action correlation.";
                 return false;
             }
-            expectedControls = activeNameActions.Select(item => item.Control).ToArray();
+            // The IME restores buttons 0/1 and the grid button 3. The name
+            // field at key 2 keeps focus and is not in this enable/disable set.
+            expectedControls = activeNameActions.Where(item => item.ActionId != 2)
+                .Select(item => item.Control).ToArray();
         }
 
         if (!TryReadPointer(capture + 4, out var vectorBegin) || vectorBegin == 0 ||
@@ -1749,12 +1755,12 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             vectorEnd != vectorBegin + 8 || vectorCapacity < vectorEnd ||
             !TryReadPointer(vectorBegin, out var control0) ||
             !TryReadPointer(vectorBegin + 4, out var control1) ||
-            !TryReadPointer(capture + 0x10, out var control2) ||
+            !TryReadPointer(capture + 0x10, out var gridButton) ||
             control0 != expectedControls[0] ||
             control1 != expectedControls[1] ||
-            control2 != expectedControls[2])
+            gridButton != expectedControls[2])
         {
-            error = "Name direct-entry close controls do not match the exact two-element action vector and key-2 widget.";
+            error = "Name direct-entry close controls do not match the exact two-element action vector and key-3 grid button.";
             return false;
         }
         error = string.Empty;
@@ -1766,13 +1772,14 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         nuint[] expectedControls;
         lock (stateGate)
         {
-            if (activeNameActions.Count != 3 ||
+            if (activeNameActions.Count != 4 ||
                 activeNameActions.Where((item, index) => item.ActionId != index).Any())
             {
-                error = "Name direct-entry activation has no exact three-action correlation.";
+                error = "Name direct-entry activation has no exact four-action correlation.";
                 return false;
             }
-            expectedControls = activeNameActions.Select(item => item.Control).ToArray();
+            expectedControls = activeNameActions.Where(item => item.ActionId != 2)
+                .Select(item => item.Control).ToArray();
         }
 
         if (!TryReadPointer(capture + 8, out var vectorBegin) || vectorBegin == 0 ||
@@ -1782,12 +1789,12 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             vectorEnd != vectorBegin + 8 || vectorCapacity < vectorEnd ||
             !TryReadPointer(vectorBegin, out var control0) ||
             !TryReadPointer(vectorBegin + 4, out var control1) ||
-            !TryReadPointer(capture + 0x14, out var control2) ||
+            !TryReadPointer(capture + 0x14, out var gridButton) ||
             control0 != expectedControls[0] ||
             control1 != expectedControls[1] ||
-            control2 != expectedControls[2])
+            gridButton != expectedControls[2])
         {
-            error = "Name direct-entry activation controls do not match the exact two-element action vector and key-2 widget.";
+            error = "Name direct-entry activation controls do not match the exact two-element action vector and key-3 grid button.";
             return false;
         }
         error = string.Empty;
@@ -1869,7 +1876,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             manager = activeNameManager;
             actions = activeNameActions;
         }
-        return manager != 0 && actions.Count == 3 &&
+        return manager != 0 && actions.Count == 4 &&
             actions.SingleOrDefault(item => item.ActionId == actionId) is not null &&
             TryReadInt32(manager + ManagerFocusKeyOffset, out var managerKey) &&
             managerKey == actionId;

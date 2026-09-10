@@ -28,9 +28,11 @@ public sealed class NewGameHookSetTests
     private const nuint NameState0 = 0xC2000;
     private const nuint NameState1 = 0xC2100;
     private const nuint NameState2 = 0xC2200;
+    private const nuint NameState3 = 0xC2300;
     private const nuint NameControl0 = 0xC3000;
     private const nuint NameControl1 = 0xC3100;
     private const nuint NameControl2 = 0xC3200;
+    private const nuint NameControl3 = 0xC3300;
     private const nuint ConfirmationManager = 0xC4000;
     private const nuint ConfirmationControl0 = 0xC5000;
     private const nuint ConfirmationControl1 = 0xC5100;
@@ -754,6 +756,47 @@ public sealed class NewGameHookSetTests
     }
 
     [Fact]
+    public void NameInitCapturesTheNativeFourControlsAndNarratesInitialNameFieldAndGridButton()
+    {
+        var memory = CreateNameMemory(active: 0, page: -1)
+            .AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, 2);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory(includeStartupOriginals: true);
+        // Native builder: localized buttons 0/1, the name-field overlay 2,
+        // and the image button 3; every state is bound before focus is set to 2.
+        factory.SetOriginal<NameInputSceneInitDelegate>(HookId.NameInputSceneInit, _ =>
+        {
+            var text = factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg);
+            text(0x100, (nint)NameTextAddress(1), 0x41, 0x35);
+            text(0x100, (nint)NameTextAddress(2), 0x41, 0x08);
+            var bind = factory.GetDetour<NsMenuControlBinderDelegate>(HookId.NsMenuControlBinder);
+            bind((nint)NameManager, (nint)NameState0, 0);
+            bind((nint)NameManager, (nint)NameState1, 1);
+            bind((nint)NameManager, (nint)NameState2, 2);
+            bind((nint)NameManager, 0xC2300, 3);
+            factory.GetDetour<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter)((nint)NameManager, 2);
+            return 1;
+        });
+        ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var result = factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        Assert.Equal(1, result);
+        Assert.Empty(dispatcher.Failures);
+        var narrator = new NewGameNarrator();
+        var initial = dispatcher.Events.Cast<NewGameAccessibilityEvent>()
+            .SelectMany(narrator.Apply).Select(item => item.Text).ToArray();
+        Assert.Contains(initial, text => text.Contains("Current name: Crono.", StringComparison.Ordinal));
+        Assert.Contains("Name text field, 3 of 4", initial);
+        dispatcher.Events.Clear();
+
+        memory.AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, 3);
+        factory.GetDetour<NsMenuFocusSetterDelegate>(HookId.NsMenuFocusSetter)((nint)NameManager, 3);
+        var gridFocus = Assert.IsType<NameActionFocused>(Assert.Single(dispatcher.Events));
+        Assert.Equal(new NameActionFocused("Character grid", 3, 4), gridFocus);
+        Assert.Equal("Character grid, 4 of 4", Assert.Single(narrator.Apply(gridFocus)).Text);
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Fact]
     public void NameInitUsesNativeInactiveGridAndDeferredLabels()
     {
         // The constructor creates only Defaults and Accept. The character-grid
@@ -779,7 +822,7 @@ public sealed class NewGameHookSetTests
         Assert.Empty(dispatcher.Failures);
         Assert.Collection(Flatten(dispatcher.Events),
             item => Assert.IsType<NameEntryPresented>(item),
-            item => Assert.Equal(new NameActionFocused("Defaults", 0, 3), item));
+            item => Assert.Equal(new NameActionFocused("Defaults", 0, 4), item));
     }
 
     [Fact]
@@ -949,6 +992,7 @@ public sealed class NewGameHookSetTests
                 ((nint)NameManager, (nint)NameState0, 0),
                 ((nint)NameManager, (nint)NameState1, 1),
                 ((nint)NameManager, (nint)NameState2, 2),
+                ((nint)NameManager, (nint)NameState3, 3),
             },
             binderArguments);
         Assert.NotEqual(NameState0, NameControl0);
@@ -1054,7 +1098,7 @@ public sealed class NewGameHookSetTests
         Assert.Collection(
             Flatten(dispatcher.Events),
             item => Assert.Equal(new NameGridVisibilityChanged(false), item),
-            item => Assert.Equal(new NameActionFocused("Defaults", 0, 3), item));
+            item => Assert.Equal(new NameActionFocused("Defaults", 0, 4), item));
 
         dispatcher.Events.Clear();
         memory.AddInlineString(NameScene + NameInputCapture.NameOffset, string.Empty);
@@ -1203,7 +1247,7 @@ public sealed class NewGameHookSetTests
         Assert.Collection(
             Flatten(dispatcher.Events),
             item => Assert.Equal(new KeyboardNameEntryClosed("Lucca"), item),
-            item => Assert.Equal(new NameActionFocused("Name text field", 2, 3), item));
+            item => Assert.Equal(new NameActionFocused("Name text field", 2, 4), item));
 
         Assert.Equal([((nint)closure, 0, 2)], actionCalls);
         Assert.Equal([(nint)delayedCapture], delayedCalls);
@@ -1214,6 +1258,7 @@ public sealed class NewGameHookSetTests
     [Theory]
     [InlineData("target")]
     [InlineData("controls")]
+    [InlineData("grid-button-is-name-field")]
     public void InvalidDelayedNameEntryCaptureStillCallsNativeOriginalOnceAndFailsCoverage(
         string corruption)
     {
@@ -1233,6 +1278,10 @@ public sealed class NewGameHookSetTests
         if (corruption == "target")
         {
             memory.AddPointer(delayedCapture, directTarget + 4);
+        }
+        else if (corruption == "grid-button-is-name-field")
+        {
+            memory.AddPointer(delayedCapture + 0x14, NameControl2);
         }
         else
         {
@@ -1360,8 +1409,11 @@ public sealed class NewGameHookSetTests
         Assert.Empty(dispatcher.Failures);
     }
 
-    [Fact]
-    public void CorruptCloseControlPayloadStillCallsNativeOriginalAndPublishesNoPartialBatch()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CorruptCloseControlPayloadStillCallsNativeOriginalAndPublishesNoPartialBatch(
+        bool gridButtonIsNameField)
     {
         const nuint closure = 0xF0000;
         const nuint nameEdit = 0xF1000;
@@ -1379,7 +1431,7 @@ public sealed class NewGameHookSetTests
             .AddPointer(delayedCapture + 4, nameEdit);
         AddDirectOpenCapture(memory, delayedCapture, 0xF6000, NameManager, nameEdit);
         AddDirectCloseCapture(memory, closeCapture, closeVector, NameManager);
-        memory.AddPointer(closeCapture + 0x10, 0xBAD00);
+        memory.AddPointer(closeCapture + 0x10, gridButtonIsNameField ? NameControl2 : 0xBAD00);
         var dispatcher = new RecordingDispatcher();
         var factory = new RecordingHookFactory();
         ConfigureNameInit(factory);
@@ -1481,7 +1533,7 @@ public sealed class NewGameHookSetTests
         Assert.Collection(
             Flatten(dispatcher.Events),
             item => Assert.IsType<NameEntryPresented>(item),
-            item => Assert.Equal(new NameActionFocused("Accept", 1, 3), item));
+            item => Assert.Equal(new NameActionFocused("Accept", 1, 4), item));
         Assert.Empty(dispatcher.Failures);
     }
 
@@ -1509,7 +1561,7 @@ public sealed class NewGameHookSetTests
         Assert.Collection(
             Flatten(dispatcher.Events),
             item => Assert.Equal(new NameGridVisibilityChanged(false), item),
-            item => Assert.Equal(new NameActionFocused("Defaults", 0, 3), item));
+            item => Assert.Equal(new NameActionFocused("Defaults", 0, 4), item));
 
         dispatcher.Events.Clear();
         memory.AddByte(NameScene + NameInputCapture.ActiveOffset, 1);
@@ -2305,8 +2357,9 @@ public sealed class NewGameHookSetTests
         AddFocusableState(memory, NameState0, NameControl0);
         AddFocusableState(memory, NameState1, NameControl1);
         AddFocusableState(memory, NameState2, NameControl2);
-        AddFocusableState(memory, 0xC2300, 0xC3300);
+        AddFocusableState(memory, NameState3, NameControl3);
         AddFocusableState(memory, 0xC2400, 0xC3400);
+        AddFocusableState(memory, 0xC2500, 0xC3500);
         if (active != 0 && page is >= 0 and <= 2 && row is >= 0 and <= 7 && column is >= 0 and <= 10)
         {
             var index = (row + page * 8) * 11 + column;
@@ -2345,9 +2398,10 @@ public sealed class NewGameHookSetTests
             binder((nint)NameManager, (nint)NameState0, 0);
             binder((nint)NameManager, (nint)NameState1, 1);
             binder((nint)NameManager, (nint)NameState2, 2);
+            binder((nint)NameManager, (nint)NameState3, 3);
             for (var index = 0; index < extraBindingCount; index++)
             {
-                binder((nint)NameManager, (nint)(0xC2300 + index * 0x100), 3 + index);
+                binder((nint)NameManager, (nint)(0xC2400 + index * 0x100), 4 + index);
             }
             return 1;
         });
@@ -2433,7 +2487,7 @@ public sealed class NewGameHookSetTests
             .AddPointer(capture + 4, vector)
             .AddPointer(capture + 8, vector + 8)
             .AddPointer(capture + 12, vector + 8)
-            .AddPointer(capture + 0x10, NameControl2)
+            .AddPointer(capture + 0x10, NameControl3)
             .AddPointer(vector, NameControl0)
             .AddPointer(vector + 4, NameControl1);
     }
@@ -2451,7 +2505,7 @@ public sealed class NewGameHookSetTests
             .AddPointer(capture + 8, vector)
             .AddPointer(capture + 12, vector + 8)
             .AddPointer(capture + 0x10, vector + 8)
-            .AddPointer(capture + 0x14, NameControl2)
+            .AddPointer(capture + 0x14, NameControl3)
             .AddPointer(vector, NameControl0)
             .AddPointer(vector + 4, NameControl1);
     }

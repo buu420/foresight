@@ -70,7 +70,7 @@ public sealed class SemanticEventDispatcherTests
         dispatcher.Publish(new NameAccessibilityBatch(
         [
             new NameGridVisibilityChanged(false),
-            new NameActionFocused("Accept", 1, 3),
+            new NameActionFocused("Accept", 1, 4),
         ]));
 
         Assert.Equal(6, session.Outputs.Count);
@@ -82,7 +82,7 @@ public sealed class SemanticEventDispatcherTests
         Assert.Equal("Name: Crona.", session.Outputs[2].Text);
         Assert.Equal("Done. Latin page, row 8, column 11.", session.Outputs[3].Text);
         Assert.Equal("Character grid closed.", session.Outputs[4].Text);
-        Assert.Equal("Accept, 2 of 3", session.Outputs[5].Text);
+        Assert.Equal("Accept, 2 of 4", session.Outputs[5].Text);
         Assert.Empty(fatal.Messages);
     }
 

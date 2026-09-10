@@ -411,7 +411,7 @@ public sealed class NewGameNarrator
     private IReadOnlyList<Announcement> FocusNameAction(NameActionFocused focused)
     {
         if (!nameEntryActive || string.IsNullOrWhiteSpace(focused.Label) ||
-            focused.Count != 3 ||
+            focused.Count != 4 ||
             focused.SelectedIndex < 0 || focused.SelectedIndex >= focused.Count)
         {
             return Fail("Name Entry action focus is missing its exact control correlation or has an invalid key.");
