@@ -73,9 +73,17 @@ public static class NameInputCapture
     public const uint GlyphAppendInvokeRva = 0x2C5D90;
     public const uint DeleteInvokeRva = 0x2C5D20;
     public const uint RefreshInvokeRva = 0x2C5CE0;
-    public const uint NameOffset = 0x350;
-    public const uint NameLengthOffset = 0x360;
-    public const uint NameCapacityOffset = 0x364;
+    // scene+0x350 holds the saved name from opening the grid, not its current text.
+    // NameEdit::getText (RVA 0x2BF880) reads the UICCTextField's LabelProtocol.
+    public const uint NameEditVtableRva = 0x3B748C;
+    public const uint NameEditTextFieldOffset = 0x27C;
+    public const uint CocosTextFieldCreateImportRva = 0x3857D8;
+    public const uint CocosTextFieldCreateRva = 0x285CA1;
+    public const uint CocosTextFieldVtableRva = 0x4B94B8;
+    public const uint TextFieldLabelProtocolOffset = 0x278;
+    public const uint CocosTextFieldLabelProtocolVtableRva = 0x4B97CC;
+    public const uint CocosTextFieldGetStringRva = 0x2D6762;
+    public const uint TextFieldCurrentNameOffset = 0x584;
     public const uint GridPointerTableRva = 0x39B708;
     public const uint LanguageGlobalRva = 0x3FA168;
     public const int MaximumNameUtf16CodeUnits = 5;
@@ -281,11 +289,6 @@ public static class NameInputCapture
             return false;
         }
 
-        if (!TryReadName(memory, scene + NameOffset, out var name, out error))
-        {
-            return false;
-        }
-
         if (!TryReadByte(memory, scene + ActiveOffset, out var active) || active is not 0 and not 1)
         {
             error = "Name Entry active byte is unreadable or outside the audited 0/1 range.";
@@ -307,6 +310,11 @@ public static class NameInputCapture
             !TryReadRequiredTarget(
                 memory, imageBase, scene + RefreshTargetOffset, RefreshInvokeRva,
                 "refresh", out var refresh, out error))
+        {
+            return false;
+        }
+
+        if (!TryReadDisplayedName(memory, imageBase, glyphAppend, delete, out var name, out error))
         {
             return false;
         }
@@ -577,6 +585,59 @@ public static class NameInputCapture
 
     private static NameGridCellDescriptor GetCell(int page, int row, int column) =>
         AuditedGrid[(page * RowsPerPage + row) * ColumnsPerRow + column];
+
+    private static bool TryReadDisplayedName(
+        IReadableMemory memory,
+        nuint imageBase,
+        nuint glyphAppend,
+        nuint delete,
+        out string name,
+        out string error)
+    {
+        name = string.Empty;
+        // The audited _Do_call thunks pass implementation+4 as the closure;
+        // its first field is the same NameEdit used by native append/delete/Accept.
+        if (!TryReadPointer(memory, glyphAppend + 4, out var nameEdit) || nameEdit == 0 ||
+            !TryReadPointer(memory, delete + 4, out var deleteOwner) || deleteOwner != nameEdit)
+        {
+            error = "Name Entry glyph/delete closures do not share a readable non-null text owner.";
+            return false;
+        }
+        if (!TryReadPointer(memory, nameEdit, out var editVtable) ||
+            editVtable != imageBase + NameEditVtableRva)
+        {
+            error = "Name Entry text owner is not the audited NameEdit type.";
+            return false;
+        }
+        if (!TryReadPointer(memory, imageBase + CocosTextFieldCreateImportRva, out var create) ||
+            create <= CocosTextFieldCreateRva)
+        {
+            error = "Name Entry Cocos text-field import is unreadable or invalid.";
+            return false;
+        }
+        var cocosBase = create - CocosTextFieldCreateRva;
+        if (!TryReadPointer(memory, nameEdit + NameEditTextFieldOffset, out var textField) || textField == 0 ||
+            !TryReadPointer(memory, textField, out var fieldVtable) ||
+            fieldVtable != cocosBase + CocosTextFieldVtableRva ||
+            !TryReadPointer(memory, textField + TextFieldLabelProtocolOffset, out var protocolVtable) ||
+            protocolVtable != cocosBase + CocosTextFieldLabelProtocolVtableRva)
+        {
+            error = "Name Entry displayed text field does not match the audited UICCTextField layout.";
+            return false;
+        }
+        Span<byte> getterBytes = stackalloc byte[7];
+        if (!TryReadPointer(memory, protocolVtable + 8, out var getter) ||
+            getter != cocosBase + CocosTextFieldGetStringRva ||
+            !memory.TryRead(getter, getterBytes) ||
+            !getterBytes.SequenceEqual<byte>([0x8D, 0x81, 0x0C, 0x03, 0, 0, 0xC3]))
+        {
+            error = "Name Entry displayed text getter is not the audited LEA EAX,[ECX+0x30C]; RET.";
+            return false;
+        }
+        // getString returns the MSVC string at LabelProtocol+0x30C. Read it
+        // directly so capture never calls game code or allocates a native string.
+        return TryReadName(memory, textField + TextFieldCurrentNameOffset, out name, out error);
+    }
 
     private static bool TryReadName(
         IReadableMemory memory,

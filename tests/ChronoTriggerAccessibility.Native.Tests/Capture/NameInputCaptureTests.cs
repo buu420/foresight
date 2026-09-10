@@ -10,6 +10,10 @@ public sealed class NameInputCaptureTests
 {
     private const nuint ImageBase = 0x400000;
     private const nuint Scene = 0x10000;
+    private const nuint NameEdit = 0x80000;
+    private const nuint TextField = 0x81000;
+    private const nuint DisplayedName = TextField + 0x584;
+    private const nuint CocosBase = 0x10000000;
 
     private static readonly string[][] ExpectedPages =
     [
@@ -81,6 +85,46 @@ public sealed class NameInputCaptureTests
         Assert.Equal(0x60000u, snapshot.GlyphAppendTarget);
         Assert.Equal(0x60100u, snapshot.DeleteTarget);
         Assert.Equal(0x60200u, snapshot.RefreshTarget);
+    }
+
+    [Theory]
+    [InlineData("", "Crono")]
+    [InlineData("Crono", "Lucca")]
+    [InlineData("Crono", "")]
+    public void ReadsCurrentTextFieldInsteadOfTheSavedGridEntryName(string savedName, string displayedName)
+    {
+        var memory = CreateValidMemory(displayedName, -1, 0, 0, 1, "", active: 0)
+            .AddInlineMsvcString(Scene + 0x350, savedName);
+
+        Assert.True(NameInputCapture.TryCreateSnapshot(
+            memory, ImageBase, Scene, null, out var snapshot, out var error), error);
+
+        Assert.Equal(displayedName, snapshot.Name);
+        Assert.False(snapshot.GridActive);
+    }
+
+    [Theory]
+    [InlineData(0x60004u, "owner")]
+    [InlineData(0x60104u, "owner")]
+    [InlineData(0x80000u, "NameEdit")]
+    [InlineData(0x8027Cu, "text field")]
+    [InlineData(0x7857D8u, "Cocos")]
+    [InlineData(0x81000u, "text field")]
+    [InlineData(0x81278u, "text field")]
+    [InlineData(0x104B97D4u, "getter")]
+    public void RejectsUnverifiedDisplayedNamePointersInsteadOfUsingTheSavedName(uint address, string diagnostic)
+    {
+        AssertRejected(CreateValidMemory("Crono", -1, 0, 0, 1, "", active: 0)
+            .AddPointer(address, 0), diagnostic);
+    }
+
+    [Fact]
+    public void RejectsDifferentEditOwnersAndAChangedTextGetter()
+    {
+        AssertRejected(CreateValidMemory("Crono", -1, 0, 0, 1, "", active: 0)
+            .AddPointer(0x60104, NameEdit + 4), "owner");
+        AssertRejected(CreateValidMemory("Crono", -1, 0, 0, 1, "", active: 0)
+            .ReplaceByte(CocosBase + 0x2D6762 + 2, 0x10), "getter");
     }
 
     [Theory]
@@ -392,15 +436,26 @@ public sealed class NameInputCaptureTests
             .AddPointer(0x61100 + 8, ImageBase + NameInputCapture.DeleteInvokeRva)
             .AddPointer(0x60200, 0x61200)
             .AddPointer(0x61200 + 8, ImageBase + NameInputCapture.RefreshInvokeRva)
+            .AddPointer(0x60000 + 4, NameEdit)
+            .AddPointer(0x60100 + 4, NameEdit)
+            .AddPointer(NameEdit, ImageBase + 0x3B748C)
+            .AddPointer(NameEdit + 0x27C, TextField)
+            .AddPointer(ImageBase + 0x3857D8, CocosBase + 0x285CA1)
+            .AddPointer(TextField, CocosBase + 0x4B94B8)
+            .AddPointer(TextField + 0x278, CocosBase + 0x4B97CC)
+            .AddPointer(CocosBase + 0x4B97CC + 8, CocosBase + 0x2D6762)
+            .ReplaceBytes(CocosBase + 0x2D6762, [0x8D, 0x81, 0x0C, 0x03, 0, 0, 0xC3])
             .AddInt32(ImageBase + NameInputCapture.LanguageGlobalRva, language);
 
         if (externalName)
         {
-            memory.AddExternalMsvcString(Scene + NameInputCapture.NameOffset, 0x50000, name);
+            memory.AddExternalMsvcString(Scene + 0x350, 0x50000, name);
+            memory.AddExternalMsvcString(DisplayedName, 0x50000, name);
         }
         else
         {
-            memory.AddInlineMsvcString(Scene + NameInputCapture.NameOffset, name);
+            memory.AddInlineMsvcString(Scene + 0x350, name);
+            memory.AddInlineMsvcString(DisplayedName, name);
         }
 
         if (active != 0 && page >= 0 && page <= 2 && row is >= 0 and <= 7 && column is >= 0 and <= 10)

@@ -130,8 +130,17 @@ public sealed class NameInputCaptureActionLabelTests
             .AddPointer(0x61100 + 8, ImageBase + NameInputCapture.DeleteInvokeRva)
             .AddPointer(0x60200, 0x61200)
             .AddPointer(0x61200 + 8, ImageBase + NameInputCapture.RefreshInvokeRva)
+            .AddPointer(0x60004, 0x80000)
+            .AddPointer(0x60104, 0x80000)
+            .AddPointer(0x80000, ImageBase + 0x3B748C)
+            .AddPointer(0x8027C, 0x81000)
+            .AddPointer(ImageBase + 0x3857D8, 0x10285CA1)
+            .AddPointer(0x81000, 0x104B94B8)
+            .AddPointer(0x81278, 0x104B97CC)
+            .AddPointer(0x104B97D4, 0x102D6762)
+            .AddBytes(0x102D6762, [0x8D, 0x81, 0x0C, 0x03, 0, 0, 0xC3])
             .AddInt32(ImageBase + NameInputCapture.LanguageGlobalRva, language)
-            .AddInlineMsvcString(Scene + NameInputCapture.NameOffset, name);
+            .AddInlineMsvcString(0x81584, name);
 
         if (active != 0 && page is >= 0 and <= 2 && row is >= 0 and <= 7 && column is >= 0 and <= 10)
         {
@@ -147,6 +156,12 @@ public sealed class NameInputCaptureActionLabelTests
     private sealed class TestMemory : IReadableMemory
     {
         private readonly Dictionary<nuint, byte[]> segments = [];
+
+        public TestMemory AddBytes(nuint address, byte[] value)
+        {
+            segments[address] = value;
+            return this;
+        }
 
         public TestMemory AddByte(nuint address, byte value)
         {

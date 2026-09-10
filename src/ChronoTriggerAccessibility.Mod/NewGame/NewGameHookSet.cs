@@ -225,6 +225,59 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         }
     }
 
+    public void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned)
+    {
+        _ = position;
+        _ = anchor;
+        if (!TryCaptureActiveEpoch(out _) ||
+            GetOwnedThreadScope() is not { Kind: CaptureKind.NameConfirmation } scope)
+        {
+            return;
+        }
+        // The name-character labels precede both CustomButtons. Each button then
+        // receives exactly one rendered label at RVA 0x2C36F5 before the next ctor.
+        if (scope.ConstructedControls.Count == 0)
+        {
+            return;
+        }
+        try
+        {
+            var control = scope.PendingConfirmationControl;
+            if (control == 0)
+            {
+                scope.Errors.Add("Confirmation rendered another label without a pending choice control.");
+                return;
+            }
+            if (returned == 0 || fontSize != 12)
+            {
+                scope.Errors.Add("Confirmation choice label factory did not return the audited non-null font-12 label.");
+                return;
+            }
+            if (!stringReader.TryRead((nuint)text, out var label, out var error) ||
+                string.IsNullOrWhiteSpace(label))
+            {
+                scope.Errors.Add($"Confirmation rendered choice text is unreadable or blank: {error}");
+                return;
+            }
+            if (scope.ConfirmationLocalizedLabels.TryGetValue(control, out var localized) &&
+                !StringComparer.Ordinal.Equals(localized, label))
+            {
+                scope.Errors.Add("Confirmation rendered choice text differs from its observed localized text.");
+                return;
+            }
+            if (!scope.ConfirmationControlLabels.TryAdd(control, new string(label.AsSpan())))
+            {
+                scope.Errors.Add("Confirmation choice control received more than one rendered label.");
+                return;
+            }
+            scope.PendingConfirmationControl = 0;
+        }
+        catch (Exception exception)
+        {
+            scope.Errors.Add($"Confirmation rendered-label capture failed: {FormatException(exception)}");
+        }
+    }
+
     private IPreparedHook PrepareOpeTextResolver(
         IVerifiedGameBuild build,
         UnmanagedBoundaryGuard boundary) =>
@@ -777,7 +830,10 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                             else if (scope.PendingConfirmationControl != 0)
                             {
                                 scope.Errors.Add(
-                                    "Confirmation constructed another choice control before localizing the preceding control.");
+                                    "Confirmation constructed another choice control before rendering the preceding control's label. " +
+                                    $"Pending=0x{scope.PendingConfirmationControl:X}, new=0x{control:X}, " +
+                                    $"constructed={scope.ConstructedControls.Count}, rendered={scope.ConfirmationControlLabels.Count}, " +
+                                    $"text keys=[{string.Join(",", scope.Text.Keys.Select(key => $"{key.Bank:X}/{key.MessageId:X}"))}].");
                             }
                             else
                             {
@@ -1388,7 +1444,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             scope.ConfirmationControlLabels.Count != 2)
         {
             FailCoverage(
-                "Name confirmation did not produce exactly two immediately correlated localized CustomButton controls.");
+                "Name confirmation did not produce exactly two CustomButton controls with correlated rendered labels.");
             return;
         }
         if (!TryGetScopeText(scope, NameInputCapture.ConfirmationPromptTextKey, out var prompt))
@@ -2091,11 +2147,10 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
                     $"Confirmation choice text ({bank:X},{messageId:X}) was not immediately preceded by a CustomButton constructor.");
                 return;
             }
-            if (!scope.ConfirmationControlLabels.TryAdd(scope.PendingConfirmationControl, text))
+            if (!scope.ConfirmationLocalizedLabels.TryAdd(scope.PendingConfirmationControl, text))
             {
                 scope.Errors.Add("Confirmation choice control received more than one localized label.");
             }
-            scope.PendingConfirmationControl = 0;
             StoreScopeText(scope, key, text);
             return;
         }
@@ -2478,6 +2533,7 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
         public List<(nuint Manager, nuint Control, int Key)> Bindings { get; } = [];
         public List<nuint> ConstructedControls { get; } = [];
         public Dictionary<nuint, string> ConfirmationControlLabels { get; } = [];
+        public Dictionary<nuint, string> ConfirmationLocalizedLabels { get; } = [];
         public List<string> Errors { get; } = [];
         public nuint PendingConfirmationControl { get; set; }
     }

@@ -24,6 +24,9 @@ public sealed class NewGameHookSetTests
     private const nuint ModeScene = 0x92000;
     private const nuint ModeRecords = 0x93000;
     private const nuint NameScene = 0xC0000;
+    private const nuint NameEdit = 0xF1000;
+    private const nuint NameTextField = 0xF8000;
+    private const nuint DisplayedName = NameTextField + 0x584;
     private const nuint NameManager = 0xC1000;
     private const nuint NameState0 = 0xC2000;
     private const nuint NameState1 = 0xC2100;
@@ -1072,7 +1075,7 @@ public sealed class NewGameHookSetTests
                 Assert.Equal(0, eventType);
                 if (actionId == 0)
                 {
-                    memory.AddInlineString(NameScene + NameInputCapture.NameOffset, "Crono");
+                    memory.AddInlineString(DisplayedName, "Crono");
                 }
                 else if (actionId == 3)
                 {
@@ -1101,7 +1104,7 @@ public sealed class NewGameHookSetTests
             item => Assert.Equal(new NameActionFocused("Defaults", 0, 4), item));
 
         dispatcher.Events.Clear();
-        memory.AddInlineString(NameScene + NameInputCapture.NameOffset, string.Empty);
+        memory.AddInlineString(DisplayedName, string.Empty);
         action(0xF0000, 0, 1);
         Assert.IsType<EmptyNameRejected>(Assert.Single(dispatcher.Events));
         Assert.Equal(3, calls);
@@ -1123,7 +1126,7 @@ public sealed class NewGameHookSetTests
                 if (calls.Count == 1)
                 {
                     memory
-                        .AddInlineString(NameScene + NameInputCapture.NameOffset, "Crona")
+                        .AddInlineString(DisplayedName, "Crona")
                         .AddInt32(NameScene + NameInputCapture.ColumnOffset, 1)
                         .AddPointer(
                             ImageBase + NameInputCapture.GridPointerTableRva + 4,
@@ -1211,7 +1214,7 @@ public sealed class NewGameHookSetTests
         factory.SetOriginal<NameInputSceneUpdateDelegate>(
             HookId.NameInputSceneUpdate,
             (_, _) => memory.AddInlineString(
-                NameScene + NameInputCapture.NameOffset, "Lucca"));
+                DisplayedName, "Lucca"));
         var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
         var installer = new ReloadedHookInstaller(set.Registrations, [set]);
         installer.PrepareAll(CreateBuild(), CreateBoundary());
@@ -1693,6 +1696,92 @@ public sealed class NewGameHookSetTests
         Assert.Empty(dispatcher.Events);
         Assert.Single(dispatcher.Failures);
         Assert.Contains("authoritative", dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ConfirmationReadsRenderedChoicesWhenSharedLocalizedNotificationsAreAbsent()
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        memory.AddInlineString(ConfirmationTextAddress(1), "Oui")
+            .AddInlineString(ConfirmationTextAddress(2), "Non");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var forwarded = new List<uint[]>();
+        var fanout = new SharedNativeHookFanoutFactory(factory, dispatcher.ReportCoverageFailure);
+        var set = new NewGameHookSet(fanout, new RecordingWrapperFactory(), memory, dispatcher);
+        fanout.ConfigureObservers([set]);
+        var renderCalls = 0;
+        MenuTextLabelFactoryDelegate render = (_, text, _, size) =>
+        {
+            renderCalls++;
+            Assert.Equal(12, size);
+            return text + 0x1000;
+        };
+        factory.SetOriginal(HookId.MenuTextLabelFactory, render);
+        _ = fanout.CreateHook(HookId.MenuTextLabelFactory, render, ImageBase + 0x2400B0);
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false, observeChoiceText: false,
+            renderLabel: text => Assert.Equal(text + 0x1000,
+                factory.GetDetour<MenuTextLabelFactoryDelegate>(HookId.MenuTextLabelFactory)(
+                    0xD9000, text, 0xD9010, 12)));
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Empty(dispatcher.Failures);
+        var confirmation = Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal("Use Crono?", confirmation.Prompt);
+        Assert.Equal(new[] { "Oui", "Non" }, confirmation.Choices);
+        Assert.Equal(1, confirmation.SelectedIndex);
+        Assert.Equal(words, Assert.Single(forwarded));
+        Assert.Equal(2, renderCalls);
+    }
+
+    [Theory]
+    [InlineData("missing", "before rendering")]
+    [InlineData("blank", "blank")]
+    [InlineData("unreadable", "unreadable")]
+    [InlineData("null", "non-null")]
+    [InlineData("duplicate", "without a pending")]
+    [InlineData("mismatch", "differs")]
+    public void ConfirmationRejectsMissingInvalidOrConflictingRenderedChoiceLabels(string behavior, string diagnostic)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var forwarded = new List<uint[]>();
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false, renderLabel: text =>
+        {
+            if (behavior == "missing") return;
+            if (behavior == "blank") memory.AddInlineString((nuint)text, " ");
+            if (behavior == "mismatch") memory.AddInlineString((nuint)text, "Changed");
+            if (behavior == "unreadable") memory.Remove((nuint)text);
+            set.AfterMenuTextLabelFactory(1, text, 2, 12, behavior == "null" ? 0 : 3);
+            if (behavior == "duplicate") set.AfterMenuTextLabelFactory(1, text, 2, 12, 3);
+        });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName("Crono");
+
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+
+        Assert.Empty(dispatcher.Events);
+        Assert.Contains(diagnostic, Assert.Single(dispatcher.Failures), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(words, Assert.Single(forwarded));
     }
 
     [Fact]
@@ -2347,8 +2436,18 @@ public sealed class NewGameHookSetTests
             .AddPointer(0xE1100 + 8, ImageBase + NameInputCapture.DeleteInvokeRva)
             .AddPointer(0xE0200, 0xE1200)
             .AddPointer(0xE1200 + 8, ImageBase + NameInputCapture.RefreshInvokeRva)
+            .AddPointer(0xE0004, NameEdit)
+            .AddPointer(0xE0104, NameEdit)
+            .AddPointer(NameEdit, ImageBase + 0x3B748C)
+            .AddPointer(NameEdit + 0x27C, NameTextField)
+            .AddPointer(ImageBase + 0x3857D8, 0x10285CA1)
+            .AddPointer(NameTextField, 0x104B94B8)
+            .AddPointer(NameTextField + 0x278, 0x104B97CC)
+            .AddPointer(0x104B97D4, 0x102D6762)
+            .AddBytes(0x102D6762, [0x8D, 0x81, 0x0C, 0x03, 0, 0, 0xC3])
+            .AddInlineString(NameScene + 0x350, string.Empty)
             .AddInt32(ImageBase + NameInputCapture.LanguageGlobalRva, 1)
-            .AddInlineString(NameScene + NameInputCapture.NameOffset, name)
+            .AddInlineString(DisplayedName, name)
             .AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, 0)
             .AddInlineString(NameTextAddress(0), "Grid Action")
             .AddInlineString(NameTextAddress(1), "Defaults")
@@ -2427,7 +2526,9 @@ public sealed class NewGameHookSetTests
         NewGameHookSet set,
         List<uint[]> forwarded,
         bool extraBinding,
-        bool useTextManager = false)
+        bool useTextManager = false,
+        bool observeChoiceText = true,
+        Action<nint>? renderLabel = null)
     {
         factory.SetOriginal<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder,
             (scene, word0, word1, word2, word3, length, capacity) =>
@@ -2444,20 +2545,26 @@ public sealed class NewGameHookSetTests
                     factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
                         0x100, (nint)ConfirmationTextAddress(1), 0x41, 0x11);
                 }
-                else
+                else if (observeChoiceText)
                 {
                     resolver(0x100, (nint)ConfirmationTextAddress(1), 0x41, 0x11);
                 }
+                if (renderLabel is not null) renderLabel((nint)ConfirmationTextAddress(1));
+                else ((ISharedNativeHookObserver)set).AfterMenuTextLabelFactory(
+                    0xD9000, (nint)ConfirmationTextAddress(1), 0xD9010, 12, 0xD9100);
                 constructor((nint)ConfirmationControl1);
                 if (useTextManager)
                 {
                     factory.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg)(
                         0x100, (nint)ConfirmationTextAddress(2), 0x41, 0x12);
                 }
-                else
+                else if (observeChoiceText)
                 {
                     resolver(0x100, (nint)ConfirmationTextAddress(2), 0x41, 0x12);
                 }
+                if (renderLabel is not null) renderLabel((nint)ConfirmationTextAddress(2));
+                else ((ISharedNativeHookObserver)set).AfterMenuTextLabelFactory(
+                    0xD9020, (nint)ConfirmationTextAddress(2), 0xD9030, 12, 0xD9200);
                 resolver(0x100, (nint)ConfirmationTextAddress(0), 0x23, 0xDA);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState0, 0);
                 binder((nint)ConfirmationManager, (nint)ConfirmationState1, 1);
@@ -2665,6 +2772,12 @@ public sealed class NewGameHookSetTests
     private sealed class TestMemory : IReadableMemory
     {
         private readonly Dictionary<nuint, byte[]> segments = [];
+
+        public TestMemory AddBytes(nuint address, byte[] value)
+        {
+            segments[address] = value;
+            return this;
+        }
 
         public TestMemory AddByte(nuint address, byte value)
         {
