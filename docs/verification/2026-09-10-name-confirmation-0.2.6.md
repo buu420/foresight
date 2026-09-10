@@ -1,5 +1,11 @@
 # Name confirmation repair 0.2.6
 
+Player follow-up: the player subsequently reported passing the New Game intro and
+reaching first control of Crono. The `2026-09-10 17.14.53 ~ Chrono Trigger.txt` log
+records the rendered question, Yes/No focus, and opening dialogue without the
+previous confirmation error. A separate in-game top-menu error follows at 12:17:20;
+that menu and the newly requested visual descriptions are being investigated.
+
 Pressing Accept previously faulted because the mod counted the prompt window
 among the Yes/No choices. The player's diagnostic run captured the complete
 question, both choices, and their two distinct managers. Version 0.2.6 uses that

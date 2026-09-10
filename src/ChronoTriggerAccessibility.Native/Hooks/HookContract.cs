@@ -99,6 +99,13 @@ public enum HookId
     TouchTopMenuActionDispatcher,
     ClassicTopMenuTimeLabelCallSite,
     ClassicTopMenuCurrencyLabelCallSite,
+    ClassicTopMenuSingleFooterLabelCallSite,
+    ClassicTopMenuFirstFooterLabelCallSite,
+    ClassicTopMenuSecondFooterLabelCallSite,
+    ClassicTopMenuContextLabelCallSite,
+    StatusBarHiddenLabelCallSite,
+    TouchStatusBarInitialLabelCallSite,
+    FieldOpcodeDispatcher,
     ClassicTopMenuCaptionLabelCallSite,
     ClassicTopMenuMemberNameLabelCallSite,
     ClassicStatusRowLabelCallSite,
@@ -413,6 +420,9 @@ public delegate void TopMenuActionDispatcherDelegate(nint context);
 
 [Function(CallingConventions.Cdecl)]
 public delegate void NativeCallSiteProbeDelegate();
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void FieldOpcodeDispatcherDelegate(nint context, int opcode);
 
 [Function(CallingConventions.Cdecl)]
 public delegate void SteamSettingsRenderedValueProbeDelegate(nint text);

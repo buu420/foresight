@@ -294,6 +294,7 @@ public sealed class TopMenuCaptureScope : IDisposable
                     out var captions,
                     out var time,
                     out var currency,
+                    out var footerLines,
                     out diagnostic))
             {
                 return false;
@@ -329,7 +330,8 @@ public sealed class TopMenuCaptureScope : IDisposable
                 return false;
             }
 
-            var flattened = FlattenStatus(members, time, currency, statusState.Lines);
+            var conditionalLines = statusState.Lines.Concat(footerLines).ToArray();
+            var flattened = FlattenStatus(members, time, currency, conditionalLines);
             snapshot = new TopMenuSnapshot(
                 style,
                 capturedControls,
@@ -337,7 +339,7 @@ public sealed class TopMenuCaptureScope : IDisposable
                 time,
                 currency,
                 members,
-                statusState.Lines,
+                conditionalLines,
                 flattened);
             published = true;
             diagnostic = string.Empty;
@@ -444,12 +446,15 @@ public sealed class TopMenuCaptureScope : IDisposable
         out List<string> captions,
         out string time,
         out string currency,
+        out IReadOnlyList<string> footerLines,
         out string diagnostic)
     {
         members = [];
         captions = [];
         time = string.Empty;
         currency = string.Empty;
+        var renderedFooter = new List<string>();
+        footerLines = renderedFooter;
         var cursor = 0;
         var activeCount = 0;
         var reserveCount = 0;
@@ -512,6 +517,11 @@ public sealed class TopMenuCaptureScope : IDisposable
             return false;
         }
 
+        // Touch StatusBar construction can render its own caption before the row builder.
+        if (style == TopMenuStyle.Touch && TryTakeUtf8(ref cursor, 0x22ECEB, out var initialCaption))
+        {
+            renderedFooter.Add(initialCaption);
+        }
         var captionRva = style == TopMenuStyle.Classic ? 0x1D179Eu : 0x2221C6u;
         for (var index = 0; index < RowCount; index++)
         {
@@ -535,6 +545,26 @@ public sealed class TopMenuCaptureScope : IDisposable
             {
                 diagnostic = "The classic top menu is missing ordered time/currency observations.";
                 return false;
+            }
+            // The native builder splits the rendered footer into either one line or
+            // exactly two, then optionally renders a separate context line.
+            if (TryTakeUtf8(ref cursor, 0x1D0D78, out var singleLine))
+            {
+                renderedFooter.Add(singleLine);
+            }
+            else if (TryTakeUtf8(ref cursor, 0x1D0DBC, out var firstLine))
+            {
+                if (!TryTakeUtf8(ref cursor, 0x1D0E05, out var secondLine))
+                {
+                    diagnostic = "The classic top-menu two-line footer is incomplete.";
+                    return false;
+                }
+                renderedFooter.Add(firstLine);
+                renderedFooter.Add(secondLine);
+            }
+            if (TryTakeUtf8(ref cursor, 0x1D0ED3, out var contextLine))
+            {
+                renderedFooter.Add(contextLine);
             }
         }
         else
@@ -1108,8 +1138,9 @@ public sealed class TopMenuCaptureScope : IDisposable
         {
             TopMenuStyle.Classic => rva is
                 0x1D0AAA or 0x1D0B54 or 0x1D179E or 0x23B1D0 or
-                0x23A2F2 or 0x23A552 or 0x23A3C2 or 0x23A5EF or 0x23A697 or 0x23A73B,
-            TopMenuStyle.Touch => rva is 0x221A4F or 0x221B1C or 0x2221C6 or 0x23A9E6,
+                0x23A2F2 or 0x23A552 or 0x23A3C2 or 0x23A5EF or 0x23A697 or 0x23A73B or
+                0x1D0D78 or 0x1D0DBC or 0x1D0E05 or 0x1D0ED3,
+            TopMenuStyle.Touch => rva is 0x221A4F or 0x221B1C or 0x2221C6 or 0x23A9E6 or 0x22ECEB,
             _ => false,
         };
     }

@@ -10,6 +10,56 @@ public sealed class TopMenuCaptureTests
 {
     private const nuint ImageBase = 0x00400000;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClassicCapture_IncludesRenderedFooterLinesAfterCurrency(bool twoLines)
+    {
+        var fixture = new Fixture(TopMenuStyle.Classic, activeCount: 1, reserveCount: 1);
+        using var scope = fixture.Begin();
+        fixture.RecordComplete(scope);
+        Assert.True(scope.TryRecordUtf8(ImageBase + (twoLines ? 0x1D0DBCu : 0x1D0D78u),
+            "Rendered first line", out var error), error);
+        if (twoLines)
+        {
+            Assert.True(scope.TryRecordUtf8(ImageBase + 0x1D0E05u, "Rendered second line", out error), error);
+        }
+        Assert.True(scope.TryRecordUtf8(ImageBase + 0x1D0ED3u, "Rendered context line", out error), error);
+
+        Assert.True(scope.TryCreateSnapshot(out var snapshot, out error), error);
+        Assert.Equal(twoLines
+            ? ["Low HP", "Rendered first line", "Rendered second line", "Rendered context line"]
+            : new[] { "Low HP", "Rendered first line", "Rendered context line" }, snapshot.ConditionalLines);
+        Assert.Equal("Rendered context line", snapshot.FlattenedStatus[^1]);
+    }
+
+    [Fact]
+    public void ClassicCapture_RejectsAnIncompleteTwoLineFooter()
+    {
+        var fixture = new Fixture(TopMenuStyle.Classic, activeCount: 1, reserveCount: 1);
+        using var scope = fixture.Begin();
+        fixture.RecordComplete(scope);
+        Assert.True(scope.TryRecordUtf8(ImageBase + 0x1D0DBCu, "First of two", out var error), error);
+
+        Assert.False(scope.TryCreateSnapshot(out _, out error));
+        Assert.Contains("footer", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TouchCapture_IncludesInitialStatusCaptionInNativeConstructionOrder()
+    {
+        var fixture = new Fixture(TopMenuStyle.Touch, activeCount: 1, reserveCount: 0);
+        using var scope = fixture.Begin();
+        fixture.RecordTouchActive(scope, "Crono");
+        Assert.True(scope.TryRecordUtf8(ImageBase + 0x22ECEB, "Rendered caption", out var error), error);
+        fixture.RecordRowsAndControls(scope);
+        fixture.RecordTimeAndCurrency(scope);
+        fixture.RecordStatus(scope);
+
+        Assert.True(scope.TryCreateSnapshot(out var snapshot, out error), error);
+        Assert.Equal(new[] { "Rendered caption" }, snapshot.ConditionalLines);
+    }
+
     [Fact]
     public void ClassicCapture_CorrelatesCompleteLocalizedStatusAndNativeFocus()
     {

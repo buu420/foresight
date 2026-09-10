@@ -285,6 +285,18 @@ public static class GameVersionCatalog
             "Classic top-menu time label call site", 0x1D0AA5, "E8 06 F6 06 00"),
         CreateAssemblyCallSite(HookId.ClassicTopMenuCurrencyLabelCallSite,
             "Classic top-menu currency label call site", 0x1D0B4F, "E8 5C F5 06 00"),
+        CreateAssemblyCallSite(HookId.ClassicTopMenuSingleFooterLabelCallSite,
+            "Classic top-menu single footer label call site", 0x1D0D73, "E8 38 F3 06 00"),
+        CreateAssemblyCallSite(HookId.ClassicTopMenuFirstFooterLabelCallSite,
+            "Classic top-menu first footer label call site", 0x1D0DB7, "E8 F4 F2 06 00"),
+        CreateAssemblyCallSite(HookId.ClassicTopMenuSecondFooterLabelCallSite,
+            "Classic top-menu second footer label call site", 0x1D0E00, "E8 AB F2 06 00"),
+        CreateAssemblyCallSite(HookId.ClassicTopMenuContextLabelCallSite,
+            "Classic top-menu context label call site", 0x1D0ECE, "E8 DD F1 06 00"),
+        CreateAssemblyCallSite(HookId.StatusBarHiddenLabelCallSite,
+            "StatusBar hidden initial label call site", 0x22EFA1, "E8 0A 11 01 00"),
+        CreateAssemblyCallSite(HookId.TouchStatusBarInitialLabelCallSite,
+            "Touch StatusBar initial label call site", 0x22ECE6, "E8 C5 13 01 00"),
         CreateAssemblyCallSite(HookId.ClassicTopMenuCaptionLabelCallSite,
             "Classic top-menu caption label call site", 0x1D1799, "E8 12 E9 06 00"),
         CreateAssemblyCallSite(HookId.ClassicTopMenuMemberNameLabelCallSite,
@@ -323,6 +335,9 @@ public static class GameVersionCatalog
             "Compact status extra-label call site", 0x239A6E, "E8 3D 66 00 00"),
         CreateAssemblyCallSite(HookId.StatusBarGlyphRendererCallSite,
             "StatusBar glyph-renderer call site", 0x22F3B8, "E8 C3 EC FF FF"),
+        Create(HookId.FieldOpcodeDispatcher, "Field event opcode dispatcher", 0x1619E0,
+            "55 8B EC 8B 45 08 53 56 8B F1 57 3D FF 00 00 00",
+            typeof(FieldOpcodeDispatcherDelegate), X86CallingConvention.MicrosoftThiscall),
     ]);
 
     public static HookContract Get(HookId id) => Hooks.Single(hook => hook.Id == id);

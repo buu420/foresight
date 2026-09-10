@@ -3,6 +3,7 @@ using ChronoTriggerAccessibility.Core.Startup;
 using ChronoTriggerAccessibility.Mod.Dialogue;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Extras;
+using ChronoTriggerAccessibility.Mod.Intro;
 using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -117,6 +118,9 @@ public sealed class Mod : ModBase
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(movieTimeline);
 
+        var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
+        dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
+
         var sharedFanout = new SharedNativeHookFanoutFactory(
             hookFactory,
             dispatcher.ReportCoverageFailure);
@@ -143,6 +147,7 @@ public sealed class Mod : ModBase
         // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
         sharedFanout.ConfigureObservers([startupTitle, newGame, extras, steamSettings, touchSettings, topMenu]);
         var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)
@@ -150,6 +155,7 @@ public sealed class Mod : ModBase
             .Concat(touchSettings.Registrations)
             .Concat(topMenu.Registrations)
             .Concat(dialogue.Registrations)
+            .Concat(introTrace.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -160,6 +166,7 @@ public sealed class Mod : ModBase
             touchSettings,
             topMenu,
             dialogue,
+            introTrace,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -170,6 +177,7 @@ public sealed class Mod : ModBase
             touchSettings,
             topMenu,
             dialogue,
+            introTrace,
             installer);
     }
 
@@ -193,4 +201,5 @@ public sealed record CompleteAccessibilityComposition(
     TouchSettingsHookSet TouchSettingsHookSet,
     TopMenuHookSet TopMenuHookSet,
     DialogueHookSet DialogueHookSet,
+    IntroTraceHookSet IntroTraceHookSet,
     ReloadedHookInstaller Installer);

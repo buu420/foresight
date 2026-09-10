@@ -150,6 +150,12 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     [
         Label(HookId.ClassicTopMenuTimeLabelCallSite, StyleMask.Classic),
         Label(HookId.ClassicTopMenuCurrencyLabelCallSite, StyleMask.Classic),
+        Label(HookId.ClassicTopMenuSingleFooterLabelCallSite, StyleMask.Classic),
+        Label(HookId.ClassicTopMenuFirstFooterLabelCallSite, StyleMask.Classic),
+        Label(HookId.ClassicTopMenuSecondFooterLabelCallSite, StyleMask.Classic),
+        Label(HookId.ClassicTopMenuContextLabelCallSite, StyleMask.Classic),
+        new(HookId.StatusBarHiddenLabelCallSite, ProbeTarget.HiddenLabel, StyleMask.Both),
+        new(HookId.TouchStatusBarInitialLabelCallSite, ProbeTarget.OptionalLabel, StyleMask.Touch),
         Label(HookId.ClassicTopMenuCaptionLabelCallSite, StyleMask.Classic),
         Label(HookId.ClassicTopMenuMemberNameLabelCallSite, StyleMask.Classic),
         Label(HookId.ClassicStatusRowLabelCallSite, StyleMask.Classic),
@@ -642,7 +648,8 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             build?.AddError($"Native top-menu text-label factory failed: {FormatException(exception)}");
             throw;
         }
-        if (build is null || marker is null || marker.Value.Target != ProbeTarget.Label)
+        if (build is null || marker is null || marker.Value.Target is not
+            (ProbeTarget.Label or ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel))
         {
             return returned;
         }
@@ -653,9 +660,23 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 build.AddError("The top-menu text-label factory returned null for an audited visible label.");
                 return returned;
             }
-            if (!stringReader.TryRead((nuint)text, out var value, out var diagnostic) || string.IsNullOrWhiteSpace(value))
+            // RVA 0x22EFA1 creates a label whose owner and label are immediately
+            // hidden by unconditional setVisible(false) calls in StatusBar init.
+            if (marker.Value.Target == ProbeTarget.HiddenLabel)
+            {
+                return returned;
+            }
+            if (!stringReader.TryRead((nuint)text, out var value, out var diagnostic))
             {
                 build.AddError($"An audited top-menu UTF-8 label is unreadable or blank: {diagnostic}");
+                return returned;
+            }
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                if (marker.Value.Target != ProbeTarget.OptionalLabel)
+                {
+                    build.AddError("An audited top-menu UTF-8 label is blank.");
+                }
                 return returned;
             }
             if (!build.Capture.TryRecordUtf8(imageBase + marker.Value.ReturnRva, value, out diagnostic))
@@ -1280,7 +1301,9 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             build.AddError($"An audited top-menu {expectedTarget} call arrived without its immediate call-site marker.");
             return null;
         }
-        if (marker.Value.Epoch != build.Epoch || marker.Value.Target != expectedTarget)
+        var compatibleLabel = expectedTarget == ProbeTarget.Label &&
+            marker.Value.Target is ProbeTarget.HiddenLabel or ProbeTarget.OptionalLabel;
+        if (marker.Value.Epoch != build.Epoch || (marker.Value.Target != expectedTarget && !compatibleLabel))
         {
             build.AddError(
                 $"Top-menu marker {marker.Value.Id} is stale or targets {marker.Value.Target} instead of {expectedTarget}.");
@@ -1618,6 +1641,8 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private enum ProbeTarget
     {
         Label,
+        HiddenLabel,
+        OptionalLabel,
         Renderer,
         Rejected,
     }

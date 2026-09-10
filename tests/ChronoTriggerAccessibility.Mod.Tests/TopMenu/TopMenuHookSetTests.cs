@@ -29,10 +29,10 @@ public sealed class TopMenuHookSetTests
 
         harness.Installer.PrepareAll(harness.Build, harness.Boundary);
 
-        Assert.Equal(31, harness.Set.RequiredHookIds.Count);
+        Assert.Equal(37, harness.Set.RequiredHookIds.Count);
         Assert.Equal(harness.Set.RequiredHookIds, harness.Factory.Created.Select(item => item.Id));
         Assert.Equal(10, harness.Factory.FunctionDetours.Count);
-        Assert.Equal(21, harness.Factory.Probes.Count);
+        Assert.Equal(27, harness.Factory.Probes.Count);
         Assert.All(harness.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
         Assert.Empty(harness.Dispatcher.Events);
         Assert.Empty(harness.Dispatcher.Failures);
@@ -79,6 +79,38 @@ public sealed class TopMenuHookSetTests
         Assert.Contains("marker", harness.Dispatcher.Failures[0], StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuBuilder]);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+    }
+
+    [Fact]
+    public void ClassicBuilderAccountsForHiddenStatusLabelAndAllRenderedFooterLines()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness, withAdditionalLabels: true);
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.True(harness.Dispatcher.Failures.Count == 0, string.Join("; ", harness.Dispatcher.Failures));
+        Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(5, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
+        Assert.Equal(new nuint[] { ImageBase + 0x1D0AAA, ImageBase + 0x1D0DBC,
+            ImageBase + 0x1D0E05, ImageBase + 0x1D0ED3 }, harness.Capture.Session!.Utf8Returns);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Native caption")]
+    public void TouchBuilderAccountsForItsOptionalInitialStatusCaption(string caption)
+    {
+        var harness = CreateHarness(TopMenuStyle.Touch);
+        ConfigureSuccessfulBuilder(harness, initialCaption: caption);
+        harness.PrepareAndActivate();
+
+        harness.BuildMenu();
+
+        Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(caption.Length == 0 ? 1 : 2, harness.Capture.Session!.Utf8Returns.Count);
     }
 
     [Fact]
@@ -512,10 +544,22 @@ public sealed class TopMenuHookSetTests
         Harness harness,
         bool omitLabelMarker = false,
         bool omitRendererMarker = false,
-        HookId? labelProbe = null)
+        HookId? labelProbe = null,
+        bool withAdditionalLabels = false,
+        string? initialCaption = null)
     {
         void Body()
         {
+            if (initialCaption is not null)
+            {
+                harness.Probe(HookId.TouchStatusBarInitialLabelCallSite);
+                harness.RenderLabel(initialCaption);
+            }
+            if (withAdditionalLabels)
+            {
+                harness.Probe(HookId.StatusBarHiddenLabelCallSite);
+                harness.RenderLabel("Hidden value");
+            }
             ObserveControlsAndBindings(harness);
             if (!omitLabelMarker)
             {
@@ -525,6 +569,15 @@ public sealed class TopMenuHookSetTests
             }
             harness.RenderLabel("12:34");
             harness.FormatStatus();
+            if (withAdditionalLabels)
+            {
+                harness.Probe(HookId.ClassicTopMenuFirstFooterLabelCallSite);
+                harness.RenderLabel("First line");
+                harness.Probe(HookId.ClassicTopMenuSecondFooterLabelCallSite);
+                harness.RenderLabel("Second line");
+                harness.Probe(HookId.ClassicTopMenuContextLabelCallSite);
+                harness.RenderLabel("Context line");
+            }
         }
         if (harness.Style == TopMenuStyle.Classic)
         {
