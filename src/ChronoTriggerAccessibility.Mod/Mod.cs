@@ -14,6 +14,7 @@ using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Mod.Template;
 using ChronoTriggerAccessibility.Mod.TopMenu;
 using ChronoTriggerAccessibility.Native.Memory;
+using ChronoTriggerAccessibility.Native.Capture;
 using Reloaded.Hooks.ReloadedII.Interfaces;
 
 namespace ChronoTriggerAccessibility.Mod;
@@ -123,12 +124,31 @@ public sealed class Mod : ModBase
         var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
         dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
         var navigationSpeech = dispatcher;
+        var footstepSound = new FootstepSound(message =>
+        {
+            navigationSpeech.RecordDiagnostic(message);
+            navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable."));
+        });
+        var footsteps = new FieldFootstepRuntime(engine =>
+        {
+            var motion = FieldMotionCapture.Capture(memory, (nuint)engine);
+            return motion is { } value ? new FootstepFrame(
+                ((ulong)value.Engine << 32) | value.ActorBase, value.Scene, value.Actor, value.FineX, value.FineY) : null;
+        }, NavigationKeyboard.IsGameForeground, NavigationKeyboard.IsKeyDown, () => Environment.TickCount64,
+            footstepSound.Play, footstepSound.Stop,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic);
         var navigation = new FieldNavigationRuntime(navigationSource.Capture, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            engine => navigationSource.Capture(engine), navigationSource.Reset);
-        var navigationHooks = new FieldNavigationHookSet(asmHookFactory, navigation.OnInput, navigation.Enable, navigation.Disable);
+            engine => navigationSource.Capture(engine), navigationSource.Reset, footsteps.Suspend);
+        var navigationHooks = new FieldNavigationHookSet(asmHookFactory, (engine, pad) =>
+        {
+            var accepted = navigation.OnInput(engine, pad);
+            footsteps.OnInput(engine, accepted);
+            return accepted;
+        }, () => { navigation.Enable(); footsteps.Enable(); },
+            () => { navigation.Disable(); footsteps.Disable(); });
         dispatcher = new NavigationDispatcher(dispatcher, navigation);
 
         var sharedFanout = new SharedNativeHookFanoutFactory(

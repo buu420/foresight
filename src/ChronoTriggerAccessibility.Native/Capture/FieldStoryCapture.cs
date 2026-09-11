@@ -3,7 +3,12 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
-public sealed record FieldStoryState(int Point, bool MotherIntroducedFriend);
+public sealed record FieldStoryState(int Point, bool MotherIntroducedFriend)
+{
+    public IReadOnlyDictionary<int, int> Globals { get; init; } = new Dictionary<int, int>();
+    public int? Global(int index) => Globals.TryGetValue(index, out var value) ? value : null;
+    public bool? Flag(int index, int mask) => Global(index) is { } value ? (value & mask) != 0 : null;
+}
 
 /// <summary>Optional story context. Opcode 18 reads A+110B0 at 161E80 and
 /// opcode 5A writes it at 16257C. Global bytes are expanded to dwords:
@@ -11,15 +16,26 @@ public sealed record FieldStoryState(int Point, bool MotherIntroducedFriend);
 /// sets global 0140 bit 0 after the initial conversation and name prompt.</summary>
 public static class FieldStoryCapture
 {
+    // Extended only for script flags actually used by the early story catalog.
+    public static IReadOnlyList<int> ObjectiveGlobalIndices { get; } = Array.AsReadOnly(new[] { 0x54, 0x55, 0x56, 0xFF, 0x190 });
+
     public static FieldStoryState? Capture(IReadableMemory memory, FieldNavigationSnapshot field)
     {
         try
         {
             if (!field.SceneIdCoherent || !Matches() ||
                 !Word((nuint)field.ActorBase + 0x110B0u, out var point) ||
-                !Word((nuint)field.ActorBase + 0x115B0u, out var flags) || !Matches() ||
-                !Word((nuint)field.ActorBase + 0x110B0u, out var repeated) || repeated != point) return null;
-            return new(point & 255, (flags & 1) != 0);
+                !Word((nuint)field.ActorBase + 0x115B0u, out var flags)) return null;
+            var globals = new Dictionary<int, int>();
+            foreach (var index in ObjectiveGlobalIndices)
+            {
+                var address = (nuint)field.ActorBase + 0x110B0u + (nuint)(index * 4);
+                if (Word(address, out var value) && Word(address, out var again) && value == again)
+                    globals[index] = value & 255;
+            }
+            if (!Matches() || !Word((nuint)field.ActorBase + 0x110B0u, out var repeated) || repeated != point ||
+                !Word((nuint)field.ActorBase + 0x115B0u, out var repeatedFlags) || flags != repeatedFlags) return null;
+            return new(point & 255, (flags & 1) != 0) { Globals = globals };
         }
         catch { return null; }
 

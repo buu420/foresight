@@ -39,6 +39,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var graph = new FieldNavigationGraph(map);
         var player = new NavigationPoint(field.LeadPlayer?.FineX ?? 0, field.LeadPlayer?.FineY ?? 0, map.PlayerLayer);
         var targets = new List<NavigationTarget>();
+        var storyAnchors = new List<NavigationTarget>();
         var activeIds = new HashSet<string>();
         foreach (var actor in field.Actors)
         {
@@ -58,6 +59,22 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var position = Position(chest.FineX, chest.FineY);
             Add($"chest:{chest.Index}", "Treasure chest", NavigationCategory.Objects, position,
                 Approach(position), TileVisible(chest.FineX / 256, chest.FineY / 256));
+        }
+        if (field.SceneIdCoherent)
+        foreach (var actor in field.Actors)
+        {
+            // These exact script slots are interaction markers for scenery drawn in
+            // the map. Their class 7 intentionally has no sprite. Never promote other
+            // hidden actors, and use their live coordinates rather than guide positions.
+            var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors);
+            if (label is null) continue;
+            var position = Position(actor.FineX, actor.FineY);
+            var touch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index);
+            var approaches = touch
+                ? At(actor.TileX * 256 + 128, actor.TileY * 256 + 128).Where(p => !graph.IsTerminal(p)).ToArray()
+                : Approach(position);
+            Add($"landmark:{actor.Index}", label, NavigationCategory.Objects, position, approaches,
+                TileVisible(actor.TileX, actor.TileY), storyOnly: touch);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -100,7 +117,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add(key, OpeningStoryTargets.ExitLabel(field.SceneId, id), NavigationCategory.Exits, position, approaches, true);
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
-        if (field.SceneIdCoherent) targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, targets));
+        if (field.SceneIdCoherent)
+        {
+            var available = targets.Concat(storyAnchors).ToArray();
+            targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, available));
+            targets.AddRange(EarlyStoryTargets.Build(field.SceneId, story, available, player));
+        }
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
@@ -160,15 +182,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 foreach (var point in At(x, y)) yield return point;
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
-            IReadOnlyList<NavigationPoint> approaches, bool visible)
+            IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false)
         {
             activeIds.Add(id);
+            var output = storyOnly ? storyAnchors : targets;
             if (visible)
             {
                 var target = new NavigationTarget(id, label, category, position, approaches, true, true);
-                discovered[id] = target; targets.Add(target);
+                discovered[id] = target; output.Add(target);
             }
-            else if (discovered.TryGetValue(id, out var known)) targets.Add(known with { Visible = false, Discovered = true });
+            else if (discovered.TryGetValue(id, out var known)) output.Add(known with { Visible = false, Discovered = true });
         }
     }
 

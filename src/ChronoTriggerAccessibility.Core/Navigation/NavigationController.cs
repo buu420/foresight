@@ -135,7 +135,8 @@ public sealed class NavigationController
     }
 
     private List<NavigationTarget> Eligible(NavigationFrame frame) => frame.Targets
-        .Where(target => target.Category == category && (target.Visible || target.Discovered) &&
+        .Where(target => target.Category == category && (target.Visible || target.Discovered ||
+            (target.Category == NavigationCategory.StoryEvents && target.IsStoryNote)) &&
             !string.IsNullOrWhiteSpace(target.Id) && !string.IsNullOrWhiteSpace(target.Label))
         .DistinctBy(target => target.Id).ToList();
 
@@ -149,6 +150,11 @@ public sealed class NavigationController
         var index = targets.FindIndex(target => target.Id == selection);
         if (index < 0) { speech.Add(EmptyCategory()); return; }
         var target = targets[index];
+        if (target.IsStoryNote)
+        {
+            speech.Add($"{target.Label}, {index + 1} of {targets.Count}. {target.Instruction}");
+            return;
+        }
         if (guiding && route is not null && nextPoint < route.Count)
         {
             speech.Add($"{target.Label}, {index + 1} of {targets.Count}. {DescribeRoute(frame.Player, 3)}");
@@ -159,10 +165,17 @@ public sealed class NavigationController
         var location = frame.Player.Layer != target.Position.Layer ? "on another level" :
             direction == NavigationDirection.None ? "here" : $"{DirectionName(direction)}, {distance:0} {(distance == 1 ? "step" : "steps")} away";
         speech.Add($"{target.Label}, {index + 1} of {targets.Count}, {location}.");
+        if (!string.IsNullOrWhiteSpace(target.Instruction)) speech.Add(target.Instruction);
     }
 
     private bool Plan(NavigationFrame frame, List<string> speech)
     {
+        if (destination!.IsStoryNote)
+        {
+            speech.Add($"{destination.Label}. {destination.Instruction}");
+            Stop();
+            return false;
+        }
         var search = NavigationPathfinder.Search(frame.Graph, frame.Player, destination!.ApproachPoints);
         planRevision++;
         route = search.Route;

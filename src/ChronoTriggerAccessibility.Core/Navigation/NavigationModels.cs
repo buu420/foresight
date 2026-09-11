@@ -14,7 +14,12 @@ public interface INavigationGraph
 }
 
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,
-    NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered);
+    NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered)
+{
+    /// <summary>A current story reminder with no spatial claim. Its Position is unused.</summary>
+    public bool IsStoryNote { get; init; }
+    public string? Instruction { get; init; }
+}
 
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,
     IReadOnlyList<NavigationTarget> Targets, INavigationGraph Graph, int UnitsPerTile = 16);

@@ -11,7 +11,7 @@ public sealed class OpeningStoryTests
     public void BedroomObjectiveUsesOnlyAnAlreadyAvailableExit()
     {
         var state = new FieldStoryState(3, false);
-        Assert.Empty(OpeningStoryTargets.Build(2, state, []));
+        Assert.True(Assert.Single(OpeningStoryTargets.Build(2, state, [])).IsStoryNote);
         var exit = Target("exit:0", NavigationCategory.Exits);
         var story = Assert.Single(OpeningStoryTargets.Build(2, state, [exit]));
         Assert.Equal("Go downstairs", story.Label);
@@ -32,7 +32,7 @@ public sealed class OpeningStoryTests
         var after = Assert.Single(OpeningStoryTargets.Build(1, new(3, true), [mother, door]));
         Assert.Equal("Leave for the Millennial Fair", after.Label);
         Assert.Equal(door.ApproachPoints, after.ApproachPoints);
-        Assert.Empty(OpeningStoryTargets.Build(1, new(3, false), [door]));
+        Assert.True(Assert.Single(OpeningStoryTargets.Build(1, new(3, false), [door])).IsStoryNote);
         Assert.Empty(OpeningStoryTargets.Build(50, new(3, false), [mother, door]));
     }
 

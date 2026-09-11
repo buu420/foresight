@@ -6,7 +6,7 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// ordinary pad value; it never holds OS keys or writes player coordinates.</summary>
 public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture, NavigationKeyboard keyboard,
     Func<bool> isForeground, Func<long> clock, Action<string> speak, Action<string> diagnostic,
-    Action<nint>? observe = null, Action? resetDiscoveries = null)
+    Action<nint>? observe = null, Action? resetDiscoveries = null, Action? resetMotion = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -24,7 +24,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
 
     public void Disable()
     {
-        lock (gate) { enabled = false; controller.Cancel("accessibility disabled"); keyboard.Suspend(); }
+        lock (gate) { enabled = false; controller.Cancel("accessibility disabled"); keyboard.Suspend(); resetMotion?.Invoke(); }
     }
 
     public void Suspend(string reason)
@@ -34,12 +34,13 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             if (controller.IsActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
             Emit(controller.Cancel(reason));
             keyboard.Suspend();
+            resetMotion?.Invoke();
         }
     }
 
     public void ResetDiscoveries()
     {
-        lock (gate) { resetDiscoveries?.Invoke(); lastObservation = -1; }
+        lock (gate) { resetDiscoveries?.Invoke(); resetMotion?.Invoke(); lastObservation = -1; }
     }
 
     public uint OnInput(nint currentEngine, uint originalPad)

@@ -154,7 +154,12 @@ public sealed class FieldNavigationSourceTests
         var field = Field(Actor(0, 6308, 2303, party: true)) with { SceneId = 2 };
         var map = Map(64);
         map.ExitCells[13 * 64 + 23] = 0;
-        Assert.Empty(source.Build(field, map, new(4096, 256, 8320, 3328), [], new(3, false)).Targets);
+        var targets = source.Build(field, map, new(4096, 256, 8320, 3328), [], new(3, false)).Targets;
+        var note = Assert.Single(targets);
+        Assert.True(note.IsStoryNote);
+        Assert.False(note.Visible);
+        Assert.False(note.Discovered);
+        Assert.Empty(note.ApproachPoints);
     }
 
     [Theory]
@@ -186,13 +191,13 @@ public sealed class FieldNavigationSourceTests
         Assert.Equal("Mother", Assert.Single(frame.Targets, t => t.Category == NavigationCategory.People).Label);
         Assert.Equal("Talk with Mother", Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents).Label);
         var hidden = field with { Actors = [field.Actors[0], mother with { DrawMode = 0 }] };
-        Assert.Empty(source.Build(hidden, Map(), new(0, 0, 1024, 1024), [], new(3, false)).Targets);
+        Assert.True(Assert.Single(source.Build(hidden, Map(), new(0, 0, 1024, 1024), [], new(3, false)).Targets).IsStoryNote);
         var otherAppearance = field with { Actors = [field.Actors[0], mother with { VisualIndex = 0x4C }] };
         Assert.DoesNotContain(source.Build(otherAppearance, Map(), new(0, 0, 1024, 1024), [], new(3, false)).Targets,
-            t => t.Label == "Mother" || t.Category == NavigationCategory.StoryEvents);
+            t => t.Label == "Mother" || (t.Category == NavigationCategory.StoryEvents && !t.IsStoryNote));
         var machine = Field(Actor(1, 128, 128, party: true), Actor(11, 512, 256) with { VisualIndex = 0x63 }) with { SceneId = 8 };
         var telepod = Assert.Single(source.Build(machine, Map(), new(0, 0, 1024, 1024), []).Targets);
-        Assert.Equal("Telepod", telepod.Label); Assert.Equal(NavigationCategory.Objects, telepod.Category);
+        Assert.Equal("Fallen pendant", telepod.Label); Assert.Equal(NavigationCategory.Objects, telepod.Category);
     }
 
     [Fact]

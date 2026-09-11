@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.2 repairs empty navigation lists caused by an incorrect actor filter and tile visibility checks at the camera edge. Counted directions, body clearance, and opening Story Events remain available. Main menus, Settings, Extras, quit confirmation, and New Game through first control were previously verified by the player. Intro audio descriptions are still pending.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.4 adds movement-based footsteps and local Story Events through the fair, the first visit to 600 AD, the trial, and the prison escape. Main menus, Settings, Extras, quit confirmation, New Game through first control, and the 0.3.3 navigation repair were verified by the player. The new story catalog and footsteps still need in-game testing. Intro audio descriptions are still pending.
 
 Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Combat, the overworld, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
 
@@ -15,6 +15,7 @@ Use these keys while controlling the party in a local field area, starting with 
 | K | Repeat the destination and remaining route, or its direction and distance when idle |
 | I | Start counted spoken directions while you move |
 | P | Start or stop automatic walking |
+| F8 | Turn footsteps off or on for the current game session |
 
 Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object, use K to hear its direction, face it, and press the game's confirm button yourself.
 
@@ -22,9 +23,11 @@ The local maps are 2D. One navigation step means one 16-pixel map tile, not one 
 
 Targets come from live field actors, the current exit grid, and rendered unopened chests. People includes creatures such as cats. Appearance labels are deliberately general where the game supplies no name. Partially visible exit and chest tiles are included. Previously seen targets retain their last seen positions when outside the current view; hidden pickups and chest contents are not listed. Discovery is kept for the current field visit. The first pass uses the native camera window conservatively and may omit targets at the outer widescreen margins. The overworld and every field's special movement rules have not been implemented or tested.
 
-Story Events initially cover Crono's bedroom and kitchen: downstairs, the first conversation with Mother, then leaving for the fair. They use the current story counter and conversation flag, and require an already visible or discovered target. The opening catalog also names Mother's ordinary appearance, the house's exits, and the visible telepod machine. Later story objectives still need to be mapped. Research and guide attribution are in [navigation-counted-guidance.md](docs/navigation-counted-guidance.md).
+Story Events follows the current story counter and local progress flags, from Mother and the Millennial Fair through the cathedral, the return to the present, the trial, and the prison escape. Routes use visible or discovered native targets. An objective whose destination is not discovered remains readable as a note; I and P explain the missing route. The cathedral's visible map objects, including its organs, switches, and sign, are also available. An undisplayed sparkle is not revealed. Research and guide attribution are in [story-events-and-footsteps.md](docs/story-events-and-footsteps.md).
 
-Live navigation tests exposed repeated directions, blocked walking, and empty lists. The repairs have offline regression coverage, including walking replays and execution of the actual native movement dispatcher in an emulator; the new target-list repair needs an in-game test. Start in Crono's room and check People for the visible cat, Exits for Stairs downstairs, and Story Events for Go downstairs. Select the stairs, press I, then test P. Check K, P to stop, manual override, and opening the menu. Navigation commands, active positions at most four times a second, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes.
+Footsteps play after actual movement, with five recorded variations. They work with manual movement and P, pause for menus, dialogue, and focus changes, and do not play just because movement is held against a wall. Their natural stride is independent of the 16-pixel tile used in spoken directions. F8 announces the new setting; footsteps start enabled on each launch. The current bank uses one general surface sound.
+
+The player confirmed that the repaired navigation worked. For this release, start by walking manually and with P, then stop against a wall and open the menu to check footsteps. Check F8, then Story Events at the fair. Navigation commands, active positions at most four times a second, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes. Local objectives do not add overworld navigation or automatic interaction, dialogue choices, puzzles, or combat.
 
 It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 

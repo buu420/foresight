@@ -14,7 +14,9 @@ public sealed class NavigationKeyboard(Func<int, bool> isDown, Func<bool> isFore
     private int previous;
     private bool armed;
 
-    public NavigationKeyboard() : this(key => (GetAsyncKeyState(key) & 0x8000) != 0, IsGameForeground) { }
+    public NavigationKeyboard() : this(IsKeyDown, IsGameForeground) { }
+
+    public static bool IsKeyDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
     public IReadOnlyList<NavigationCommand> Poll()
     {

@@ -36,6 +36,29 @@ public sealed class FieldStoryCaptureTests
         Assert.Null(FieldStoryCapture.Capture(Memory(), Field() with { SceneIdCoherent = false }));
     }
 
+    [Theory]
+    [InlineData(0x54, 0x20)]
+    [InlineData(0x55, 0x80)]
+    [InlineData(0x56, 2)]
+    [InlineData(0xFF, 4)]
+    [InlineData(0x190, 4)]
+    public void ReadsOnlyStableOptionalFlagsAtExpandedDwordOffsets(int index, int mask)
+    {
+        var memory = Memory();
+        var address = (nuint)(0x150B0 + index * 4);
+        memory.Words[address] = 0xAB00 | mask;
+        var state = FieldStoryCapture.Capture(memory, Field());
+        Assert.NotNull(state);
+        Assert.True(state.Flag(index, mask));
+        Assert.Equal(mask, state.Global(index));
+        Assert.Null(state.Flag(0x123, 1));
+        memory.Words.Remove(address);
+        Assert.Null(FieldStoryCapture.Capture(memory, Field())!.Flag(index, mask));
+        memory.Words[address] = mask;
+        memory.MutateAddress = address;
+        Assert.Null(FieldStoryCapture.Capture(memory, Field())!.Flag(index, mask));
+    }
+
     private static WordsMemory Memory() => new()
     {
         Words = { [0x1040] = 0x4000, [0x3010] = 1, [0x150B0] = 0xAB03, [0x155B0] = 1 }
@@ -45,10 +68,13 @@ public sealed class FieldStoryCaptureTests
     private sealed class WordsMemory : IReadableMemory
     {
         public Dictionary<nuint, int> Words { get; } = [];
+        public nuint MutateAddress { get; set; }
         public bool TryRead(nuint address, Span<byte> destination)
         {
             if (destination.Length != 4 || !Words.TryGetValue(address, out var value)) return false;
-            BinaryPrimitives.WriteInt32LittleEndian(destination, value); return true;
+            BinaryPrimitives.WriteInt32LittleEndian(destination, value);
+            if (address == MutateAddress) Words[address] = value ^ 255;
+            return true;
         }
     }
 }

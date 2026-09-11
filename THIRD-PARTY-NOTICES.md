@@ -2,6 +2,17 @@
 
 Chrono Trigger Accessibility uses the following third-party components. Chrono Trigger and its assets are not included in the mod package.
 
+## Footstep recordings
+
+The five embedded footstep variations combine wood and carpet recordings from
+Kenney's **Impact Sounds 1.0** (19 December 2019), released under Creative Commons
+Zero (CC0). Source: <https://kenney.nl/assets/impact-sounds>.
+License: <https://creativecommons.org/publicdomain/zero/1.0/>.
+Kenney permits personal, educational, and commercial use; attribution is optional.
+The mod filters, blends, fades, and adjusts the volume of these recordings.
+`tools/Prepare-Footsteps.py` reproduces the bank from the upstream archive.
+The recordings are not original game assets or newly recorded by this project.
+
 ## Prism 0.17.3
 
 Prism, the Platform-agnostic Reader Interface for Speech and Messages, is distributed under the Mozilla Public License 2.0. The package contains the upstream `LICENSE` and `NOTICE` files alongside the reviewed 32-bit Windows binary.
