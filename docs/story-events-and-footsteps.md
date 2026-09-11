@@ -120,6 +120,13 @@ does not include every scripted door change, guard, or special movement; runtime
 routes therefore still require the live graph. Prison side-room wall climbs
 remain manual.
 
+The guardroom's lower and upper sections are separated until its script opens
+the door with map-copy operations at file offsets 01B8/01D0. Startup actor 2
+checks the party's row at 01FF and requests the visible guards' encounter at
+0209. While those guards remain available, their live row supplies the approach;
+the objective advances to the upper bridge once they leave. This avoids directing
+the player to an inaccessible upper exit before the scene's own event runs.
+
 ## Footsteps
 
 The accepted bank is derived from [Kenney Impact Sounds 1.0](https://kenney.nl/assets/impact-sounds),
@@ -152,7 +159,7 @@ failure reports the problem and does not stop navigation.
 
 ## Validation
 
-The Release suite passed 1,001 tests: Core 99, Prism 8, Native 514, and Mod 380.
+The Release suite passed 1,002 tests: Core 99, Prism 8, Native 514, and Mod 381.
 The eight prison regressions reject the closer backward exit on each audited
 bridge/stair floor. The manifest remains pinned by its exact SHA-256.
 

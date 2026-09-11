@@ -141,6 +141,22 @@ public sealed class EarlyStoryTests
     }
 
     [Fact]
+    public void GuardroomEncounterIsReachedBeforeTheUpperBridge()
+    {
+        var guard = Target("actor:10:5:49") with
+        {
+            Position = new(2176, 6143, 1),
+            ApproachPoints = [new(2176, 5888, 1), new(1920, 6144, 1), new(2432, 6144, 1)],
+        };
+        var bridge = Target("exit:0");
+        var before = Assert.Single(EarlyStoryTargets.Build(29, State(45), [guard, bridge], default));
+        Assert.Equal("Approach the guards", before.Label);
+        Assert.Equal(new[] { new NavigationPoint(2176, 5888, 1) }, before.ApproachPoints);
+        var after = Assert.Single(EarlyStoryTargets.Build(29, State(46), [bridge], default));
+        Assert.Equal("Continue onto the upper bridge", after.Label);
+    }
+
+    [Fact]
     public void UndiscoveredSceneryDoesNotBecomeARouteAndTouchMarkersStayOutOfObjects()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });

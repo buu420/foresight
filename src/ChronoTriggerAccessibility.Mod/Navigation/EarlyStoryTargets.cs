@@ -183,6 +183,19 @@ public static class EarlyStoryTargets
                 Exit("return-inside-prison", "Return inside the prison tower", [0, 1]);
                 break;
             case 29 when p is >= 45 and < 48:
+                var guards = available.Where(t => t.Id is "actor:10:5:49" or "actor:11:5:49")
+                    .Where(t => t.Visible || t.Discovered).ToArray();
+                if (guards.Length != 0)
+                {
+                    var encounter = StoryTarget.BindAny("guardroom", "Approach the guards", guards,
+                        guards.Select(t => t.Id).ToArray(), player);
+                    // The native startup watcher triggers the encounter when the
+                    // player enters the guards' row (23), not at a map exit. Keep
+                    // live approaches in that row so arrival does not stop short.
+                    result.Add(encounter with { ApproachPoints = guards.SelectMany(t => t.ApproachPoints
+                        .Where(a => a.Y / 256 == t.Position.Y / 256)).Distinct().ToArray() });
+                    break;
+                }
                 Known("tank-document", "Read the document on the floor", "actor:12:4:162");
                 Exit("prison-bridge", "Continue onto the upper bridge", [0]);
                 break;
