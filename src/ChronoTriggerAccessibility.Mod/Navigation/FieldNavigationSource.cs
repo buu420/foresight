@@ -61,6 +61,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
+        var visibleExitCellCount = 0;
         for (var y = 0; y < map.ExitHeight; y++)
         for (var x = 0; x < map.ExitWidth; x++)
         {
@@ -68,15 +69,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (id >= 128) continue;
             exitCellCount++;
             if (!exitGroups.TryGetValue(id, out var points)) exitGroups[id] = points = [];
-            // A partly drawn exit tile is visible even when its center is beyond
-            // the camera edge. Entirely off-screen extensions remain undiscovered.
             var px = x * 256 + 128; var py = y * 256 + 128;
-            if (TileVisible(x, y)) points.Add(Position(px, py));
+            points.Add(Position(px, py));
+            if (TileVisible(x, y)) visibleExitCellCount++;
         }
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
             var key = $"exit:{id}";
-            if (points.Count == 0)
+            // Visibility discovers the destination. Its connected native footprint
+            // supplies usable entry points even when the camera clips the stairs.
+            var visible = points.Where(p => TileVisible(p.X / 256, p.Y / 256)).ToArray();
+            if (visible.Length == 0)
             {
                 activeIds.Add(key);
                 if (discovered.TryGetValue(key, out var old)) targets.Add(old with
@@ -86,12 +89,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 });
                 continue;
             }
-            var position = points.OrderBy(Distance).First();
+            var position = visible.OrderBy(Distance).First();
             // Preserve discovered approaches while the exit still owns their cells.
             // Re-ranking a large exit by the moving player evicts a routed goal.
             var retained = discovered.TryGetValue(key, out var knownExit)
-                ? knownExit.ApproachPoints.Where(p => StillExitGoal(p, id)) : [];
-            var approaches = retained.Concat(points.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
+                ? knownExit.ApproachPoints.Where(p => StillExitGoal(p, id)).ToArray() : [];
+            var footprint = ConnectedExitFootprint(points, visible.Concat(retained));
+            var approaches = retained.Concat(footprint.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
             Add(key, OpeningStoryTargets.ExitLabel(field.SceneId, id), NavigationCategory.Exits, position, approaches, true);
         }
@@ -110,7 +114,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"storyEvents={targets.Count(t => t.Category == NavigationCategory.StoryEvents)}; " +
                 $"actors={field.Actors.Count}; usable={field.Actors.Count(a => a.IsUsable)}; " +
                 $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
-                $"exitCells={exitCellCount}; visibleExitCells={exitGroups.Sum(pair => pair.Value.Count)}; " +
+                $"exitCells={exitCellCount}; visibleExitCells={visibleExitCellCount}; " +
                 $"renderedChests={treasures.Count}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
                 $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}";
             if (inventory == lastInventory) return;
@@ -165,6 +169,24 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 discovered[id] = target; targets.Add(target);
             }
             else if (discovered.TryGetValue(id, out var known)) targets.Add(known with { Visible = false, Discovered = true });
+        }
+    }
+
+    private static IEnumerable<NavigationPoint> ConnectedExitFootprint(IEnumerable<NavigationPoint> cells,
+        IEnumerable<NavigationPoint> discoveredPoints)
+    {
+        // A disconnected reuse of an exit id must be seen separately. Flood only
+        // through cardinally adjacent cells belonging to this same native exit.
+        var remaining = cells.ToDictionary(p => (p.X / 256, p.Y / 256));
+        var pending = new Queue<(int X, int Y)>(discoveredPoints.Select(p => (p.X / 256, p.Y / 256)).Distinct());
+        while (pending.TryDequeue(out var tile))
+        {
+            if (!remaining.Remove(tile, out var point)) continue;
+            yield return point;
+            pending.Enqueue((tile.X - 1, tile.Y));
+            pending.Enqueue((tile.X + 1, tile.Y));
+            pending.Enqueue((tile.X, tile.Y - 1));
+            pending.Enqueue((tile.X, tile.Y + 1));
         }
     }
 

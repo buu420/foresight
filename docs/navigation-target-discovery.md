@@ -20,9 +20,11 @@ therefore hid the only exit and the Story Event bound to it. A regression using
 these coordinates failed with an empty target list before the repair.
 
 Exit and rendered chest tiles now use rectangle overlap with positive area.
-Touching an edge alone does not reveal a tile. Discovery and approach goals are
-limited to the visible tile footprint; the unseen exit extension on row 14 is
-not added. Existing discoveries remain valid under the previous scene rules.
+Touching an edge alone does not reveal a tile. Version 0.3.2 also limited approach
+goals to the visible tiles. That restriction prevented routing to this known
+staircase's reachable entry on row 14. Version 0.3.3 separates destination discovery
+from its connected entry geometry; see [the stairs route repair](navigation-stairs-route.md).
+Existing discoveries remain valid under the previous scene rules.
 
 ## Visible People and interactable Objects
 

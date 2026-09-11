@@ -92,11 +92,59 @@ public sealed class FieldNavigationSourceTests
         Assert.All(stairs.ApproachPoints, p =>
         {
             Assert.Equal(23, p.X / 256);
-            Assert.Equal(13, p.Y / 256); // No undiscovered extension on row 14.
+            Assert.InRange(p.Y / 256, 13, 14);
         });
+        Assert.Contains(stairs.ApproachPoints, p => p.Y / 256 == 14);
         var story = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents);
         Assert.Equal("Go downstairs", story.Label);
         Assert.Equal(stairs.ApproachPoints, story.ApproachPoints);
+    }
+
+    [Fact]
+    public void PartlyVisibleStairsUseTheirConnectedReachableEntryBeyondTheCameraEdge()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var field = Field(Actor(1, 384, 640, party: true)) with { SceneId = 2 };
+        var map = Map();
+        // A two-tile stair trigger: the upper tile is visible decoration with no
+        // traversable floor, while the connected lower tile is the usable entry.
+        map.ExitCells[1 * 4 + 2] = map.ExitCells[2 * 4 + 2] = 0;
+        map.CollisionLayers[1 * 4 + 2] = 0;
+        var frame = source.Build(field, map, new(256, 0, 768, 320), [], new(3, false));
+        var stairs = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.Exits);
+        var story = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents);
+        var search = NavigationPathfinder.Search(frame.Graph, frame.Player, stairs.ApproachPoints);
+
+        Assert.NotNull(search.Route);
+        Assert.False(search.LimitReached);
+        Assert.Equal(2, search.Route[^1].Y / 256);
+        Assert.Equal(stairs.ApproachPoints, story.ApproachPoints);
+        Assert.Contains(search.Route[^1], story.ApproachPoints);
+        var offscreen = source.Build(field, map, new(0, 0, 256, 256), [], new(3, false));
+        var known = Assert.Single(offscreen.Targets, t => t.Category == NavigationCategory.Exits);
+        Assert.False(known.Visible);
+        Assert.Equal(stairs.ApproachPoints, known.ApproachPoints);
+    }
+
+    [Fact]
+    public void ConnectedExitGeometryDoesNotDiscoverHiddenExitsOrDisconnectedSameIdTiles()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var field = Field(Actor(1, 384, 640, party: true));
+        var map = Map();
+        map.ExitCells[1 * 4 + 2] = map.ExitCells[2 * 4 + 2] = 0;
+        map.ExitCells[3 * 4 + 0] = 0; // Disconnected reuse of the same exit id.
+        map.ExitCells[3 * 4 + 3] = 0; // Diagonal contact is not a cardinal connection.
+        map.ExitCells[2 * 4 + 1] = 1; // Adjacent but a different, unseen exit.
+        var frame = source.Build(field, map, new(512, 0, 768, 320), []);
+        var stairs = Assert.Single(frame.Targets);
+        Assert.Equal("exit:0", stairs.Id);
+        Assert.Contains(stairs.ApproachPoints, p => p.Y / 256 == 2);
+        Assert.All(stairs.ApproachPoints, p =>
+        {
+            Assert.Equal(2, p.X / 256);
+            Assert.InRange(p.Y / 256, 1, 2);
+        });
     }
 
     [Fact]
