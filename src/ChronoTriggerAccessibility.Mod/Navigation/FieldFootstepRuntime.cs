@@ -5,7 +5,7 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 public sealed class FieldFootstepRuntime(Func<nint, FootstepFrame?> capture,
     Func<bool> isForeground, Func<int, bool> isDown, Func<long> clock,
     Action play, Action stop, Action<string> speak, Action<string> diagnostic,
-    Func<string>? describeCapture = null)
+    Func<string>? describeCapture = null, Func<nint, FootstepFrame?>? worldCapture = null)
 {
     private readonly FootstepTracker tracker = new();
     private bool enabled;
@@ -16,20 +16,24 @@ public sealed class FieldFootstepRuntime(Func<nint, FootstepFrame?> capture,
     private readonly Dictionary<string, long> observations = new(StringComparer.Ordinal);
     private long lastDiagnostic = -1;
     private long suspensions;
+    private bool worldMode;
+
+    public void OnWorldInput(nint engine, uint acceptedPad) => ProcessInput(engine, acceptedPad, true);
 
     public void Enable() { enabled = true; Suspend(); }
     public void Disable() { enabled = false; Suspend(); }
     public void Suspend() { tracker.Reset(); armed = false; suspensions++; stop(); }
 
-    public void OnInput(nint engine, uint acceptedPad)
+    public void OnInput(nint engine, uint acceptedPad) => ProcessInput(engine, acceptedPad, false);
+
+    private void ProcessInput(nint engine, uint acceptedPad, bool world)
     {
         if (!enabled || failed) return;
         try
         {
+            if (worldMode != world) { Suspend(); worldMode = world; }
             var now = clock();
             if (!isForeground()) { Suspend(); Trace("background", null, acceptedPad, now); return; }
-            var frame = capture(engine);
-            if (frame is null) { Suspend(); Trace("capture-unavailable", null, acceptedPad, now); return; }
             var down = isDown(0x77); // F8
             var toggle = armed && down && !previousKey &&
                 !isDown(0x10) && !isDown(0x11) && !isDown(0x12) && !isDown(0x5B) && !isDown(0x5C);
@@ -41,6 +45,13 @@ public sealed class FieldFootstepRuntime(Func<nint, FootstepFrame?> capture,
                 tracker.Reset();
                 stop();
                 speak(soundEnabled ? "Footsteps on." : "Footsteps off.");
+            }
+            var frame = world ? worldCapture?.Invoke(engine) : capture(engine);
+            if (frame is null)
+            {
+                // The native input boundary is still active. Keep F8's key edge
+                // alive while dropping movement that cannot be measured.
+                tracker.Reset(); stop(); Trace("capture-unavailable", null, acceptedPad, now); return;
             }
             if (soundEnabled && tracker.Update(frame, acceptedPad, clock())) play();
             Trace(soundEnabled ? tracker.State : "off", frame, acceptedPad, now);

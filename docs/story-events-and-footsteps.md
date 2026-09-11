@@ -177,9 +177,12 @@ same-clock samples, then passed with the fix. In-game audibility needs a retest.
 
 The same session's exit was scene 12 local exit 0, MapJump record 24, destination
 496 (world 0), tile (50,38). That transition leaves the field-input hook entirely.
-The user's loss of navigation keys there is the existing world-map coverage gap,
-not evidence that local navigation stopped working. World-map integration remains
-outstanding; the next footstep test should stay within the inn.
+That log proves the field hook stopped after leaving the inn. The reported failure
+after returning remained an open regression. Version 0.3.7 adds world input sampling,
+tests source changes even when a pointer is reused, and fixes slow observation
+resetting key edges. Its next test includes the world map and the return indoors.
+The later Settings failure and world capture evidence are recorded in
+[world-navigation.md](world-navigation.md).
 
 ## Validation
 

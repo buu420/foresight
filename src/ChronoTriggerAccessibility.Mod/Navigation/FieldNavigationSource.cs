@@ -4,7 +4,8 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-public sealed class FieldNavigationSource(IReadableMemory memory, Action<string> diagnostic)
+public sealed class FieldNavigationSource(IReadableMemory memory, Action<string> diagnostic,
+    Func<int, string?>? areaName = null)
 {
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private string? scene;
@@ -127,7 +128,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
-            player, targets.AsReadOnly(), graph, 256);
+            player, targets.AsReadOnly(), graph, 256) { AreaName = areaName?.Invoke(field.SceneId) };
 
         void ReportInventory()
         {

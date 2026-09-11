@@ -6,12 +6,16 @@ namespace ChronoTriggerAccessibility.Core.Tests.Menus;
 
 public sealed class MenuNarratorTests
 {
+    private static readonly MenuOwner TopMenuOwner = new("TopMenu", 0x0050_1000);
+    private static readonly MenuOwner SettingsOwner = new("SteamSettings", 0x0060_2000);
+
     [Fact]
     public void EntryInterruptsWithTitleThenQueuesFocusAndVisibleStatusInOrder()
     {
         var narrator = new MenuNarrator();
 
         var announcements = narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Menu",
             new MenuFocus("Items", null, 1, 7, null, false),
             ["12:34", "600G", "Truce Canyon", "Crono 120 / 120"]));
@@ -31,6 +35,7 @@ public sealed class MenuNarratorTests
     {
         var narrator = new MenuNarrator();
         narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Settings",
             new MenuFocus("Battle", "Active", 1, 6, "Battles continue while you choose commands.", false),
             []));
@@ -66,8 +71,9 @@ public sealed class MenuNarratorTests
         var narrator = ActiveMenu();
         narrator.Apply(new MenuFocusChanged(new MenuFocus("Items", null, 1, 7, null, false)));
 
-        Assert.Empty(narrator.Apply(new MenuExited()));
+        Assert.Empty(narrator.Apply(new MenuExited(TopMenuOwner)));
         var reopened = narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Menu", new MenuFocus("Items", null, 1, 7, null, false), []));
 
         Assert.Equal(["Menu.", "Items, 1 of 7"], reopened.Select(item => item.Text));
@@ -144,6 +150,7 @@ public sealed class MenuNarratorTests
         var narrator = new MenuNarrator();
 
         var failure = Assert.Single(narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Menu",
             new MenuFocus("Items", null, 1, 7, null, false),
             ["12:34", ""] )));
@@ -154,6 +161,7 @@ public sealed class MenuNarratorTests
         Assert.True(failure.Interrupt);
         Assert.Empty(narrator.Apply(new MenuCoverageFailed("second failure")));
         Assert.Empty(narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Menu", new MenuFocus("Items", null, 1, 7, null, false), [])));
     }
 
@@ -176,6 +184,7 @@ public sealed class MenuNarratorTests
         var status = new List<string> { "12:34" };
         var choices = new List<string> { "Yes", "No" };
         var presented = new MenuPresented(
+            TopMenuOwner,
             "Menu", new MenuFocus("Items", null, 1, 7, null, false), status);
         var confirmation = new MenuConfirmationPresented("Restore defaults?", choices, 0);
         status[0] = "changed";
@@ -185,10 +194,102 @@ public sealed class MenuNarratorTests
         Assert.Equal("Yes", confirmation.Choices![0]);
     }
 
+    [Fact]
+    public void StaleParentCloseAfterChildPresentationKeepsTheChildMenuActive()
+    {
+        // Exact native ordering observed at 22:47:02 in the 2026-09-11 session log: the top
+        // menu activates Settings, the Settings node presents, and only then does the parent
+        // top-menu StatusBar/root deleting destructor run and publish its close.
+        var narrator = new MenuNarrator();
+        narrator.Apply(new MenuPresented(
+            TopMenuOwner,
+            "Menu", new MenuFocus("Settings", null, 5, 7, null, false), []));
+        narrator.Apply(new MenuActivated("Settings"));
+        narrator.Apply(new MenuPresented(
+            SettingsOwner,
+            "Settings",
+            new MenuFocus("Battle", null, 1, 6, "Change battle settings.", false),
+            []));
+
+        Assert.Empty(narrator.Apply(new MenuExited(TopMenuOwner)));
+
+        var focused = Assert.Single(narrator.Apply(new MenuFocusChanged(
+            new MenuFocus("Sound", null, 2, 6, "Adjust the sound volume.", false))));
+        Assert.Equal("Sound, 2 of 6. Adjust the sound volume.", focused.Text);
+    }
+
+    [Fact]
+    public void OwningCloseAfterAStaleParentCloseStillEndsTheMenu()
+    {
+        var narrator = new MenuNarrator();
+        narrator.Apply(new MenuPresented(
+            TopMenuOwner, "Menu", new MenuFocus("Settings", null, 5, 7, null, false), []));
+        narrator.Apply(new MenuPresented(
+            SettingsOwner, "Settings", new MenuFocus("Battle", null, 1, 6, null, false), []));
+        narrator.Apply(new MenuExited(TopMenuOwner));
+
+        Assert.Empty(narrator.Apply(new MenuExited(SettingsOwner)));
+
+        var failure = Assert.Single(narrator.Apply(new MenuFocusChanged(
+            new MenuFocus("Sound", null, 2, 6, null, false))));
+        Assert.Equal(
+            "Chrono Trigger accessibility stopped: Menu focus changed without a validated active menu.",
+            failure.Text);
+    }
+
+    [Fact]
+    public void SameOwnerCloseEndsTheMenuAndADifferentInstanceOfTheSameSourceDoesNot()
+    {
+        var narrator = ActiveMenu();
+        var otherInstance = TopMenuOwner with { Instance = TopMenuOwner.Instance + 0x40 };
+
+        Assert.Empty(narrator.Apply(new MenuExited(otherInstance)));
+        Assert.Single(narrator.Apply(new MenuFocusChanged(
+            new MenuFocus("Inventory", null, 2, 7, null, false))));
+
+        Assert.Empty(narrator.Apply(new MenuExited(TopMenuOwner)));
+        var failure = Assert.Single(narrator.Apply(new MenuFocusChanged(
+            new MenuFocus("Equipment", null, 1, 7, null, false))));
+        Assert.StartsWith("Chrono Trigger accessibility stopped:", failure.Text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void PresentationWithoutAnOwningNativeMenuIdentityFailsClosed(string? source)
+    {
+        var narrator = new MenuNarrator();
+        var owner = source is null ? null : new MenuOwner(source, 0x1234);
+
+        var failure = Assert.Single(narrator.Apply(new MenuPresented(
+            owner, "Menu", new MenuFocus("Items", null, 1, 7, null, false), [])));
+
+        Assert.Equal(
+            "Chrono Trigger accessibility stopped: Menu presentation has no owning native menu identity.",
+            failure.Text);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void CloseWithoutAnOwningNativeMenuIdentityFailsClosed(string? source)
+    {
+        var narrator = ActiveMenu();
+        var owner = source is null ? null : new MenuOwner(source, 0x1234);
+
+        var failure = Assert.Single(narrator.Apply(new MenuExited(owner)));
+
+        Assert.Equal(
+            "Chrono Trigger accessibility stopped: Menu exit has no owning native menu identity.",
+            failure.Text);
+    }
+
     private static MenuNarrator ActiveMenu()
     {
         var narrator = new MenuNarrator();
         narrator.Apply(new MenuPresented(
+            TopMenuOwner,
             "Menu", new MenuFocus("Items", null, 1, 7, null, false), []));
         return narrator;
     }

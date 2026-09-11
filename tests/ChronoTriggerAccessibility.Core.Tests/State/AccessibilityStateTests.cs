@@ -15,6 +15,7 @@ public sealed class AccessibilityStateTests
         var state = new AccessibilityState();
 
         var menu = state.Apply(new MenuPresented(
+            new MenuOwner("SteamSettings", 0x0060_2000),
             "Settings", new MenuFocus("Battle", "Active", 1, 6, "Choose battle timing.", false), []));
         state.Apply(new DialogueOpened());
         var dialogue = state.Apply(new DialogueLinePresented(0, 0, "The fair has begun."));

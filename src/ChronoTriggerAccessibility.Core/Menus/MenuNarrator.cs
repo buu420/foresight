@@ -9,6 +9,7 @@ public sealed class MenuNarrator
     private static readonly IReadOnlyList<Announcement> NoAnnouncements = Array.Empty<Announcement>();
     private bool faulted;
     private bool active;
+    private MenuOwner? activeOwner;
     private string? lastFocusText;
     private string? lastConfirmationText;
     private IReadOnlyList<string>? confirmationChoices;
@@ -27,7 +28,7 @@ public sealed class MenuNarrator
                 MenuPresented presented => Present(presented),
                 MenuFocusChanged changed => ChangeFocus(changed),
                 MenuActivated activated => Activate(activated),
-                MenuExited => Exit(),
+                MenuExited exited => Exit(exited),
                 MenuUnsupported unsupported => AnnounceUnsupported(unsupported),
                 MenuConfirmationPresented confirmation => PresentConfirmation(confirmation),
                 MenuConfirmationFocused focused => FocusConfirmation(focused),
@@ -43,6 +44,10 @@ public sealed class MenuNarrator
 
     private IReadOnlyList<Announcement> Present(MenuPresented presented)
     {
+        if (!IsIdentified(presented.Owner))
+        {
+            return Fail("Menu presentation has no owning native menu identity.");
+        }
         if (string.IsNullOrWhiteSpace(presented.Title))
         {
             return Fail("Menu presentation title is blank or null.");
@@ -57,6 +62,7 @@ public sealed class MenuNarrator
         }
 
         active = true;
+        activeOwner = presented.Owner;
         confirmationChoices = null;
         lastConfirmationPrompt = null;
         lastConfirmationText = null;
@@ -99,15 +105,31 @@ public sealed class MenuNarrator
         return [Interrupt($"{activated.Label} selected.")];
     }
 
-    private IReadOnlyList<Announcement> Exit()
+    private IReadOnlyList<Announcement> Exit(MenuExited exited)
     {
+        if (!IsIdentified(exited.Owner))
+        {
+            return Fail("Menu exit has no owning native menu identity.");
+        }
+        if (active && activeOwner is not null && activeOwner != exited.Owner)
+        {
+            // A parent menu was torn down after a different menu had already presented. The
+            // close is authoritative only for its own owner, so the live menu stays active
+            // and keeps its focus identity untouched.
+            return NoAnnouncements;
+        }
+
         active = false;
+        activeOwner = null;
         lastFocusText = null;
         lastConfirmationPrompt = null;
         lastConfirmationText = null;
         confirmationChoices = null;
         return NoAnnouncements;
     }
+
+    private static bool IsIdentified(MenuOwner? owner) =>
+        owner is not null && !string.IsNullOrWhiteSpace(owner.Source);
 
     private IReadOnlyList<Announcement> AnnounceUnsupported(MenuUnsupported unsupported)
     {
@@ -183,6 +205,7 @@ public sealed class MenuNarrator
 
         faulted = true;
         active = false;
+        activeOwner = null;
         confirmationChoices = null;
         lastConfirmationPrompt = null;
         var exact = string.IsNullOrWhiteSpace(diagnostic)

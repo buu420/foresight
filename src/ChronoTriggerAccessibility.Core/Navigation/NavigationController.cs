@@ -110,6 +110,9 @@ public sealed class NavigationController
         return Result(speech, frame.Player);
     }
 
+    private static string Arrival(NavigationTarget target) => $"Arrived at {target.Label}." +
+        (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? "" : " " + target.ArrivalInstruction);
+
     private void Refresh(NavigationFrame frame, List<string> speech)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -206,7 +209,7 @@ public sealed class NavigationController
         if (route is null) return;
         if (Arrived(frame.Player, route[^1]))
         {
-            speech.Add($"Arrived at {destination.Label}.");
+            speech.Add(Arrival(destination));
             Stop();
             return;
         }
@@ -221,7 +224,7 @@ public sealed class NavigationController
             if (!Plan(frame, speech)) return;
             if (route!.Count == 1)
             {
-                speech.Add($"Arrived at {destination!.Label}.");
+                speech.Add(Arrival(destination!));
                 Stop();
                 return;
             }

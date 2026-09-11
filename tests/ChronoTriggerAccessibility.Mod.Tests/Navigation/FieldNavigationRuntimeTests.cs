@@ -73,6 +73,25 @@ public sealed class FieldNavigationRuntimeTests
         Assert.Equal(count, h.Diagnostics.Count);
     }
 
+    [Fact]
+    public void SlowIdleObservationDoesNotDiscardTheNextKeyPress()
+    {
+        long now = 0;
+        var keys = new HashSet<int>();
+        var speech = new List<string>();
+        var target = new NavigationPoint(16, 0, 1);
+        var runtime = new FieldNavigationRuntime(_ => new("room", true, new(0, 0, 1),
+            [new("person", "Person", NavigationCategory.People, target, [target], true, false)], new Line()),
+            new(keys.Contains, () => true), () => true, () => now, speech.Add, _ => { },
+            _ => now += 600);
+        runtime.Enable();
+        runtime.OnInput(1, 0);
+        now += 16;
+        keys.Add('K');
+        runtime.OnInput(1, 0);
+        Assert.Contains(speech, s => s.Contains("Person"));
+    }
+
     private sealed class Harness
     {
         public HashSet<int> Keys { get; } = [];

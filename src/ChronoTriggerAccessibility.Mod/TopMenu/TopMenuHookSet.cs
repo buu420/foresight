@@ -881,7 +881,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private void HandleStatusDestructor(Func<StatusBarDestructorDelegate> original, nint statusBar)
     {
         string? failure = null;
-        var publishExit = false;
+        MenuOwner? publishExit = null;
         try
         {
             if (TryGetBuild(out var build) && build.Status?.Pointer == (nuint)statusBar)
@@ -899,13 +899,13 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                     }
                     else if (!TryDeferExitLocked(active))
                     {
-                        publishExit = true;
+                        publishExit = OwnerOf(active);
                     }
                 }
             }
-            if (publishExit)
+            if (publishExit is not null)
             {
-                dispatcher.Publish(new MenuExited());
+                dispatcher.Publish(new MenuExited(publishExit));
             }
         }
         catch (Exception exception)
@@ -935,7 +935,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private nint HandleDeletingDestructor(TopMenuStyle style, nuint root, Func<nint> callOriginal)
     {
         string? failure = null;
-        var publishExit = false;
+        MenuOwner? publishExit = null;
         try
         {
             lock (gate)
@@ -953,13 +953,13 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                     }
                     else if (!TryDeferExitLocked(active))
                     {
-                        publishExit = true;
+                        publishExit = OwnerOf(active);
                     }
                 }
             }
-            if (publishExit)
+            if (publishExit is not null)
             {
-                dispatcher.Publish(new MenuExited());
+                dispatcher.Publish(new MenuExited(publishExit));
             }
         }
         catch (Exception exception)
@@ -1151,7 +1151,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 }
                 if (IsCurrentActionTransactionLocked(transaction) && transaction.ExitDeferred)
                 {
-                    dispatcher.Publish(new MenuExited());
+                    dispatcher.Publish(new MenuExited(OwnerOf(transaction.Owner)));
                 }
             }
             finally
@@ -1278,7 +1278,7 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             activeContext = active;
             try
             {
-                dispatcher.Publish(new MenuPresented("Menu", focused, snapshot.FlattenedStatus));
+                dispatcher.Publish(new MenuPresented(OwnerOf(active), "Menu", focused, snapshot.FlattenedStatus));
             }
             catch
             {
@@ -1647,6 +1647,8 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         public ITopMenuStatusCapture Capture { get; } = capture;
         public bool Disposed { get; set; }
     }
+
+    private static MenuOwner OwnerOf(ActiveContext active) => new("TopMenu", (ulong)active.Root);
 
     private sealed record ActiveContext(
         nuint Root,

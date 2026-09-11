@@ -417,6 +417,55 @@ public sealed class TopMenuHookSetTests
         Assert.Empty(harness.Dispatcher.Failures);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EveryTeardownPathCarriesTheSameOwnerAsThePublishedPresentation(bool viaStatusBar)
+    {
+        // The narrator only honours a close from the owner that presented, so each teardown
+        // path must stamp the identity of its own active context.
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        var presented = Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+
+        if (viaStatusBar)
+        {
+            harness.DeleteStatusBar();
+        }
+        else
+        {
+            harness.DeleteClassic();
+        }
+
+        var exited = Assert.IsType<MenuExited>(harness.Dispatcher.Events[1]);
+        Assert.NotNull(presented.Owner);
+        Assert.Equal(presented.Owner, exited.Owner);
+        Assert.Equal("TopMenu", exited.Owner!.Source);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void DeferredActionExitCarriesTheOwnerOfTheMenuThatWasTornDown()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(
+            HookId.ClassicTopMenuActionDispatcher,
+            _ => harness.DeleteClassic());
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        var presented = Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
+        harness.Dispatcher.Events.Clear();
+
+        harness.DispatchAction(7);
+
+        var exited = Assert.IsType<MenuExited>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(presented.Owner, exited.Owner);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
     [Fact]
     public void IndependentStatusBarDestructorImmediatelyInvalidatesThePublishedMenuAndExitsOnce()
     {

@@ -1342,9 +1342,9 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         {
             dispatcher.Publish(primary);
         }
-        if (scope.ExitObserved)
+        if (scope.ExitOwner is { } exitOwner)
         {
-            dispatcher.Publish(new MenuExited());
+            dispatcher.Publish(new MenuExited(exitOwner));
         }
         foreach (var deferred in scope.DeferredEvents)
         {
@@ -1763,7 +1763,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         }
         if (departed is not null)
         {
-            QueueExit();
+            QueueExit(departed);
         }
     }
 
@@ -1832,19 +1832,19 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         }
         if (cleared)
         {
-            QueueExit();
+            QueueExit(context);
         }
     }
 
-    private void QueueExit()
+    private void QueueExit(ActiveContext departed)
     {
         if (GetOwnedCallbackScope() is { } callback)
         {
-            callback.ExitObserved = true;
+            callback.ExitOwner = OwnerOf(departed);
         }
         else
         {
-            dispatcher.Publish(new MenuExited());
+            dispatcher.Publish(new MenuExited(OwnerOf(departed)));
         }
     }
 
@@ -1967,7 +1967,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         ActiveContext context,
         MenuFocus? focus,
         IReadOnlyList<string> status) =>
-        new(context.Title, focus, status);
+        new(OwnerOf(context), context.Title, focus, status);
 
     private static MenuFocus ToFocus(MenuControlSnapshot snapshot) =>
         new(snapshot.Label, snapshot.Value, snapshot.Position, snapshot.Count, snapshot.Help, !snapshot.Enabled);
@@ -2246,7 +2246,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         public int EntryFocusKey { get; }
         public List<FocusObservation> Focus { get; } = [];
         public List<AccessibilityEvent> DeferredEvents { get; } = [];
-        public bool ExitObserved { get; set; }
+        public MenuOwner? ExitOwner { get; set; }
         public bool ReviewTransitionObserved { get; set; }
     }
 
@@ -2263,6 +2263,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         BuildScope Build,
         ActiveContext Context,
         MenuPresented Presented);
+
+    private static MenuOwner OwnerOf(ActiveContext context) => new("Extras", (ulong)context.Node);
 
     private sealed class ActiveContext(
         Surface surface,

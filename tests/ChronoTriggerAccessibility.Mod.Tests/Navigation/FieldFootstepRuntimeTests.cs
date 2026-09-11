@@ -119,6 +119,21 @@ public sealed class FieldFootstepRuntimeTests
             Assert.True(pair.Second - pair.First > duration));
     }
 
+    [Fact]
+    public void F8StillReportsItsSettingWhenPositionCaptureIsUnavailable()
+    {
+        var fixture = new Fixture { Available = false };
+        fixture.Tick(0, 0);
+        fixture.Keys.Add(0x77);
+        fixture.Tick(0, 0);
+        fixture.Tick(0, 0);
+        Assert.Equal(new[] { "Footsteps off." }, fixture.Speech);
+        fixture.Keys.Clear(); fixture.Tick(0, 0);
+        fixture.Keys.Add(0x77); fixture.Tick(0, 0);
+        Assert.Equal("Footsteps on.", fixture.Speech[^1]);
+        Assert.Equal(0, fixture.Plays);
+    }
+
     private sealed class Fixture
     {
         public readonly HashSet<int> Keys = [];

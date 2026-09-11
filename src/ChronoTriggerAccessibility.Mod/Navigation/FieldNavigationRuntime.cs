@@ -6,7 +6,8 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// ordinary pad value; it never holds OS keys or writes player coordinates.</summary>
 public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture, NavigationKeyboard keyboard,
     Func<bool> isForeground, Func<long> clock, Action<string> speak, Action<string> diagnostic,
-    Action<nint>? observe = null, Action? resetDiscoveries = null, Action? resetMotion = null)
+    Action<nint>? observe = null, Action? resetDiscoveries = null, Action? resetMotion = null,
+    Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -16,6 +17,26 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private long lastObservation = -1;
     private long lastDiagnostic = -1;
     private string lastRouteState = "none";
+    private bool worldMode;
+    private uint worldDirection;
+
+    public uint OnWorldInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, true);
+
+    public uint ApplyWorldPad(nint currentEngine, uint originalPad)
+    {
+        lock (gate)
+        {
+            var now = clock();
+            if (!enabled || !worldMode || engine != currentEngine || !isForeground() ||
+                lastCall < 0 || now < lastCall || now - lastCall > 250) return originalPad;
+            if (originalPad != 0)
+            {
+                if (worldDirection != 0) Suspend("manual control");
+                return originalPad;
+            }
+            return originalPad | worldDirection;
+        }
+    }
 
     public void Enable()
     {
@@ -24,13 +45,14 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
 
     public void Disable()
     {
-        lock (gate) { enabled = false; controller.Cancel("accessibility disabled"); keyboard.Suspend(); resetMotion?.Invoke(); }
+        lock (gate) { enabled = false; worldDirection = 0; controller.Cancel("accessibility disabled"); keyboard.Suspend(); resetMotion?.Invoke(); }
     }
 
     public void Suspend(string reason)
     {
         lock (gate)
         {
+            worldDirection = 0;
             if (controller.IsActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
             Emit(controller.Cancel(reason));
             keyboard.Suspend();
@@ -43,11 +65,14 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate) { resetDiscoveries?.Invoke(); resetMotion?.Invoke(); lastObservation = -1; }
     }
 
-    public uint OnInput(nint currentEngine, uint originalPad)
+    public uint OnInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, false);
+
+    private uint ProcessInput(nint currentEngine, uint originalPad, bool world)
     {
         lock (gate)
         {
             if (!enabled) return originalPad;
+            worldDirection = 0;
             try
             {
                 var now = clock();
@@ -58,21 +83,27 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     return originalPad;
                 }
                 if (lastCall >= 0 && (now < lastCall || now - lastCall > 250)) Suspend("player input was paused");
-                if (engine != 0 && engine != currentEngine) Suspend("area changed");
+                if (engine != 0 && (engine != currentEngine || worldMode != world))
+                {
+                    Suspend("area changed");
+                    lastObservation = -1;
+                }
+                worldMode = world;
                 engine = currentEngine;
                 lastCall = now;
                 var commands = keyboard.Poll();
                 if (!controller.IsActive && commands.Count == 0)
                 {
-                    if (observe is not null && (lastObservation < 0 || now - lastObservation >= 500))
+                    var observer = world ? worldObserve : observe;
+                    if (observer is not null && (lastObservation < 0 || now - lastObservation >= 500))
                     {
-                        lastObservation = now;
-                        try { observe(currentEngine); }
+                        try { observer(currentEngine); }
                         catch (Exception exception) { diagnostic($"Navigation discovery read failed: {exception.GetType().Name}."); }
+                        lastObservation = clock();
                     }
                     return originalPad;
                 }
-                var frame = capture(currentEngine);
+                var frame = world ? worldCapture?.Invoke(currentEngine) : capture(currentEngine);
                 if (frame is null || !frame.CanNavigate)
                 {
                     Suspend("navigation state is unavailable");
@@ -102,7 +133,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     lastDiagnostic = now;
                 }
                 if (speech.Count != 0) speak(string.Join(" ", speech));
-                lastCall = clock();
+                if (world) worldDirection = DirectionBits(result.Direction);
                 return originalPad | DirectionBits(result.Direction);
             }
             catch (Exception exception)
@@ -114,6 +145,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 diagnostic($"Field navigation failure: {exception}");
                 speak("Navigation stopped because its state could not be read.");
                 return originalPad;
+            }
+            finally
+            {
+                // Native input pauses begin after our work finishes. Asset/camera
+                // observation can take longer on area entry or a network install.
+                lastCall = clock();
             }
         }
     }

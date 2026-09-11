@@ -124,6 +124,11 @@ public sealed class Mod : ModBase
         var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
         dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
         var navigationSpeech = dispatcher;
+        nuint navigationImageBase = 0;
+        var navigationText = new NavigationTextCapture(memory);
+        var worldSource = new WorldNavigationSource(memory, dispatcher.RecordDiagnostic);
+        var areas = new NavigationAreaAnnouncer(
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         var footstepSound = new FootstepSound(navigationSpeech.RecordDiagnostic,
             () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")));
         var motionCaptureStage = "not sampled";
@@ -135,12 +140,19 @@ public sealed class Mod : ModBase
         }, NavigationKeyboard.IsGameForeground, NavigationKeyboard.IsKeyDown, () => Environment.TickCount64,
             footstepSound.Play, footstepSound.Stop,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            () => motionCaptureStage);
-        var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic);
-        var navigation = new FieldNavigationRuntime(navigationSource.Capture, new NavigationKeyboard(),
+            () => $"field={motionCaptureStage}; world={worldSource.MotionStage}", worldSource.CaptureMotion);
+        var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic, scene =>
+        {
+            var name = navigationText.FieldName(navigationImageBase, scene);
+            return string.IsNullOrWhiteSpace(name) || name.StartsWith('(') ? "Local area" : name;
+        });
+        NavigationFrame? Field(nint engine) => areas.Observe(navigationSource.Capture(engine));
+        NavigationFrame? World(nint context) => areas.Observe(worldSource.Capture(context));
+        var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            engine => navigationSource.Capture(engine), navigationSource.Reset, footsteps.Suspend);
+            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); },
+            footsteps.Suspend, World, context => World(context));
         var navigationHooks = new FieldNavigationHookSet(asmHookFactory, (engine, pad) =>
         {
             var accepted = navigation.OnInput(engine, pad);
@@ -148,6 +160,15 @@ public sealed class Mod : ModBase
             return accepted;
         }, () => { navigation.Enable(); footsteps.Enable(); },
             () => { navigation.Disable(); footsteps.Disable(); });
+        var worldHooks = new WorldNavigationHookSet(asmHookFactory, (context, pad) =>
+        {
+            var accepted = navigation.OnWorldInput(context, pad);
+            footsteps.OnWorldInput(context, accepted);
+        }, navigation.ApplyWorldPad, image =>
+        {
+            navigationImageBase = image;
+            worldSource.BindImageBase(image);
+        });
         dispatcher = new NavigationDispatcher(dispatcher, navigation);
 
         var sharedFanout = new SharedNativeHookFanoutFactory(
@@ -186,6 +207,7 @@ public sealed class Mod : ModBase
             .Concat(dialogue.Registrations)
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
+            .Concat(worldHooks.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -198,6 +220,7 @@ public sealed class Mod : ModBase
             dialogue,
             introTrace,
             navigationHooks,
+            worldHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -210,6 +233,7 @@ public sealed class Mod : ModBase
             dialogue,
             introTrace,
             navigationHooks,
+            worldHooks,
             installer);
     }
 
@@ -235,4 +259,5 @@ public sealed record CompleteAccessibilityComposition(
     DialogueHookSet DialogueHookSet,
     IntroTraceHookSet IntroTraceHookSet,
     FieldNavigationHookSet FieldNavigationHookSet,
+    WorldNavigationHookSet WorldNavigationHookSet,
     ReloadedHookInstaller Installer);

@@ -127,6 +127,8 @@ public enum HookId
     CompactStatusExtraLabelCallSite,
     StatusBarGlyphRendererCallSite,
     FieldNavigationPadCallSite,
+    WorldNavigationTickCallSite,
+    WorldNavigationPadInstruction,
 }
 
 public enum X86CallingConvention
@@ -139,6 +141,7 @@ public enum NativeHookKind
 {
     FunctionEntry,
     AssemblyCallSite,
+    AssemblyInstructionSite,
 }
 
 public sealed class HookContract

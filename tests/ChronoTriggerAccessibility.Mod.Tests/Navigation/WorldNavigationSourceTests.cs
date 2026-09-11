@@ -1,0 +1,67 @@
+using ChronoTriggerAccessibility.Core.Navigation;
+using ChronoTriggerAccessibility.Mod.Navigation;
+using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Native.Memory;
+using Xunit;
+
+namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
+
+public sealed class WorldNavigationSourceTests
+{
+    [Fact]
+    public void OnlyVisibleOrDiscoveredEnabledEntrancesBecomeTargets()
+    {
+        var source = Source();
+        var inn = Entrance(6, 25, 19, 6, 12, 400,304);
+        var far = Entrance(9, 70, 20, 10, 5, 1120,320);
+        var world = Snapshot([inn, far]);
+        var frame = source.Build(world, Label);
+        Assert.Single(frame.Targets);
+        Assert.Equal("Truce Inn", frame.Targets[0].Label);
+        var away = world with { Viewport = new(16000, 0, 24000, 16000) };
+        frame = source.Build(away, Label);
+        Assert.Contains(frame.Targets, t => t.Label == "Truce Inn" && !t.Visible && t.Discovered);
+        frame = source.Build(away with { Entrances = [inn with { Available = false }, far] }, Label);
+        Assert.DoesNotContain(frame.Targets, t => t.Label == "Truce Inn");
+    }
+
+    [Fact]
+    public void MultipleDoorRecordsHaveOneStableSelectionAndRetainAllUsableGoals()
+    {
+        var source = Source();
+        var first = Entrance(6,25,19,6,12,400,304);
+        var second = Entrance(46,26,18,6,12,416,288);
+        var world = Snapshot([first, second]);
+        var target = Assert.Single(source.Build(world, Label).Targets);
+        Assert.Equal(2, target.ApproachPoints.Count);
+        Assert.Equal("Press Confirm to enter.", target.Instruction);
+        var moved = world with { Motion = world.Motion with { PixelX = 410, PixelY = 290 } };
+        var again = Assert.Single(source.Build(moved, Label).Targets);
+        Assert.Equal(target.Id, again.Id);
+        Assert.Equal(target.ApproachPoints, again.ApproachPoints);
+    }
+
+    [Fact]
+    public void CurrentStoryGoalsUseEligibleEntrancesWithoutRevealingHiddenLocations()
+    {
+        var fair = Entrance(9,26,14,10,5,416,224);
+        var source = Source(); var world = Snapshot([fair]) with { StoryPoint = 3 };
+        Assert.Contains(source.Build(world, Label).Targets, t => t.Category == NavigationCategory.StoryEvents && !t.IsStoryNote);
+        source.Reset();
+        var hidden = world with { Viewport = new(0,0,64,64) };
+        Assert.DoesNotContain(source.Build(hidden, Label).Targets,
+            t => t.Category == NavigationCategory.StoryEvents && !t.IsStoryNote);
+        Assert.DoesNotContain(source.Build(world with { StoryPoint = 45 }, Label).Targets,
+            t => t.Category == NavigationCategory.StoryEvents && t.Label.Contains("fair"));
+    }
+
+    private static WorldNavigationSource Source() => new(new EmptyMemory(), _ => { });
+    private static string? Label(int id) => id switch {6 => "Truce Inn", 10 => "Leene Square", _ => null};
+    private static WorldEntrance Entrance(int id,int tx,int ty,int name,int dest,int x,int y) =>
+        new(id,tx,ty,name,dest,0,52,28,true) { ContactPoints = [new(x,y)] };
+    private static WorldNavigationSnapshot Snapshot(IReadOnlyList<WorldEntrance> exits) =>
+        new(new(1,2,3,4,0,0x400,400,304), new byte[6144],new byte[512],exits,
+            new(300*16,190*16,520*16,410*16),null);
+    private sealed class EmptyMemory : IReadableMemory
+    { public bool TryRead(nuint address, Span<byte> destination) => false; }
+}

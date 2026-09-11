@@ -638,7 +638,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
         original()(instance);
         if (announceExit)
         {
-            PublishSafely(new MenuExited());
+            PublishSafely(new MenuExited(OwnerOf(root)));
         }
     }
 
@@ -906,7 +906,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
         var refreshedFocus = ToFocus(refreshed.Snapshot);
         if (changedSurface)
         {
-            PublishSafely(CreateActivePresentation(refreshed.Snapshot));
+            PublishSafely(CreateActivePresentation(refreshed.Root, refreshed.Snapshot));
         }
         else if (!Equals(beforeFocus, refreshedFocus))
         {
@@ -1506,7 +1506,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
             {
                 nested = null;
             }
-            var presented = CreateActivePresentation(snapshot);
+            var presented = CreateActivePresentation(scope.Root, snapshot);
             if (firstPresentation)
             {
                 schedule = new DeferredPresentation(scope.Root, scope.Generation, presented);
@@ -1955,7 +1955,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
     private static string? OptionalText(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 
-    private static MenuPresented CreateActivePresentation(SteamSettingsSnapshot snapshot)
+    private static MenuPresented CreateActivePresentation(nuint root, SteamSettingsSnapshot snapshot)
     {
         var title = MenuTitle;
         if (snapshot.Mode == SteamSettingsMode.Page && snapshot.ActivePageIndex is { } page &&
@@ -1963,7 +1963,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
         {
             title = snapshot.Categories[page].Label;
         }
-        return new MenuPresented(title, ToFocus(snapshot), []);
+        return new MenuPresented(OwnerOf(root), title, ToFocus(snapshot), []);
     }
 
     private NestedContext? GetNested(nuint root)
@@ -2041,7 +2041,11 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
                 ordered.Select(pair => pair.Value.Label).ToArray(),
                 selectedIndex);
         }
-        return new MenuPresented(context.Title, ToNestedFocus(context, context.FocusKey), context.StatusDetails);
+        return new MenuPresented(
+            OwnerOf(context.Root),
+            context.Title,
+            ToNestedFocus(context, context.FocusKey),
+            context.StatusDetails);
     }
 
     private static AccessibilityEvent CreateNestedFocusEvent(NestedContext context, int key)
@@ -2108,7 +2112,7 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
         {
             return;
         }
-        PublishSafely(CreateActivePresentation(snapshot));
+        PublishSafely(CreateActivePresentation(root, snapshot));
     }
 
     private bool TryGetConfirmationPromptScope(int bank, int messageId, out BuildScope scope)
@@ -2651,6 +2655,8 @@ public sealed class SteamSettingsHookSet : IHookActivationObserver, ISharedNativ
             }
         }
     }
+
+    private static MenuOwner OwnerOf(nuint root) => new("SteamSettings", (ulong)root);
 
     private sealed record ActiveState(
         nuint Root,

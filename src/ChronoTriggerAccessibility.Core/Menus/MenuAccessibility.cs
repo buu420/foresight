@@ -5,6 +5,14 @@ namespace ChronoTriggerAccessibility.Core.Menus;
 
 public abstract record MenuAccessibilityEvent : AccessibilityEvent;
 
+/// <summary>
+/// Identifies the native menu that presented, and therefore owns, the current narration state.
+/// <paramref name="Source"/> names the hook set; <paramref name="Instance"/> is the native root
+/// pointer of that hook set's own active context. Native teardown of a parent menu can run after
+/// a child menu has already presented, so a close is only authoritative for its own owner.
+/// </summary>
+public sealed record MenuOwner(string Source, ulong Instance);
+
 public sealed record MenuFocus(
     string Label,
     string? Value,
@@ -15,13 +23,19 @@ public sealed record MenuFocus(
 
 public sealed record MenuPresented : MenuAccessibilityEvent
 {
-    public MenuPresented(string title, MenuFocus? focus, IReadOnlyList<string>? statusDetails)
+    public MenuPresented(
+        MenuOwner? owner,
+        string title,
+        MenuFocus? focus,
+        IReadOnlyList<string>? statusDetails)
     {
+        Owner = owner;
         Title = title;
         Focus = focus;
         StatusDetails = Snapshot(statusDetails);
     }
 
+    public MenuOwner? Owner { get; }
     public string Title { get; }
     public MenuFocus? Focus { get; }
     public IReadOnlyList<string>? StatusDetails { get; }
@@ -36,7 +50,7 @@ public sealed record MenuFocusChanged(MenuFocus? Focus) : MenuAccessibilityEvent
 
 public sealed record MenuActivated(string Label) : MenuAccessibilityEvent;
 
-public sealed record MenuExited : MenuAccessibilityEvent;
+public sealed record MenuExited(MenuOwner? Owner) : MenuAccessibilityEvent;
 
 public sealed record MenuUnsupported(
     string SelectedLabel,

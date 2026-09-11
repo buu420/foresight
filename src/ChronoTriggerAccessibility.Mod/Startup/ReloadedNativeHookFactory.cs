@@ -215,11 +215,14 @@ public sealed class ReloadedNativeHookFactory :
 
         var contract = GameVersionCatalog.Hooks.SingleOrDefault(candidate => candidate.Id == id)
             ?? throw new ArgumentOutOfRangeException(nameof(id), id, "The hook ID is not present in the verified catalog.");
-        if (contract.Kind != NativeHookKind.AssemblyCallSite)
+        var worldInstruction = id == HookId.WorldNavigationPadInstruction &&
+            contract.Kind == NativeHookKind.AssemblyInstructionSite &&
+            contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("0BBE1C330000"));
+        if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction)
         {
             throw new ArgumentException("A function-entry contract cannot be installed as an assembly call-site hook.", nameof(id));
         }
-        if (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8)
+        if (!worldInstruction && (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8))
         {
             throw new NotSupportedException(
                 $"Assembly call-site '{contract.Symbol}' is not an audited exact five-byte direct CALL.");
@@ -240,13 +243,14 @@ public sealed class ReloadedNativeHookFactory :
                 $"The requested {(options.PreferRelativeJump ? "relative" : "absolute")} jump needs at least {minimumJumpLength} bytes.",
                 nameof(options));
         }
-        if (options.Behaviour != AsmHookBehaviour.ExecuteFirst ||
+        var behaviour = worldInstruction ? AsmHookBehaviour.ExecuteAfter : AsmHookBehaviour.ExecuteFirst;
+        if (options.Behaviour != behaviour ||
             options.HookLength != contract.ExpectedBytes.Length ||
             !options.PreferRelativeJump ||
             options.MaxOpcodeSize != contract.ExpectedBytes.Length)
         {
             throw new ArgumentException(
-                "An exact five-byte direct-call probe requires ExecuteFirst, HookLength=5, PreferRelativeJump=true, and MaxOpcodeSize=5.",
+                $"The audited probe requires {behaviour}, HookLength={contract.ExpectedBytes.Length}, PreferRelativeJump=true, and MaxOpcodeSize={contract.ExpectedBytes.Length}.",
                 nameof(options));
         }
 

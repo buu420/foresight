@@ -500,7 +500,7 @@ public sealed class TouchSettingsHookSet : IHookActivationObserver, ISharedNativ
             }
             if (publishExit)
             {
-                dispatcher.Publish(new MenuExited());
+                dispatcher.Publish(new MenuExited(OwnerOf(root)));
             }
         }
         catch (Exception exception)
@@ -1306,7 +1306,8 @@ public sealed class TouchSettingsHookSet : IHookActivationObserver, ISharedNativ
                     return;
                 }
                 context.Presented = true;
-                dispatcher.Publish(new MenuPresented(context.Heading, ToFocus(snapshot), []));
+                dispatcher.Publish(new MenuPresented(
+                    OwnerOf(context.Root), context.Heading, ToFocus(snapshot), []));
                 return;
             }
             dispatcher.Publish(new MenuFocusChanged(ToFocus(snapshot)));
@@ -1330,7 +1331,8 @@ public sealed class TouchSettingsHookSet : IHookActivationObserver, ISharedNativ
                         return;
                     }
                     context.Presented = true;
-                    dispatcher.Publish(new MenuPresented(context.Heading, ToFocus(context.Snapshot), []));
+                    dispatcher.Publish(new MenuPresented(
+                        OwnerOf(context.Root), context.Heading, ToFocus(context.Snapshot), []));
                 }
             }
             catch (Exception exception)
@@ -1735,6 +1737,8 @@ public sealed class TouchSettingsHookSet : IHookActivationObserver, ISharedNativ
                 scope.Choices.Add(new LabeledControl(control, text, label));
             }, scope.Errors.Add);
     }
+
+    private static MenuOwner OwnerOf(nuint root) => new("TouchSettings", (ulong)root);
 
     private sealed class ActiveContext(
         int epoch,

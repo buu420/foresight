@@ -342,6 +342,10 @@ public static class GameVersionCatalog
             typeof(FieldOpcodeDispatcherDelegate), X86CallingConvention.MicrosoftThiscall),
         CreateAssemblyCallSite(HookId.FieldNavigationPadCallSite,
             "Field navigation input before dash predicate", 0x175A8D, "E8 FE 01 00 00"),
+        CreateAssemblyCallSite(HookId.WorldNavigationTickCallSite,
+            "World navigation walking-task tick", 0x264B56, "E8 E5 00 00 00"),
+        new(HookId.WorldNavigationPadInstruction, "World navigation combined direction input", 0x26536F,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
     ]);
 
     public static HookContract Get(HookId id) => Hooks.Single(hook => hook.Id == id);

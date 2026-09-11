@@ -181,6 +181,21 @@ public sealed class ReloadedNativeHookFactoryTests
         Assert.Contains(callback, prepared.LifetimeRoots);
     }
 
+    [Fact]
+    public void AuditedWorldInstructionExecutesItsSixBytesBeforeTheCallback()
+    {
+        var controller = new RecordingAsmHookController();
+        var factory = new ReloadedNativeHookFactory(controller);
+        NativeCallSiteProbeDelegate callback = () => { };
+        factory.CreateAsmHook(HookId.WorldNavigationPadInstruction, "World pad", callback, 0x66536F,
+            NativeCallSiteProbeAssembly.Build, new(AsmHookBehaviour.ExecuteAfter, 6, true, 6));
+        Assert.Equal(6, controller.Options!.hookLength);
+        Assert.Equal(AsmHookBehaviour.ExecuteAfter, controller.Options.Behaviour);
+        Assert.Throws<ArgumentException>(() => factory.CreateAsmHook(HookId.WorldNavigationPadInstruction,
+            "World pad", callback, 0x66536F, NativeCallSiteProbeAssembly.Build,
+            new(AsmHookBehaviour.ExecuteFirst, 6, true, 6)));
+    }
+
     private static RuntimeAsmHookOptions ValidOptions => new(
         AsmHookBehaviour.ExecuteFirst,
         HookLength: 5,
