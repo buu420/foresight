@@ -97,6 +97,10 @@ and retired markers are dropped. Multiple staircase targets prefer the current
 view over a previously visited floor. The live graph still determines whether
 a discovered approach can actually be reached.
 
+Scene 72 actor 22's rescue handler at file offset 09AF parks the freed prisoner
+at tile FF,FF. Actors moved beyond the map bounds are retired from discovery
+even if their draw mode remains set, preventing a stale prisoner objective.
+
 The catalog supplies local objectives and readable notes, not automatic puzzle
 solutions, jury answers, secret rewards, or battle actions. The overworld,
 combat, special field movement, and later chapters remain outside this change.
@@ -148,7 +152,7 @@ failure reports the problem and does not stop navigation.
 
 ## Validation
 
-The Release suite passed 1,000 tests: Core 99, Prism 8, Native 514, and Mod 379.
+The Release suite passed 1,001 tests: Core 99, Prism 8, Native 514, and Mod 380.
 The eight prison regressions reject the closer backward exit on each audited
 bridge/stair floor. The manifest remains pinned by its exact SHA-256.
 

@@ -43,7 +43,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var activeIds = new HashSet<string>();
         foreach (var actor in field.Actors)
         {
-            if (!actor.IsUsable || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
+            if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
             // People includes visible characters without a talk action, such as
@@ -66,6 +66,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // These exact script slots are interaction markers for scenery drawn in
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
+            if (!InsideMap(actor)) continue;
             var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors);
             if (label is null) continue;
             var position = Position(actor.FineX, actor.FineY);
@@ -149,6 +150,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"loaded={a.LoadedFlag},usable={a.IsUsable},party={a.IsPartyMember}," +
                 $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},pos=({a.FineX},{a.FineY})")) + ".");
         }
+
+        // Scripts park retired actors at tile FF,FF without necessarily clearing
+        // their draw mode. Such actors must not keep their last discovered position.
+        bool InsideMap(FieldActorSnapshot actor) => actor.FineX >= 0 && actor.FineY >= 0 &&
+            actor.FineX / 256 < map.Width && actor.FineY / 256 < map.Height;
 
         NavigationPoint Position(int x, int y)
         {

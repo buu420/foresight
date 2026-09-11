@@ -127,6 +127,20 @@ public sealed class EarlyStoryTests
     }
 
     [Fact]
+    public void FreedPrisonerParkedOutsideTheMapDoesNotLeaveAStaleObjective()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var prisoner = Actor(22, 11504, 2448) with { ClassTag = 4, VisualIndex = 41, DrawMode = 1 };
+        var field = Field(72, prisoner);
+        var before = source.Build(field, Map(), new(0, 0, 16384, 16384), [], State(46));
+        Assert.Contains(before.Targets, t => t.Label == "Speak to the prisoner at the guillotine");
+        // Native scene 72/22 parks Fritz at tile FF,FF after the rescue dialogue.
+        var parked = Actor(22, 65535, 65535) with { ClassTag = 4, VisualIndex = 41, DrawMode = 1 };
+        var after = source.Build(field with { Actors = [field.Actors[0], parked] }, Map(), new(0, 0, 16384, 16384), [], State(46));
+        Assert.DoesNotContain(after.Targets, t => t.Id == "actor:22:4:41" || t.Label.Contains("prisoner"));
+    }
+
+    [Fact]
     public void UndiscoveredSceneryDoesNotBecomeARouteAndTouchMarkersStayOutOfObjects()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
