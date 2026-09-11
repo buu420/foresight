@@ -12,35 +12,51 @@ public readonly record struct FieldMotionSnapshot(uint Engine, uint ActorBase, i
 public static class FieldMotionCapture
 {
     public static FieldMotionSnapshot? Capture(IReadableMemory memory, nuint engine)
+        => Capture(memory, engine, out _);
+
+    public static FieldMotionSnapshot? Capture(IReadableMemory memory, nuint engine, out string stage)
     {
+        stage = "engine pointers";
         try
         {
             if (engine == 0 || !Word(memory, engine + EngineScriptDataPointerOffset, out var script) ||
                 !Word(memory, engine + EngineActorBasePointerOffset, out var actors) ||
                 !Word(memory, engine + EngineFieldStatePointerOffset, out var state) ||
                 !Word(memory, engine + EngineRendererPointerOffset, out var renderer) ||
-                script == 0 || actors == 0 || state == 0 || renderer == 0 ||
-                !Word(memory, state + FieldStateControlFlagOffset, out var control) || control == 0 ||
-                !Word(memory, state + FieldStateInputModeOffset, out var mode) || mode != 0 ||
-                !Word(memory, state + FieldStateSceneIdOffset, out var scene) ||
-                !Word(memory, renderer + RendererSceneIdOffset, out var renderedScene) || scene != renderedScene ||
-                !Word(memory, state + FieldStatePartySlotTableOffset, out var slot) ||
+                script == 0 || actors == 0 || state == 0 || renderer == 0) return null;
+            stage = "player control";
+            if (!Word(memory, state + FieldStateControlFlagOffset, out var control) || control == 0) return null;
+            stage = "input mode";
+            if (!Word(memory, state + FieldStateInputModeOffset, out var mode) || mode != 0) return null;
+            stage = "scene agreement";
+            if (!Word(memory, state + FieldStateSceneIdOffset, out var scene) ||
+                !Word(memory, renderer + RendererSceneIdOffset, out var renderedScene) || scene != renderedScene) return null;
+            stage = "leader slot";
+            if (!Word(memory, state + FieldStatePartySlotTableOffset, out var slot) ||
                 (slot & 0x81) != 0 || slot / 2 >= MaximumActors) return null;
+            stage = "actor count";
             Span<byte> count = stackalloc byte[1];
             if (!Read(memory, script + ScriptObjectCountOffset, count) ||
                 count[0] is 0 or > MaximumActors || slot / 2 >= count[0]) return null;
             var actor = (int)(slot / 2);
+            stage = "actor body";
             Span<byte> body = stackalloc byte[(int)ActorStride];
             if (!Read(memory, actors + ActorArrayOffset + (nuint)(actor * ActorStride), body)) return null;
             var x = At(body, ActorFineXOffset);
             var y = At(body, ActorFineYOffset);
-            if (At(body, ActorClassTagOffset) is < 0 or > 3 ||
-                At(body, ActorDrawModeOffset) != DrawModeDrawn ||
-                At(body, ActorFacingOffset) is < 0 or > 3 ||
-                x is < 0 or > ushort.MaxValue || y is < 0 or > ushort.MaxValue ||
-                At(body, ActorTileXOffset) != x >> 8 || At(body, ActorFractionXOffset) != (x & 255) ||
+            stage = "actor class";
+            if (At(body, ActorClassTagOffset) is < 0 or > 3) return null;
+            stage = "actor draw mode";
+            if (At(body, ActorDrawModeOffset) != DrawModeDrawn) return null;
+            stage = "actor facing";
+            if (At(body, ActorFacingOffset) is < 0 or > 3) return null;
+            stage = "coordinate range";
+            if (x is < 0 or > ushort.MaxValue || y is < 0 or > ushort.MaxValue) return null;
+            stage = "coordinate agreement";
+            if (At(body, ActorTileXOffset) != x >> 8 || At(body, ActorFractionXOffset) != (x & 255) ||
                 At(body, ActorTileYOffset) != y >> 8 || At(body, ActorFractionYOffset) != (y & 255)) return null;
             // Reject a scene/control/leader change during the read.
+            stage = "capture changed";
             if (!Same(memory, engine + EngineActorBasePointerOffset, actors) ||
                 !Same(memory, engine + EngineFieldStatePointerOffset, state) ||
                 !Same(memory, engine + EngineRendererPointerOffset, renderer) ||
@@ -50,6 +66,7 @@ public static class FieldMotionCapture
                 !Same(memory, state + FieldStatePartySlotTableOffset, slot) ||
                 !Same(memory, state + FieldStateControlFlagOffset, control) ||
                 !Same(memory, state + FieldStateInputModeOffset, mode)) return null;
+            stage = "ready";
             return new((uint)engine, (uint)actors, (int)scene, actor, x, y);
         }
         catch { return null; }

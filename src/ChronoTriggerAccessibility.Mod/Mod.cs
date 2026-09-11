@@ -124,19 +124,18 @@ public sealed class Mod : ModBase
         var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
         dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
         var navigationSpeech = dispatcher;
-        var footstepSound = new FootstepSound(message =>
-        {
-            navigationSpeech.RecordDiagnostic(message);
-            navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable."));
-        });
+        var footstepSound = new FootstepSound(navigationSpeech.RecordDiagnostic,
+            () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")));
+        var motionCaptureStage = "not sampled";
         var footsteps = new FieldFootstepRuntime(engine =>
         {
-            var motion = FieldMotionCapture.Capture(memory, (nuint)engine);
+            var motion = FieldMotionCapture.Capture(memory, (nuint)engine, out motionCaptureStage);
             return motion is { } value ? new FootstepFrame(
                 ((ulong)value.Engine << 32) | value.ActorBase, value.Scene, value.Actor, value.FineX, value.FineY) : null;
         }, NavigationKeyboard.IsGameForeground, NavigationKeyboard.IsKeyDown, () => Environment.TickCount64,
             footstepSound.Play, footstepSound.Stop,
-            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
+            () => motionCaptureStage);
         var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic);
         var navigation = new FieldNavigationRuntime(navigationSource.Capture, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,

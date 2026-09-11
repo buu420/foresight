@@ -58,6 +58,35 @@ public sealed class FieldFootstepRuntimeTests
     }
 
     [Fact]
+    public void DiagnosticsDistinguishMissingCaptureFromObservedMovementWithoutFlooding()
+    {
+        var fixture = new Fixture { Available = false };
+        for (var i = 0; i < 30; i++) fixture.Tick(0, 0x100);
+        Assert.Single(fixture.Diagnostics);
+        Assert.Contains("capture-unavailable", fixture.Diagnostics[0]);
+        Assert.Contains("capture=test capture missing", fixture.Diagnostics[0]);
+        fixture.Available = true;
+        for (var i = 0; i < 60; i++) fixture.Tick(i * 32, 0x100);
+        Assert.Equal(2, fixture.Diagnostics.Count);
+        Assert.Contains("step:", fixture.Diagnostics[^1]);
+        Assert.Contains("capture=ready", fixture.Diagnostics[^1]);
+        Assert.True(fixture.Plays > 0);
+    }
+
+    [Fact]
+    public void DiagnosticsExposeRepeatedClockValuesThatDiscardDistance()
+    {
+        var fixture = new Fixture();
+        for (var i = 0; i < 80; i++)
+        {
+            fixture.Tick(i * 16, 0x100);
+            fixture.Tick(i * 16, 0x100, 0);
+        }
+        Assert.Equal(0, fixture.Plays);
+        Assert.Contains("clock:", fixture.Diagnostics[^1]);
+    }
+
+    [Fact]
     public void EmbeddedBankContainsFivePlayablePcmWaves()
     {
         for (var i = 1; i <= 5; i++)
@@ -94,6 +123,7 @@ public sealed class FieldFootstepRuntimeTests
     {
         public readonly HashSet<int> Keys = [];
         public readonly List<string> Speech = [];
+        public readonly List<string> Diagnostics = [];
         public readonly FieldFootstepRuntime Runtime;
         public bool Foreground = true, Available = true;
         public int Plays;
@@ -103,7 +133,8 @@ public sealed class FieldFootstepRuntimeTests
         public Fixture()
         {
             Runtime = new(_ => Available ? new FootstepFrame(1, 1, 1, x, 0) : null,
-                () => Foreground, Keys.Contains, () => now, () => { Plays++; PlayTimes.Add(now); }, () => { }, Speech.Add, _ => { });
+                () => Foreground, Keys.Contains, () => now, () => { Plays++; PlayTimes.Add(now); }, () => { }, Speech.Add,
+                Diagnostics.Add, () => Available ? "ready" : "test capture missing");
             Runtime.Enable();
         }
         public void Tick(int position, uint input, int interval = 33) { x = position; now += interval; Runtime.OnInput(1, input); }

@@ -1,4 +1,4 @@
-# Story Events and footsteps, 0.3.4
+# Story Events and footsteps, 0.3.5
 
 The user approved local Story Events through the trial and prison escape, and
 footsteps tied to actual movement with a listening sample. The existing U/O,
@@ -157,9 +157,21 @@ valid during asynchronous playback, as required by Microsoft's
 F8 is foreground-only, edge-triggered, and ignored with modifier keys. Audio
 failure reports the problem and does not stop navigation.
 
+The player reported no footstep audio in 0.3.4. The live log confirms F8 off/on
+and movement, but that build did not log movement decisions or PlaySound results.
+Version 0.3.5 adds two-second diagnostic counters for capture failure stages,
+tracker decisions (including repeated clock values and resets), and audio
+acceptance/rejection/stale requests. It does not yet change the movement or
+playback rules. A separate 32-bit .NET 9 probe using the real embedded bank and
+audio worker loaded all five waves and reported seven accepted, zero rejected,
+and zero stale requests at its last periodic report. This proves the worker's
+direct playback path; the player also confirmed hearing this probe. In-game
+audibility remains unresolved. Claude is auditing the native
+movement sampling boundary while the player supplies the next live trace.
+
 ## Validation
 
-The Release suite passed 1,002 tests: Core 99, Prism 8, Native 514, and Mod 381.
+The 0.3.5 Release suite passed 1,004 tests: Core 99, Prism 8, Native 514, and Mod 383.
 The eight prison regressions reject the closer backward exit on each audited
 bridge/stair floor. The manifest remains pinned by its exact SHA-256.
 
@@ -167,5 +179,6 @@ Regression tests cover actual displacement, blocked movement, running cadence,
 release ticks, scripted motion, discontinuities, focus/menu resets, F8, embedded
 PCM headers, stable optional flags, story progression, missing destinations,
 nonspatial notes, cathedral discovery, sparkle hiding, and current-floor binding.
-The new features have not been exercised in the live game by Codex. User testing
-starts with manual/P walking, blocked input, F8, menus, and the fair's Story Events.
+The new features have not been exercised in the live game by Codex. The next user
+test repeats manual/P walking, blocked input, F8, and menus to identify where the
+footsteps are lost. The fair's Story Events remain a separate gameplay check.

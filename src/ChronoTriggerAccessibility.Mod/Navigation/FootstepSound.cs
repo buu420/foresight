@@ -5,7 +5,7 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 /// <summary>Owns a background audio worker. Game hooks only post a bounded request;
 /// wave loading and device calls never run on the game's input thread.</summary>
-public sealed class FootstepSound(Action<string> diagnostic)
+public sealed class FootstepSound(Action<string> diagnostic, Action? unavailable = null)
 {
     private readonly Channel<(bool Play, long Time, long Generation)> queue =
         Channel.CreateBounded<(bool, long, long)>(new BoundedChannelOptions(1)
@@ -34,6 +34,7 @@ public sealed class FootstepSound(Action<string> diagnostic)
         var ownsSound = false;
         long playingUntil = 0;
         var index = 0;
+        long accepted = 0, rejected = 0, stale = 0, stops = 0, lastDiagnostic = -1;
         try
         {
             for (var i = 1; i <= 5; i++)
@@ -48,28 +49,41 @@ public sealed class FootstepSound(Action<string> diagnostic)
                 durations.Add((int)Math.Ceiling((bytes.Length - 44) / 96.0));
                 buffers.Add(GCHandle.Alloc(bytes, GCHandleType.Pinned));
             }
+            diagnostic($"Footsteps audio: loaded {buffers.Count} embedded waves; duration={durations[0]}ms.");
             await foreach (var request in queue.Reader.ReadAllAsync())
             {
-                if (Environment.TickCount64 >= playingUntil) ownsSound = false;
+                var now = Environment.TickCount64;
+                if (now >= playingUntil) ownsSound = false;
                 if (!request.Play)
                 {
                     if (ownsSound) { PlaySound(0, 0, 0); ownsSound = false; }
-                    continue;
+                    stops++;
                 }
-                if (request.Generation != Volatile.Read(ref generation) ||
-                    Environment.TickCount64 - request.Time > 150) continue;
+                else if (request.Generation != Volatile.Read(ref generation) || now - request.Time > 150) stale++;
                 // NOSTOP yields to an existing WinMM sound; NODEFAULT prevents a system beep.
-                if (PlaySound(buffers[index].AddrOfPinnedObject(), 0, 0x17))
+                else
                 {
-                    ownsSound = true;
-                    playingUntil = Environment.TickCount64 + durations[index];
+                    if (PlaySound(buffers[index].AddrOfPinnedObject(), 0, 0x17))
+                    {
+                        accepted++;
+                        ownsSound = true;
+                        playingUntil = Environment.TickCount64 + durations[index];
+                    }
+                    else rejected++;
+                    index = (index + 1) % buffers.Count;
                 }
-                index = (index + 1) % buffers.Count;
+                if (lastDiagnostic < 0 || now - lastDiagnostic >= 2000)
+                {
+                    diagnostic($"Footsteps audio: accepted={accepted}; rejected={rejected}; " +
+                        $"stale={stale}; stops={stops}; requestAge={(request.Play ? now - request.Time : 0)}ms.");
+                    lastDiagnostic = now;
+                }
             }
         }
         catch (Exception error)
         {
             diagnostic($"Footstep audio unavailable: {error.GetType().Name}: {error.Message}");
+            unavailable?.Invoke();
         }
         finally
         {
