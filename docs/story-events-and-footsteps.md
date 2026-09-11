@@ -1,4 +1,4 @@
-# Story Events and footsteps, 0.3.5
+# Story Events and footsteps, 0.3.6
 
 The user approved local Story Events through the trial and prison escape, and
 footsteps tied to actual movement with a listening sample. The existing U/O,
@@ -159,19 +159,31 @@ failure reports the problem and does not stop navigation.
 
 The player reported no footstep audio in 0.3.4. The live log confirms F8 off/on
 and movement, but that build did not log movement decisions or PlaySound results.
-Version 0.3.5 adds two-second diagnostic counters for capture failure stages,
+Version 0.3.5 added two-second diagnostic counters for capture failure stages,
 tracker decisions (including repeated clock values and resets), and audio
-acceptance/rejection/stale requests. It does not yet change the movement or
-playback rules. A separate 32-bit .NET 9 probe using the real embedded bank and
+acceptance/rejection/stale requests. A separate 32-bit .NET 9 probe using the real embedded bank and
 audio worker loaded all five waves and reported seven accepted, zero rejected,
 and zero stale requests at its last periodic report. This proves the worker's
-direct playback path; the player also confirmed hearing this probe. In-game
-audibility remains unresolved. Claude is auditing the native
-movement sampling boundary while the player supplies the next live trace.
+direct playback path; the player also confirmed hearing this probe.
+
+The user's 0.3.5 trace then established the cause: scene 12 reported 62 normal
+samples and 62 zero-clock resets after two seconds, rising to 364 clock resets
+when the player started walking. Capture remained ready and displacement was
+observed, but the partial stride was repeatedly cleared before reaching 384
+units. Version 0.3.6 accepts zero elapsed time; only a backward clock or a long
+gap resets timing. Unchanged positions remain silent, and the 250 ms beat limit
+still prevents bursts. Regression tests first reproduced silence with paired
+same-clock samples, then passed with the fix. In-game audibility needs a retest.
+
+The same session's exit was scene 12 local exit 0, MapJump record 24, destination
+496 (world 0), tile (50,38). That transition leaves the field-input hook entirely.
+The user's loss of navigation keys there is the existing world-map coverage gap,
+not evidence that local navigation stopped working. World-map integration remains
+outstanding; the next footstep test should stay within the inn.
 
 ## Validation
 
-The 0.3.5 Release suite passed 1,004 tests: Core 99, Prism 8, Native 514, and Mod 383.
+The 0.3.6 Release suite passed 1,006 tests: Core 101, Prism 8, Native 514, and Mod 383.
 The eight prison regressions reject the closer backward exit on each audited
 bridge/stair floor. The manifest remains pinned by its exact SHA-256.
 
@@ -180,5 +192,5 @@ release ticks, scripted motion, discontinuities, focus/menu resets, F8, embedded
 PCM headers, stable optional flags, story progression, missing destinations,
 nonspatial notes, cathedral discovery, sparkle hiding, and current-floor binding.
 The new features have not been exercised in the live game by Codex. The next user
-test repeats manual/P walking, blocked input, F8, and menus to identify where the
-footsteps are lost. The fair's Story Events remain a separate gameplay check.
+test repeats manual/P walking, blocked input, F8, and menus to verify in-game
+footstep playback. The fair's Story Events remain a separate gameplay check.

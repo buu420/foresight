@@ -74,7 +74,7 @@ public sealed class FieldFootstepRuntimeTests
     }
 
     [Fact]
-    public void DiagnosticsExposeRepeatedClockValuesThatDiscardDistance()
+    public void RepeatedNativeSamplesWithinOneClockTickKeepAccumulatedMovement()
     {
         var fixture = new Fixture();
         for (var i = 0; i < 80; i++)
@@ -82,8 +82,8 @@ public sealed class FieldFootstepRuntimeTests
             fixture.Tick(i * 16, 0x100);
             fixture.Tick(i * 16, 0x100, 0);
         }
-        Assert.Equal(0, fixture.Plays);
-        Assert.Contains("clock:", fixture.Diagnostics[^1]);
+        Assert.Equal(3, fixture.Plays);
+        Assert.Contains("stationary:", fixture.Diagnostics[^1]);
     }
 
     [Fact]

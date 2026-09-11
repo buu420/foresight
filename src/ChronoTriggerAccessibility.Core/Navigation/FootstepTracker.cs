@@ -26,12 +26,14 @@ public sealed class FootstepTracker
         previous = current;
         previousPad = acceptedPad;
         previousTime = now;
-        if (before is not { } old || elapsed is <= 0 or > 250 ||
+        // The native field updater can sample twice within the same Windows clock
+        // tick. Zero elapsed time is valid; unchanged coordinates stay silent below.
+        if (before is not { } old || elapsed is < 0 or > 250 ||
             old.Context != current.Context || old.Scene != current.Scene || old.Actor != current.Actor)
         {
             distance = 0;
             lastStep = -1;
-            State = before is null ? "first" : elapsed <= 0 ? "clock" : elapsed > 250 ? "gap" : "identity";
+            State = before is null ? "first" : elapsed < 0 ? "clock" : elapsed > 250 ? "gap" : "identity";
             return false;
         }
         var dx = (double)current.X - old.X;

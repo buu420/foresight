@@ -36,6 +36,28 @@ public sealed class FootstepTrackerTests
     }
 
     [Fact]
+    public void MovementWithinOneClockTickAccumulatesWithoutAnAudioBurst()
+    {
+        var tracker = new FootstepTracker();
+        var count = 0;
+        for (var i = 0; i <= 48; i++)
+            if (tracker.Update(Frame(i * 32), 0x100, 100)) count++;
+        Assert.Equal(1, count);
+        Assert.False(tracker.Update(Frame(1536), 0x100, 350));
+        Assert.True(tracker.Update(Frame(1568), 0x100, 366));
+    }
+
+    [Fact]
+    public void BackwardClockStillDiscardsPartialMovement()
+    {
+        var tracker = new FootstepTracker();
+        tracker.Update(Frame(), 0x100, 0);
+        for (var i = 1; i < 12; i++) tracker.Update(Frame(i * 32), 0x100, i * 33);
+        Assert.False(tracker.Update(Frame(384), 0x100, 300));
+        Assert.False(tracker.Update(Frame(416), 0x100, 333));
+    }
+
+    [Fact]
     public void ScriptedMotionWithoutAcceptedMovementIsSilent()
     {
         var tracker = new FootstepTracker();
