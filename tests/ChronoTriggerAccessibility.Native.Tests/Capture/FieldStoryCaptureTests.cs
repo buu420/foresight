@@ -40,8 +40,13 @@ public sealed class FieldStoryCaptureTests
     [InlineData(0x54, 0x20)]
     [InlineData(0x55, 0x80)]
     [InlineData(0x56, 2)]
+    [InlineData(0x58, 0x60)]
+    [InlineData(0x5C, 0x20)]
+    [InlineData(0xA4, 0x40)]
+    [InlineData(0xEC, 0x40)]
     [InlineData(0xFF, 4)]
     [InlineData(0x190, 4)]
+    [InlineData(0x1D0, 1)]
     public void ReadsOnlyStableOptionalFlagsAtExpandedDwordOffsets(int index, int mask)
     {
         var memory = Memory();

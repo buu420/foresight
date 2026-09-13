@@ -52,7 +52,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
-            var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) : null;
+            var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
+                FutureAreaLabels.ActorLabel(field.SceneId, actor, story) : null;
             Add(id, label ?? description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y));
         }
         foreach (var chest in treasures)
@@ -68,10 +69,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor)) continue;
-            var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors);
+            var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
+                FutureAreaLabels.Landmark(field.SceneId, story, actor);
             if (label is null) continue;
             var position = Position(actor.FineX, actor.FineY);
-            var touch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index);
+            var touch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
+                FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
             var approaches = touch
                 ? At(actor.TileX * 256 + 128, actor.TileY * 256 + 128).Where(p => !graph.IsTerminal(p)).ToArray()
                 : Approach(position);
@@ -116,7 +119,31 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var footprint = ConnectedExitFootprint(points, visible.Concat(retained));
             var approaches = retained.Concat(footprint.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
-            Add(key, OpeningStoryTargets.ExitLabel(field.SceneId, id), NavigationCategory.Exits, position, approaches, true);
+            Add(key, FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id),
+                NavigationCategory.Exits, position, approaches, true);
+        }
+        if (field.SceneIdCoherent)
+        foreach (var passage in FutureScriptedPassage.ForScene(field.SceneId, story, field.Actors))
+        {
+            // Discover only the rendered, walkable part of a scripted boundary.
+            // This does not turn an unseen controller position into a destination.
+            var goals = new List<NavigationPoint>();
+            for (var y = Math.Max(0, passage.Top); y <= Math.Min(map.Height - 1, passage.Bottom); y++)
+            for (var x = Math.Max(0, passage.Left); x <= Math.Min(map.Width - 1, passage.Right); x++)
+                if (TileVisible(x, y)) goals.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
+            activeIds.Add(passage.Id);
+            var retained = discovered.TryGetValue(passage.Id, out var previous)
+                ? previous.ApproachPoints.Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var current) &&
+                    current == p && !graph.IsTerminal(p)).ToArray() : [];
+            var visible = goals.Count != 0;
+            var approaches = retained.Concat(goals.OrderBy(Distance)).Distinct().Take(64)
+                .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
+            if (approaches.Length == 0) { discovered.Remove(passage.Id); continue; }
+            var position = goals.Count != 0 ? goals.MinBy(Distance) : previous!.Position;
+            var target = new NavigationTarget(passage.Id, passage.Label, NavigationCategory.Exits, position,
+                approaches, visible, true);
+            discovered[passage.Id] = target;
+            (passage.StoryOnly ? storyAnchors : targets).Add(target);
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         if (field.SceneIdCoherent)
@@ -124,6 +151,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var available = targets.Concat(storyAnchors).ToArray();
             targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, available));
             targets.AddRange(EarlyStoryTargets.Build(field.SceneId, story, available, player));
+            targets.AddRange(FutureStoryTargets.Build(field.SceneId, story, available, player));
         }
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&

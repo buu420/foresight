@@ -8,6 +8,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
 {
     private readonly NavigationTextCapture text = new(memory);
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
+    private readonly WorldRegionIndex futureRegions = new();
     private nuint imageBase;
     private string? scene, lastFailure, lastInventory;
     public string MotionStage { get; private set; } = "not sampled";
@@ -87,6 +88,11 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         {
             var eligible = targets.Where(t => t.Category == NavigationCategory.Exits &&
                 destinations.TryGetValue(t.Id, out var destination) && sceneIds.Contains(destination)).ToArray();
+            if (world.Motion.World == 2)
+                eligible = eligible.Select(t => t with { ApproachPoints = t.ApproachPoints
+                    .Where(p => futureRegions.Connected(player, p)).ToArray() }).Where(t => t.ApproachPoints.Count != 0)
+                    .Select(t => t with { Position = t.ApproachPoints.MinBy(p => Math.Abs((long)p.X - player.X) + Math.Abs((long)p.Y - player.Y)) })
+                    .ToArray();
             if (eligible.Length == 0) return;
             var anchor = eligible.MinBy(t => Math.Abs((long)t.Position.X - player.X) + Math.Abs((long)t.Position.Y - player.Y))!;
             targets.Add(anchor with { Id = "world-story:" + id, Label = name, Category = NavigationCategory.StoryEvents,
@@ -95,6 +101,24 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         void AddStory()
         {
             if (world.StoryPoint is not { } progress) return;
+            if (world.Motion.World == 2 && progress is >= 51 and < 72)
+            {
+                futureRegions.Update(world.Map, world.Properties, graph);
+                if (progress < 55)
+                {
+                    Bind("future-trann", "Explore Trann Dome", 210);
+                    Bind("future-site16", "Cross Site 16 toward Arris Dome", 212);
+                    Bind("future-arris", "Visit Arris Dome", 214);
+                }
+                else if (progress < 60)
+                {
+                    Bind("future-site32", "Cross Site 32 toward Proto Dome", 223);
+                    Bind("future-proto", "Visit Proto Dome", 226);
+                }
+                else if (progress < 63) Bind("future-factory", "Restore power at the Derelict Factory", 228);
+                else Bind("future-return-proto", "Return to Proto Dome", 226);
+                return;
+            }
             if (world.Motion.World == 0)
             {
                 if (progress is >= 3 and < 12) Bind("fair", "Go to the fair at Leene Square", 5);

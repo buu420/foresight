@@ -194,9 +194,21 @@ public sealed class AccessibilityRuntimeTests
     public async Task StartInBackgroundDoesNotRunInitializationOnCallingThread()
     {
         var scenario = new RuntimeScenario();
-        var callingThread = Environment.CurrentManagedThreadId;
-
-        await scenario.Runtime.StartInBackground();
+        var callingThread = 0;
+        var scheduled = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Model the game/loader thread. The xUnit caller is a pool worker: after
+        // an await yields it, the default scheduler may reuse that same worker.
+        var caller = new Thread(() =>
+        {
+            try
+            {
+                callingThread = Environment.CurrentManagedThreadId;
+                scheduled.SetResult(scenario.Runtime.StartInBackground());
+            }
+            catch (Exception exception) { scheduled.SetException(exception); }
+        }) { IsBackground = true };
+        caller.Start();
+        await scheduled.Task.Unwrap().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.NotEqual(callingThread, scenario.VerifierThreadId);
         Assert.Equal(AccessibilityRuntimeState.Active, scenario.Runtime.State);

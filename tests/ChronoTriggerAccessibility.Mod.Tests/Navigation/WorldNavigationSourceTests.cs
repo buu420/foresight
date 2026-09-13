@@ -55,6 +55,50 @@ public sealed class WorldNavigationSourceTests
             t => t.Category == NavigationCategory.StoryEvents && t.Label.Contains("fair"));
     }
 
+    [Theory]
+    [InlineData(51, 210, 212, 214)]
+    [InlineData(55, 223, 226, -1)]
+    [InlineData(60, 228, -1, -1)]
+    [InlineData(66, 226, -1, -1)]
+    [InlineData(77, -1, -1, -1)]
+    public void FutureWorldObjectivesAdvanceAndUseTheCorrectSideOfEachRuin(int point, int a, int b, int c)
+    {
+        var destinations = new[] { 210, 212, 213, 214, 223, 225, 226, 228 };
+        var entries = destinations.Select((d, i) => Entrance(i, 25 + i, 19, 38 + i, d, 400 + i * 16, 304)).ToArray();
+        var world = Snapshot(entries) with { StoryPoint = point, Viewport = new(0, 0, 20000, 16000) };
+        world = world with { Motion = world.Motion with { World = 2 } };
+        var goals = Source().Build(world, id => "Dome " + id).Targets.Where(t => t.Category == NavigationCategory.StoryEvents).ToArray();
+        var expected = new[] { a, b, c }.Where(d => d != -1).Order().ToArray();
+        // A story copy retains the native entrance arrival, including its destination.
+        var actual = goals.Select(g => Assert.Single(entries, e =>
+            g.ApproachPoints.Contains(new(e.ContactPoints[0].X * 16, e.ContactPoints[0].Y * 16, 1))).Destination).Order().ToArray();
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void FutureStoryDoesNotSendThePlayerAcrossAnUnconnectedWorldRegion()
+    {
+        var ruins = Entrance(12, 26, 19, 42, 223, 416, 304);
+        var proto = Entrance(5, 45, 19, 43, 226, 720, 304);
+        var world = Snapshot([ruins, proto]) with { StoryPoint = 55, Viewport = new(0, 0, 20000, 16000) };
+        world = world with { Motion = world.Motion with { World = 2 } };
+        var map = new byte[6144]; var properties = new byte[512];
+        properties[2] = properties[3] = 0x11;
+        for (var y = 0; y < 64; y++) map[y * 96 + 35] = 1;
+        world = world with { Map = map, Properties = properties };
+        var source = Source();
+        var west = source.Build(world, id => id == 42 ? "Site 32" : "Proto Dome");
+        Assert.Equal("Cross Site 32 toward Proto Dome", Assert.Single(west.Targets, t => t.Category == NavigationCategory.StoryEvents).Label);
+        Assert.Contains(west.Targets, t => t.Label == "Proto Dome" && t.Category == NavigationCategory.Exits);
+        var east = source.Build(world with { Motion = world.Motion with { PixelX = 720 } }, id => "Dome " + id);
+        Assert.Equal("Visit Proto Dome", Assert.Single(east.Targets, t => t.Category == NavigationCategory.StoryEvents).Label);
+        // A changed native collision table must invalidate the cached region index.
+        var opened = source.Build(world with { Map = new byte[6144] }, id => "Dome " + id);
+        Assert.Equal(2, opened.Targets.Count(t => t.Category == NavigationCategory.StoryEvents));
+        var closed = source.Build(world, id => "Dome " + id);
+        Assert.Single(closed.Targets, t => t.Category == NavigationCategory.StoryEvents);
+    }
+
     private static WorldNavigationSource Source() => new(new EmptyMemory(), _ => { });
     private static string? Label(int id) => id switch {6 => "Truce Inn", 10 => "Leene Square", _ => null};
     private static WorldEntrance Entrance(int id,int tx,int ty,int name,int dest,int x,int y) =>

@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.10 makes footsteps match navigation's distance units and preserves beats during faster movement. Manual directions continue one leg at a time. It retains world automatic walking, world/local transition recovery, and the Settings speech repair. Intro audio descriptions remain pending.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.11 adds Story Events and named navigation targets through the first journey across 2300 AD and the first visit to the End of Time. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. It retains world automatic walking, world/local transition recovery, and the Settings speech repair. Intro audio descriptions remain pending.
 
 Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Combat, vehicles, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
 
@@ -27,11 +27,11 @@ The world map is also 2D. Its native walking step is eight pixels. Choose Exits 
 
 Local targets come from live field actors, the current exit grid, and rendered unopened chests. People includes creatures such as cats. Appearance labels are deliberately general where the game supplies no name. Partially visible exit and chest tiles are included. Previously seen targets retain their last seen positions when outside the current view; hidden pickups and chest contents are not listed. Discovery is kept for the current area visit. Local fields use the native camera window conservatively and may omit targets at the outer widescreen margins. Special field movement rules still need individual coverage and testing.
 
-Story Events follows the current story counter and local progress flags, from Mother and the Millennial Fair through the cathedral, the return to the present, the trial, and the prison escape. Routes use visible or discovered native targets. An objective whose destination is not discovered remains readable as a note; I and P explain the missing route. The cathedral's visible map objects, including its organs, switches, and sign, are also available. An undisplayed sparkle is not revealed. Research and guide attribution are in [story-events-and-footsteps.md](docs/story-events-and-footsteps.md).
+Story Events follows the current story counter and local progress flags, from Mother and the Millennial Fair through the cathedral, the return to the present, the trial, and the prison escape, then through the future domes, Sites 16 and 32, the Derelict Factory, and the first End of Time visit. Routes use visible or discovered native targets. An objective whose destination is not discovered remains readable as a note; I and P explain the missing route. The cathedral's visible map objects, including its organs, switches, and sign, are also available. An undisplayed sparkle is not revealed. Research and guide attribution are in [story-events-and-footsteps.md](docs/story-events-and-footsteps.md) and [future-story-navigation.md](docs/future-story-navigation.md). The latter also describes the manual rat pursuit, console and crane inputs, and Spekkio lesson. Future world objectives stay on the player's connected walking region.
 
 Footsteps follow actual movement, with one sound per navigation step: 16 pixels locally, eight pixels on the world map. When I, K, a turn, or a corrected manual route gives an instruction, start counting afresh. "Right 5 steps" means five sounds for that leg. Fractional instructions include a partial final distance: "Right 2.5 steps" means two full sounds and a half step before the turn. The turn/arrival announcement covers that final fraction. Stopping briefly preserves distance already walked; holding movement against a wall produces no extra beats. F8 announces the new setting; footsteps start enabled on each launch. The five existing recordings can overlap during faster movement, and use one general surface sound. Menu, dialogue, focus, and area transitions clear pending movement. Movement, capture, reset, and audio-result counters are written to the Reloaded log at most once every two seconds per component. See [footstep-distance-counting.md](docs/footstep-distance-counting.md) for verification and limits.
 
-The player confirmed the earlier local navigation repair and reported world auto-walk failures in 0.3.7. Version 0.3.8 passed the observed missed-turn replay and native input-dispatch checks. The September 13 live test recorded automatic walking to Leene Square, and the player confirmed that X entered the fair. Navigation and footsteps remained active after entering. The player reports that 0.3.9 manual navigation works; the 0.3.10 footstep counting change still needs player validation. Navigation commands, active positions at most four times a second, input-delivery counters, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes. Automatic interaction, dialogue choices, puzzles, and combat are not implemented. See [world-navigation.md](docs/world-navigation.md) and [navigation-manual-turn-recovery.md](docs/navigation-manual-turn-recovery.md) for evidence and validation limits.
+The player confirmed the earlier local navigation repair and reported world auto-walk failures in 0.3.7. Version 0.3.8 passed the observed missed-turn replay and native input-dispatch checks. The September 13 live test recorded automatic walking to Leene Square, and the player confirmed that X entered the fair. Navigation and footsteps remained active after entering. The player reports that 0.3.9 manual navigation works; the player also confirmed accurate counting with the 0.3.10 footsteps. The new 0.3.11 areas still need a live playthrough. Navigation commands, active positions at most four times a second, input-delivery counters, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes. Automatic interaction, dialogue choices, puzzles, and combat are not implemented. See [world-navigation.md](docs/world-navigation.md) and [navigation-manual-turn-recovery.md](docs/navigation-manual-turn-recovery.md) for evidence and validation limits.
 
 It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 
@@ -44,7 +44,7 @@ The native hooks are fail-closed and support only this executable:
 - SHA-256: `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`
 - Architecture: 32-bit x86
 
-Both the launcher and the mod verify this hash and refuse to hook anything else. If it does not match, the game still starts — silently, with an explanatory dialog. Do not patch the executable to bypass the check.
+Both the launcher and the mod verify this hash and refuse to hook anything else. If it does not match, the game still starts â€” silently, with an explanatory dialog. Do not patch the executable to bypass the check.
 
 ## Screen-reader output
 
@@ -57,7 +57,7 @@ Start your screen reader **before** launching the game. The first expected annou
 - Windows 10 or newer.
 - Chrono Trigger installed through Steam.
 - A **32-bit .NET 9 Desktop Runtime**. Any 9.0.x revision works; no specific patch version is required, and `DOTNET_ROOT_X86` does not need to be set.
-- Visual Studio 2022 Build Tools with the C++ x86 toolset, and the .NET SDK — only if you are building from source.
+- Visual Studio 2022 Build Tools with the C++ x86 toolset, and the .NET SDK â€” only if you are building from source.
 
 ## Install
 
@@ -86,7 +86,7 @@ A normal Steam launch is all that is required. No script, no separate shortcut, 
 
 ### Upgrading from an earlier version
 
-Earlier versions injected Reloaded through Ultimate ASI Loader, deployed as `winmm.dll` beside the game together with `Reloaded.Mod.Loader.Bootstrapper.asi`. The native launcher replaces both, and `Deploy-Mod.ps1` deletes them — but only when their SHA-256 matches the files this mod installed, so a proxy DLL belonging to some other mod is left alone and reported instead. Leaving them in place would load Reloaded twice.
+Earlier versions injected Reloaded through Ultimate ASI Loader, deployed as `winmm.dll` beside the game together with `Reloaded.Mod.Loader.Bootstrapper.asi`. The native launcher replaces both, and `Deploy-Mod.ps1` deletes them â€” but only when their SHA-256 matches the files this mod installed, so a proxy DLL belonging to some other mod is left alone and reported instead. Leaving them in place would load Reloaded twice.
 
 Earlier versions also required a machine-wide `DOTNET_ROOT_X86` environment variable and a `Launch Chrono Trigger Accessible.ps1` script. Neither is used any more; the variable can be deleted and the script has been removed from the repository.
 
@@ -135,8 +135,8 @@ Afterwards you may delete `<game>\Accessibility` and `<game>\Reloaded-II`. Nothi
 
 Two logs matter:
 
-- `<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.log` — the launcher's own record: hash check, pointer lease, injection, exit code.
-- `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` — the newest `Chrono Trigger` log. Search it for `[chrono.trigger.accessibility]`; it records the executable check, each hook, the selected Prism backend, semantic events, and the exact announcement text.
+- `<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.log` â€” the launcher's own record: hash check, pointer lease, injection, exit code.
+- `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` â€” the newest `Chrono Trigger` log. Search it for `[chrono.trigger.accessibility]`; it records the executable check, each hook, the selected Prism backend, semantic events, and the exact announcement text.
 
 | Symptom | Cause and fix |
 |---|---|
