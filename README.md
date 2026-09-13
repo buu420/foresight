@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.8 fixes world automatic walking being rejected before reaching the movement code, and stabilizes spoken directions after a missed turn. It retains footsteps, world/local transition recovery, and the Settings speech repair. Intro audio descriptions remain pending.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.9 gives manual walking directions one leg at a time, including when repeating or correcting a route. It retains world automatic walking, footsteps, world/local transition recovery, and the Settings speech repair. Intro audio descriptions remain pending.
 
 Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Combat, vehicles, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
 
@@ -12,16 +12,16 @@ Use these keys while controlling the party in a local field area or walking on t
 |---|---|
 | U / O | Previous / next category: People, Exits, Interactable Objects, Story Events |
 | J / L | Previous / next destination |
-| K | Repeat the destination and remaining route, or its direction and distance when idle |
+| K | Repeat the destination and current manual leg, or its direction and distance when idle |
 | I | Start counted spoken directions while you move |
 | P | Start or stop automatic walking |
 | F8 | Turn footsteps off or on for the current game session |
 
 Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object, use K to hear its direction, face it, and press the game's confirm button yourself.
 
-The local maps are 2D. One navigation step means one 16-pixel map tile, not one key press. Directions use left, right, up, and down: for example, "Left 3 steps, then down 2 steps." Partial tiles use quarter steps. Guidance announces turns; K repeats the remaining instructions. Routes prefer fewer turns among equally short paths, and walking follows cardinal edges with the native body clearance.
+The local maps are 2D. One navigation step means one 16-pixel map tile, not one key press. Directions use left, right, up, and down. Partial tiles use quarter steps. Routes prefer fewer turns among equally short paths, and walking follows cardinal edges with the native body clearance.
 
-On long manual legs, an advance cue announces the coming turn. If you miss the route, guidance asks you to stop. Release the movement keys; once Crono stops, it gives a fresh route. It no longer recalculates on every animation frame while you are still moving. I supplies speech only and leaves movement under your control.
+Press I for manual guidance. It speaks only the current leg: "Right 5 steps." When you reach the turn, it gives the next instruction, such as "Up 1 step." K repeats the destination and the distance remaining in that leg. A K press that coincides with a new turn or correction produces one instruction. If you leave the route, guidance asks you to stop. Release the movement keys; once Crono stops, it recalculates from your position and speaks the first corrected leg. I supplies speech only and leaves movement under your control. Automatic walking with P keeps its initial route overview.
 
 The world map is also 2D. Its native walking step is eight pixels. Choose Exits with U/O to browse visible area entrances, or Story Events for an available current objective. World entrances use the game's loaded labels, including custom character names. On arrival, press the game's Confirm button to enter; automatic walking never presses it. The live camera and node transforms determine visibility at the current resolution. The first version supports walking and routes within one world map, but does not route across its wrapping outer edges or through intermediate local areas.
 
@@ -31,7 +31,7 @@ Story Events follows the current story counter and local progress flags, from Mo
 
 Footsteps follow actual movement, with five recorded variations, and remain silent against a wall or during menus and dialogue. Their natural stride is independent of the 16-pixel tile used in spoken directions. F8 announces the new setting; footsteps start enabled on each launch. The current bank uses one general surface sound. The player confirmed hearing footsteps in 0.3.7. Movement, capture, reset, and audio-result counters are written to the Reloaded log at most once every two seconds per component.
 
-The player confirmed the earlier local navigation repair and reported world auto-walk failures in 0.3.7. Version 0.3.8 passes the observed missed-turn replay and native input-dispatch checks. The September 13 live test recorded automatic walking to Leene Square, and the player confirmed that X entered the fair. Navigation and footsteps remained active after entering. Revised manual guidance still needs player validation. Navigation commands, active positions at most four times a second, input-delivery counters, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes. Automatic interaction, dialogue choices, puzzles, and combat are not implemented. See [world-navigation.md](docs/world-navigation.md) and [navigation-manual-turn-recovery.md](docs/navigation-manual-turn-recovery.md) for evidence and validation limits.
+The player confirmed the earlier local navigation repair and reported world auto-walk failures in 0.3.7. Version 0.3.8 passed the observed missed-turn replay and native input-dispatch checks. The September 13 live test recorded automatic walking to Leene Square, and the player confirmed that X entered the fair. Navigation and footsteps remained active after entering. Version 0.3.9 has automated coverage for sequential instructions, repeats, and deviations at local and world step sizes; its revised manual guidance still needs player validation. Navigation commands, active positions at most four times a second, input-delivery counters, and stop reasons are recorded in the Reloaded log. Target counts and actor facts are logged when the inventory changes. Moving actors and special field mechanics may still interrupt routes. Automatic interaction, dialogue choices, puzzles, and combat are not implemented. See [world-navigation.md](docs/world-navigation.md) and [navigation-manual-turn-recovery.md](docs/navigation-manual-turn-recovery.md) for evidence and validation limits.
 
 It ships a self-contained, loader-only copy of Reloaded-II inside the game folder. You do not need to install Reloaded-II, run its launcher, or configure anything by hand.
 

@@ -6,16 +6,16 @@ namespace ChronoTriggerAccessibility.Core.Tests.Navigation;
 public sealed class ManualTurnRecoveryTests
 {
     [Fact]
-    public void WarnsOnceBeforeALongManualLegEndsWithoutDrivingThePlayer()
+    public void LongManualLegDoesNotAnnounceTheNextDirectionEarly()
     {
         var controller = new NavigationController();
         var frame = Frame();
-        Assert.Contains("Right 12 steps, then up 38 steps, then right 19 steps.",
+        Assert.Contains("Right 12 steps.",
             controller.Handle(NavigationCommand.Guide, frame, 0).Speech);
         Assert.Empty(controller.Update(At(frame, 3328, 9856), 900, true).Speech);
-        var warning = controller.Update(At(frame, 3456, 9856), 1000, true);
-        Assert.Contains("Turn up in 4 steps.", warning.Speech);
-        Assert.Equal(NavigationDirection.None, warning.Direction);
+        var moving = controller.Update(At(frame, 3456, 9856), 1000, true);
+        Assert.Empty(moving.Speech);
+        Assert.Equal(NavigationDirection.None, moving.Direction);
         Assert.Empty(controller.Update(At(frame, 3584, 9856), 1100, true).Speech);
         Assert.Contains("Up 38 steps.", controller.Update(At(frame, 3968, 9856), 1500, true).Speech);
     }
@@ -46,8 +46,7 @@ public sealed class ManualTurnRecoveryTests
         Assert.Empty(controller.Update(At(frame, 4480, 9728), 2200).Speech);
         Assert.Empty(controller.Update(At(frame, 4480, 9728), 2350).Speech);
         var recovered = controller.Update(At(frame, 4480, 9728), 2450);
-        Assert.Contains("Route updated.", string.Join(" ", recovered.Speech));
-        Assert.Contains("steps", string.Join(" ", recovered.Speech));
+        Assert.Equal(["Route updated.", "Left 4 steps."], recovered.Speech);
         Assert.DoesNotContain("quarter", string.Join(" ", recovered.Speech));
         Assert.Equal(NavigationDirection.None, recovered.Direction);
         Assert.Empty(controller.Update(At(frame, 4480, 9728), 2700).Speech);

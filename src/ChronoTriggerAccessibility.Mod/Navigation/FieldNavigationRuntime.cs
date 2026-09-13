@@ -142,6 +142,10 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 var speech = new List<string>(result.Speech);
                 foreach (var command in commands)
                 {
+                    // A new manual turn or recovery message also answers a simultaneous
+                    // repeat request. Keep that message without reading the same leg twice.
+                    if (command == NavigationCommand.Repeat && result.Guiding &&
+                        !result.AutoWalking && result.Speech.Count != 0) continue;
                     if (command == NavigationCommand.ToggleWalk && originalPad != 0)
                     {
                         speech.Add("Release the movement and action buttons before starting automatic walking.");

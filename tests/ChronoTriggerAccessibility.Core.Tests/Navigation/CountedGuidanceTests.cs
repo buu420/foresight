@@ -11,13 +11,13 @@ public sealed class CountedGuidanceTests
         var controller = new NavigationController();
         var frame = Frame();
         var initial = controller.Handle(NavigationCommand.Guide, frame, 0);
-        Assert.Contains("Left 3 steps, then down 2 steps.", Say(initial));
+        Assert.Contains("Left 3 steps.", initial.Speech);
         Assert.Equal(NavigationDirection.None, initial.Direction);
 
         for (var x = 752; x >= 512; x -= 16)
             Assert.Empty(controller.Update(frame with { Player = new(x, 0, 1) }, 768 - x).Speech);
-        Assert.Contains("Left 2 steps, then down 2 steps.", Say(controller.Handle(
-            NavigationCommand.Repeat, frame with { Player = new(512, 0, 1) }, 300)));
+        Assert.Equal(["Stairs, 1 of 1. Left 2 steps."], controller.Handle(
+            NavigationCommand.Repeat, frame with { Player = new(512, 0, 1) }, 300).Speech);
 
         var turn = controller.Update(frame with { Player = new(0, 0, 1) }, 800);
         Assert.Contains("Down 2 steps.", Say(turn));
