@@ -40,6 +40,23 @@ and the original [manual's Moving Around the World, page 39](https://dlf.emu-lan
 The PC game's current world task, entrance records, and loaded names establish
 the runtime map type. The guide does not supply guessed route coordinates.
 
+### September 13 live verification
+
+The deployed 0.3.8 session at 11:45:59 activated all 126 hooks. At 11:47:05,
+P started the Leene Square route from world position (5760,5504). The log shows
+actual position changes along the up/right/up/right route, with no physical
+input, followed by arrival at 11:47:07. A later route from the other side reached
+another contact point at 11:48:22. The player confirmed that X entered the fair.
+At 11:48:25 the source switched to field scene 5, Leene Square, Central Plaza;
+navigation commands and movement capture remained active there.
+
+This confirms world automatic movement and a world-to-field transition in the
+running game. It does not establish all destinations or revised manual guidance.
+The rear-plaza story objective remained readable but undiscovered at the fair's
+entrance, so it did not offer an unverified route. The log also contains a
+local 'No route to Person' result in Truce Inn, which remains a separate coverage
+limitation. No accessibility error was recorded in this session.
+
 ## 0.3.7: capture and transition repair
 
 The 0.3.6 log ends local movement after Truce Inn's exit to world 0. The field
