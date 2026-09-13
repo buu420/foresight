@@ -17,12 +17,15 @@ public sealed class FieldFootstepRuntime(Func<nint, FootstepFrame?> capture,
     private long lastDiagnostic = -1;
     private long suspensions;
     private bool worldMode;
+    private NavigationLeg? guidance;
+
+    public void SetGuidance(NavigationLeg? value) => guidance = value;
 
     public void OnWorldInput(nint engine, uint acceptedPad) => ProcessInput(engine, acceptedPad, true);
 
     public void Enable() { enabled = true; Suspend(); }
     public void Disable() { enabled = false; Suspend(); }
-    public void Suspend() { tracker.Reset(); armed = false; suspensions++; stop(); }
+    public void Suspend() { tracker.Reset(); guidance = null; armed = false; suspensions++; stop(); }
 
     public void OnInput(nint engine, uint acceptedPad) => ProcessInput(engine, acceptedPad, false);
 
@@ -51,9 +54,10 @@ public sealed class FieldFootstepRuntime(Func<nint, FootstepFrame?> capture,
             {
                 // The native input boundary is still active. Keep F8's key edge
                 // alive while dropping movement that cannot be measured.
-                tracker.Reset(); stop(); Trace("capture-unavailable", null, acceptedPad, now); return;
+                tracker.Reset(); Trace("capture-unavailable", null, acceptedPad, now); return;
             }
-            if (soundEnabled && tracker.Update(frame, acceptedPad, clock())) play();
+            if (soundEnabled && tracker.Update(frame, acceptedPad, clock(), guidance))
+                for (var i = 0; i < tracker.Steps; i++) play();
             Trace(soundEnabled ? tracker.State : "off", frame, acceptedPad, now);
         }
         catch (Exception error)

@@ -128,7 +128,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
-            player, targets.AsReadOnly(), graph, 256) { AreaName = areaName?.Invoke(field.SceneId) };
+            player, targets.AsReadOnly(), graph, NavigationUnits.LocalStep) { AreaName = areaName?.Invoke(field.SceneId) };
 
         void ReportInventory()
         {

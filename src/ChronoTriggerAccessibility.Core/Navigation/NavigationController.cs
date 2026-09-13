@@ -18,6 +18,7 @@ public sealed class NavigationController
     private bool waitingForManualStop;
     private NavigationPoint observedPosition;
     private long lastManualActivity;
+    private long instructionRevision;
 
     public bool IsActive => guiding;
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
@@ -291,7 +292,11 @@ public sealed class NavigationController
 
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
         new(speech.AsReadOnly(), walking && route is not null && nextPoint < route.Count
-            ? Steering(player) : NavigationDirection.None, guiding, walking);
+            ? Steering(player) : NavigationDirection.None, guiding, walking)
+        {
+            ManualLeg = guiding && !walking && !waitingForManualStop && route is not null && nextPoint < route.Count
+                ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision) : null
+        };
 
     private bool AdvanceAlongRoute(NavigationPoint player)
     {
@@ -342,6 +347,7 @@ public sealed class NavigationController
             player = route[end]; index = end + 1;
         }
         if (instructions.Count == 0) return string.Empty;
+        if (!walking) instructionRevision++;
         var text = string.Join(", then ", instructions);
         return char.ToUpperInvariant(text[0]) + text[1..] + ".";
     }

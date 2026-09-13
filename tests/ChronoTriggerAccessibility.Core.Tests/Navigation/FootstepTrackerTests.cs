@@ -22,7 +22,7 @@ public sealed class FootstepTrackerTests
         var count = 0;
         for (var i = 0; i <= 96; i++)
             if (tracker.Update(Frame(i * 16), 0x100, i * 33)) count++;
-        Assert.Equal(4, count);
+        Assert.Equal(6, count);
     }
 
     [Fact]
@@ -32,19 +32,20 @@ public sealed class FootstepTrackerTests
         var count = 0;
         for (var i = 0; i <= 48; i++)
             if (tracker.Update(Frame(i * 32), 0x100, i * 33)) count++;
-        Assert.Equal(4, count);
+        Assert.Equal(6, count);
     }
 
     [Fact]
-    public void MovementWithinOneClockTickAccumulatesWithoutAnAudioBurst()
+    public void ClockResolutionDoesNotDiscardMeasuredStepsOrInventStationarySteps()
     {
         var tracker = new FootstepTracker();
         var count = 0;
         for (var i = 0; i <= 48; i++)
             if (tracker.Update(Frame(i * 32), 0x100, 100)) count++;
-        Assert.Equal(1, count);
+        Assert.Equal(6, count);
         Assert.False(tracker.Update(Frame(1536), 0x100, 350));
-        Assert.True(tracker.Update(Frame(1568), 0x100, 366));
+        Assert.False(tracker.Update(Frame(1568), 0x100, 366));
+        Assert.True(tracker.Update(Frame(1792), 0x100, 398));
     }
 
     [Fact]
@@ -70,9 +71,9 @@ public sealed class FootstepTrackerTests
     {
         var tracker = new FootstepTracker();
         tracker.Update(Frame(), 0x100, 0);
-        for (var i = 1; i < 12; i++) Assert.False(tracker.Update(Frame(i * 32), 0x100, i * 33));
-        Assert.True(tracker.Update(Frame(384), 0, 396));
-        Assert.False(tracker.Update(Frame(416), 0, 429));
+        for (var i = 1; i < 8; i++) Assert.False(tracker.Update(Frame(i * 32), 0x100, i * 33));
+        Assert.True(tracker.Update(Frame(256), 0, 264));
+        Assert.False(tracker.Update(Frame(288), 0, 297));
     }
 
     [Theory]

@@ -52,15 +52,15 @@ public sealed class NavigationTransitionTests
         long now = 0; int x = 0, plays = 0;
         var runtime = new FieldFootstepRuntime(_ => new(1, 12, 1, 0, 0), () => true, keys.Contains,
             () => now, () => plays++, () => { }, speech.Add, _ => { },
-            worldCapture: _ => new(2, 496, 0, x, 0));
+            worldCapture: _ => new(2, 496, 0, x, 0, NavigationUnits.WorldStep));
         runtime.Enable();
         for (var i = 0; i < 33; i++) { x = i * 16; now += 33; runtime.OnWorldInput(1, 0x100); }
-        Assert.Equal(1, plays);
+        Assert.Equal(4, plays);
         keys.Add(0x77); now += 33; runtime.OnWorldInput(1, 0);
         Assert.Equal("Footsteps off.", speech[^1]);
         runtime.Suspend();
         for (var i = 0; i < 33; i++) { x = i * 16; now += 33; runtime.OnInput(1, 0x100); }
-        Assert.Equal(1, plays);
+        Assert.Equal(4, plays);
         Assert.Single(speech);
     }
 

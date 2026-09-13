@@ -11,9 +11,9 @@ public sealed class FieldFootstepRuntimeTests
     {
         var fixture = new Fixture();
         for (var i = 0; i <= 48; i++) fixture.Tick(i * 32, 0x100);
-        Assert.Equal(4, fixture.Plays);
+        Assert.Equal(6, fixture.Plays);
         for (var i = 0; i < 24; i++) fixture.Tick(1536, 0x100);
-        Assert.Equal(4, fixture.Plays);
+        Assert.Equal(6, fixture.Plays);
     }
 
     [Fact]
@@ -36,9 +36,9 @@ public sealed class FieldFootstepRuntimeTests
     public void MissingControlAndSuspensionDiscardPartialMovement()
     {
         var fixture = new Fixture();
-        for (var i = 0; i <= 11; i++) fixture.Tick(i * 32, 0x100);
+        for (var i = 0; i <= 7; i++) fixture.Tick(i * 32, 0x100);
         fixture.Runtime.Suspend();
-        fixture.Tick(384, 0x100);
+        fixture.Tick(256, 0x100);
         Assert.Equal(0, fixture.Plays);
         fixture.Available = false;
         fixture.Tick(1000, 0x100);
@@ -82,7 +82,7 @@ public sealed class FieldFootstepRuntimeTests
             fixture.Tick(i * 16, 0x100);
             fixture.Tick(i * 16, 0x100, 0);
         }
-        Assert.Equal(3, fixture.Plays);
+        Assert.Equal(4, fixture.Plays);
         Assert.Contains("stationary:", fixture.Diagnostics[^1]);
     }
 
@@ -107,16 +107,19 @@ public sealed class FieldFootstepRuntimeTests
     }
 
     [Fact]
-    public void FastRunningLeavesTimeForEachRecordingToFinish()
+    public void FastRunningKeepsEveryBeatEvenWhenTheRecordingsNeedToOverlap()
     {
         var fixture = new Fixture();
         for (var i = 0; i < 192; i++) fixture.Tick(i * 32, 0x100, 16);
-        Assert.True(fixture.PlayTimes.Count >= 8);
+        Assert.Equal(23, fixture.PlayTimes.Count);
         using var stream = typeof(FootstepSound).Assembly.GetManifestResourceStream(
             "ChronoTriggerAccessibility.Mod.Audio.footstep-1.wav")!;
         var duration = (stream.Length - 44) / 96.0;
         Assert.All(fixture.PlayTimes.Zip(fixture.PlayTimes.Skip(1)), pair =>
-            Assert.True(pair.Second - pair.First > duration));
+        {
+            Assert.Equal(128, pair.Second - pair.First);
+            Assert.True(pair.Second - pair.First < duration);
+        });
     }
 
     [Fact]

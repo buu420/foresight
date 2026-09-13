@@ -18,7 +18,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         var motion = WorldNavigationCapture.Motion(memory, imageBase, (nuint)context, out var stage);
         MotionStage = stage;
         return motion is null ? null : new(((ulong)motion.Context << 32) | motion.ScriptData,
-            496 + motion.World, motion.Actor, motion.PixelX * 16, motion.PixelY * 16);
+            496 + motion.World, motion.Actor, motion.PixelX * 16, motion.PixelY * 16, NavigationUnits.WorldStep);
     }
     public NavigationFrame? Capture(nint context)
     {
@@ -80,7 +80,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         }
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
-        return new(identity, true, player, targets.AsReadOnly(), graph, 128)
+        return new(identity, true, player, targets.AsReadOnly(), graph, NavigationUnits.WorldStep)
         { AreaName = string.IsNullOrWhiteSpace(era) ? "World map" : $"World map, {era}" };
 
         void Bind(string id, string name, params int[] sceneIds)

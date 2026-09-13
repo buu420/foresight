@@ -130,7 +130,9 @@ public sealed class Mod : ModBase
         var areas = new NavigationAreaAnnouncer(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         var footstepSound = new FootstepSound(navigationSpeech.RecordDiagnostic,
-            () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")));
+            () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")),
+            timingInterrupted: () => navigationSpeech.Publish(new NavigationAnnouncement(
+                "Footstep timing interrupted. Stop and press K for a fresh count.")));
         var motionCaptureStage = "not sampled";
         var footsteps = new FieldFootstepRuntime(engine =>
         {
@@ -152,13 +154,13 @@ public sealed class Mod : ModBase
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); },
-            footsteps.Suspend, World, context => World(context));
+            footsteps.Suspend, World, context => World(context), footsteps.SetGuidance);
         var navigationHooks = new FieldNavigationHookSet(asmHookFactory, (engine, pad) =>
         {
             var accepted = navigation.OnInput(engine, pad);
             footsteps.OnInput(engine, accepted);
             return accepted;
-        }, () => { navigation.Enable(); footsteps.Enable(); },
+        }, () => { footstepSound.WarmUp(); navigation.Enable(); footsteps.Enable(); },
             () => { navigation.Disable(); footsteps.Disable(); });
         var worldHooks = new WorldNavigationHookSet(asmHookFactory, (context, pad) =>
         {

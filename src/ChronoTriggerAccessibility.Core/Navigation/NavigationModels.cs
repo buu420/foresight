@@ -6,6 +6,12 @@ public enum NavigationDirection { None, North, South, West, East, NorthWest, Nor
 
 public readonly record struct NavigationPoint(int X, int Y, int Layer);
 
+public static class NavigationUnits
+{
+    public const int LocalStep = 256;
+    public const int WorldStep = 128;
+}
+
 public interface INavigationGraph
 {
     IEnumerable<NavigationPoint> Neighbours(NavigationPoint point);
@@ -28,5 +34,10 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public string? AreaName { get; init; }
 }
 
+public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision);
+
 public sealed record NavigationResult(IReadOnlyList<string> Speech, NavigationDirection Direction,
-    bool Guiding, bool AutoWalking);
+    bool Guiding, bool AutoWalking)
+{
+    public NavigationLeg? ManualLeg { get; init; }
+}

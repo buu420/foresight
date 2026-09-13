@@ -7,7 +7,8 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture, NavigationKeyboard keyboard,
     Func<bool> isForeground, Func<long> clock, Action<string> speak, Action<string> diagnostic,
     Action<nint>? observe = null, Action? resetDiscoveries = null, Action? resetMotion = null,
-    Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null)
+    Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null,
+    Action<NavigationLeg?>? synchronizeFootsteps = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -166,6 +167,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                         string.Join(" ", speech));
                     lastDiagnostic = now;
                 }
+                synchronizeFootsteps?.Invoke(result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
                 if (world) worldDirection = DirectionBits(result.Direction);
                 return originalPad | DirectionBits(result.Direction);
