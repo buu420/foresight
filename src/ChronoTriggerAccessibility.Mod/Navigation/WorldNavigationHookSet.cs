@@ -17,15 +17,30 @@ public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
     private readonly Action<nint, uint> tickCallback = onTick;
     private readonly Func<nint, uint, uint> padCallback = onPad;
     private readonly Action<nuint> bindBuild = bindImageBase;
-    public IReadOnlyList<IHookRegistration> Registrations =>
+    /// <summary>
+    /// 264C40 rebuilds the combined pad three times. State 0F (265147) gates the whole
+    /// remaining chain on the physical pad being non-zero, and states 10 (265247) and 11
+    /// (26536F) each re-read the native getters and overwrite the emulated accumulator
+    /// that the direction dispatch in states 12-15 reads. A synthetic direction only
+    /// reaches movement if it is injected at every one of them.
+    /// </summary>
+    private static readonly HookId[] PadInstructions =
     [
-        new Registration(this, HookId.WorldNavigationTickCallSite),
-        new Registration(this, HookId.WorldNavigationPadInstruction),
+        HookId.WorldNavigationPadGateInstruction,
+        HookId.WorldNavigationPadSecondInstruction,
+        HookId.WorldNavigationPadInstruction,
     ];
+
+    private static readonly HookId[] Boundaries =
+        [HookId.WorldNavigationTickCallSite, .. PadInstructions];
+
+    public IReadOnlyList<IHookRegistration> Registrations =>
+        [.. Boundaries.Select(id => new Registration(this, id))];
 
     public void AfterHooksActivated()
     {
-        if (prepared != 2) throw new InvalidOperationException("Both world input boundaries must be prepared.");
+        if (prepared != Boundaries.Length)
+            throw new InvalidOperationException("Every world input boundary must be prepared.");
         active = true;
     }
     public void AfterHooksDisabled() => active = false;

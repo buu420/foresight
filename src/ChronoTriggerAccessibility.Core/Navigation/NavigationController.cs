@@ -15,6 +15,10 @@ public sealed class NavigationController
     private NavigationDirection announcedDirection;
     private int unitsPerTile = 16;
     private long planRevision;
+    private bool waitingForManualStop;
+    private NavigationPoint observedPosition;
+    private long lastManualActivity;
+    private int warnedTurn = -1;
 
     public bool IsActive => guiding;
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
@@ -88,6 +92,8 @@ public sealed class NavigationController
                 walking = command == NavigationCommand.ToggleWalk;
                 lastPosition = frame.Player;
                 lastProgress = nowMilliseconds;
+                observedPosition = frame.Player;
+                lastManualActivity = nowMilliseconds;
                 speech.Add($"{(walking ? "Walking to" : "Guidance to")} {target.Label}.");
                 Follow(frame, nowMilliseconds, speech);
                 break;
@@ -106,7 +112,7 @@ public sealed class NavigationController
             Stop();
             speech.Add("Navigation stopped: manual control.");
         }
-        if (guiding) Follow(frame, nowMilliseconds, speech);
+        if (guiding) Follow(frame, nowMilliseconds, speech, manualInput);
         return Result(speech, frame.Player);
     }
 
@@ -153,6 +159,11 @@ public sealed class NavigationController
         var index = targets.FindIndex(target => target.Id == selection);
         if (index < 0) { speech.Add(EmptyCategory()); return; }
         var target = targets[index];
+        if (waitingForManualStop)
+        {
+            speech.Add($"{target.Label}, {index + 1} of {targets.Count}. Stop moving for new directions.");
+            return;
+        }
         if (target.IsStoryNote)
         {
             speech.Add($"{target.Label}, {index + 1} of {targets.Count}. {target.Instruction}");
@@ -183,14 +194,18 @@ public sealed class NavigationController
         planRevision++;
         route = search.Route;
         nextPoint = 1;
+        warnedTurn = -1;
         if (route is not null) return true;
         speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." : $"No route to {destination.Label} is available.");
         Stop();
         return false;
     }
 
-    private void Follow(NavigationFrame frame, long now, List<string> speech)
+    private void Follow(NavigationFrame frame, long now, List<string> speech, bool manualInput = false)
     {
+        if (!walking && (manualInput || frame.Player != observedPosition || now < lastManualActivity))
+            lastManualActivity = now;
+        observedPosition = frame.Player;
         var currentTarget = Eligible(frame).Find(target => target.Id == destination?.Id);
         if (currentTarget is null)
         {
@@ -221,13 +236,37 @@ public sealed class NavigationController
         if (!onRoute ||
             !frame.Graph.Neighbours(previous).Contains(route[nextPoint]))
         {
+            // Human movement continues while a spoken turn finishes. Replanning
+            // each animation tick creates alternating quarter-step corrections.
+            // Wait for both key release and the native step to settle first.
+            if (!walking && now - lastManualActivity < 200)
+            {
+                if (!waitingForManualStop)
+                {
+                    speech.Add("Off route. Stop moving for new directions.");
+                    waitingForManualStop = true;
+                }
+                return;
+            }
             if (!Plan(frame, speech)) return;
+            if (!walking)
+            {
+                waitingForManualStop = false;
+                announcedDirection = NavigationDirection.None;
+                speech.Add("Route updated.");
+            }
             if (route!.Count == 1)
             {
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;
             }
+        }
+        else if (waitingForManualStop)
+        {
+            waitingForManualStop = false;
+            speech.Add(DescribeRoute(frame.Player, 1));
+            announcedDirection = LegDirection(nextPoint);
         }
         if (walking)
         {
@@ -249,6 +288,28 @@ public sealed class NavigationController
             speech.Add(DescribeRoute(frame.Player, announcedDirection == NavigationDirection.None ? 3 : 1));
             announcedDirection = direction;
         }
+        else if (!walking && speech.Count == 0)
+        {
+            WarnBeforeTurn(frame.Player, speech);
+        }
+    }
+
+    private void WarnBeforeTurn(NavigationPoint player, List<string> speech)
+    {
+        var end = LegEnd(nextPoint);
+        if (end == warnedTurn || end + 1 >= route!.Count) return;
+        var start = nextPoint - 1;
+        var direction = LegDirection(nextPoint);
+        while (start > 0 && LegDirection(start) == direction) start--;
+        var horizontal = direction is NavigationDirection.West or NavigationDirection.East;
+        var length = horizontal ? Math.Abs((long)route[end].X - route[start].X) :
+            Math.Abs((long)route[end].Y - route[start].Y);
+        var remaining = horizontal ? Math.Abs((long)route[end].X - player.X) :
+            Math.Abs((long)route[end].Y - player.Y);
+        if (length <= 4L * unitsPerTile || remaining <= 0 || remaining > 4L * unitsPerTile) return;
+        var steps = (int)Math.Ceiling((double)remaining / unitsPerTile);
+        speech.Add($"Turn {DirectionName(LegDirection(end + 1))} in {steps} {(steps == 1 ? "step" : "steps")}.");
+        warnedTurn = end;
     }
 
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
@@ -333,6 +394,8 @@ public sealed class NavigationController
         route = null;
         destination = null;
         announcedDirection = NavigationDirection.None;
+        waitingForManualStop = false;
+        warnedTurn = -1;
     }
 
     private bool Near(NavigationPoint a, NavigationPoint b) =>

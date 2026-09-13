@@ -19,24 +19,52 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private string lastRouteState = "none";
     private bool worldMode;
     private uint worldDirection;
+    private long worldPadCalls;
+    private long worldPadApplied;
+    private long worldPadManual;
+    private uint worldPadLastInput;
+    private string worldPadLastReject = "none";
 
     public uint OnWorldInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, true);
 
+    /// <summary>Runs at each native world pad-combine site. Counters distinguish
+    /// requested directions from callbacks that accepted them. Position changes
+    /// remain the evidence that the game actually moved.</summary>
     public uint ApplyWorldPad(nint currentEngine, uint originalPad)
     {
         lock (gate)
         {
+            worldPadCalls++;
+            worldPadLastInput = originalPad;
             var now = clock();
-            if (!enabled || !worldMode || engine != currentEngine || !isForeground() ||
-                lastCall < 0 || now < lastCall || now - lastCall > 250) return originalPad;
+            var reject =
+                !enabled ? "disabled" :
+                !worldMode ? "not world mode" :
+                engine != currentEngine ? "different context" :
+                !isForeground() ? "background" :
+                lastCall < 0 ? "no tick yet" :
+                now < lastCall || now - lastCall > 250 ? "tick is stale" : null;
+            if (reject is not null)
+            {
+                worldPadLastReject = reject;
+                return originalPad;
+            }
             if (originalPad != 0)
             {
+                worldPadManual++;
+                worldPadLastReject = "physical input";
                 if (worldDirection != 0) Suspend("manual control");
                 return originalPad;
             }
+            worldPadLastReject = worldDirection == 0 ? "no direction" : "none";
+            if (worldDirection != 0) worldPadApplied++;
             return originalPad | worldDirection;
         }
     }
+
+    private string WorldPadDiagnostic() =>
+        $"worldPad=calls:{worldPadCalls},applied:{worldPadApplied},manual:{worldPadManual}; " +
+        $"worldPadInput=0x{worldPadLastInput:X}; worldPadReject={worldPadLastReject}";
 
     public void Enable()
     {
@@ -129,7 +157,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     diagnostic($"Navigation: command={string.Join(",", commands)}; scene={frame.Scene}; " +
                         $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
                         $"input=0x{originalPad:X}; pad=0x{DirectionBits(result.Direction):X}; " +
-                        $"guiding={result.Guiding}; walking={result.AutoWalking}; {string.Join(" ", speech)}");
+                        $"guiding={result.Guiding}; walking={result.AutoWalking}; " +
+                        (world ? WorldPadDiagnostic() + "; " : string.Empty) +
+                        string.Join(" ", speech));
                     lastDiagnostic = now;
                 }
                 if (speech.Count != 0) speak(string.Join(" ", speech));

@@ -92,6 +92,47 @@ public sealed class FieldNavigationRuntimeTests
         Assert.Contains(speech, s => s.Contains("Person"));
     }
 
+    [Fact]
+    public void EveryWorldCombineSiteReceivesTheDirectionAndDeliveryIsReported()
+    {
+        // 264C40 rebuilds the pad at three combine sites and the direction dispatch reads
+        // whichever one ran last, so all three have to see the synthetic direction.
+        long now = 0;
+        var keys = new HashSet<int>();
+        var diagnostics = new List<string>();
+        var target = new NavigationPoint(16, 0, 1);
+        var runtime = new FieldNavigationRuntime(_ => null,
+            new(keys.Contains, () => true), () => true, () => now, _ => { }, diagnostics.Add,
+            worldCapture: _ => new("world:1:0", true, new(0, 0, 1),
+                [new("exit", "Exit", NavigationCategory.People, target, [target], true, false)],
+                new Line()),
+            worldObserve: _ => { });
+        runtime.Enable();
+
+        // A combine site that runs before any world tick must not inject anything.
+        Assert.Equal(0u, runtime.ApplyWorldPad(1, 0));
+        runtime.OnWorldInput(1, 0);
+        keys.Add('L');
+        runtime.OnWorldInput(1, 0);
+        keys.Clear();
+        keys.Add('P');
+        var accepted = runtime.OnWorldInput(1, 0);
+        keys.Clear();
+
+        Assert.NotEqual(0u, accepted);
+        Assert.Equal(accepted, runtime.ApplyWorldPad(1, 0));
+        Assert.Equal(accepted, runtime.ApplyWorldPad(1, 0));
+        Assert.Equal(accepted, runtime.ApplyWorldPad(1, 0));
+        // A foreign world context never receives this context's direction.
+        Assert.Equal(0u, runtime.ApplyWorldPad(2, 0));
+        // A physical pad at a combine site is manual control, never an injection.
+        Assert.Equal(0x20u, runtime.ApplyWorldPad(1, 0x20));
+
+        var report = diagnostics.Last(line => line.Contains("worldPad=", StringComparison.Ordinal));
+        Assert.Contains("worldPad=calls:1,applied:0,manual:0", report, StringComparison.Ordinal);
+        Assert.Contains("worldPadReject=not world mode", report, StringComparison.Ordinal);
+    }
+
     private sealed class Harness
     {
         public HashSet<int> Keys { get; } = [];

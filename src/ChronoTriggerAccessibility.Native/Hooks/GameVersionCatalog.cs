@@ -344,6 +344,16 @@ public static class GameVersionCatalog
             "Field navigation input before dash predicate", 0x175A8D, "E8 FE 01 00 00"),
         CreateAssemblyCallSite(HookId.WorldNavigationTickCallSite,
             "World navigation walking-task tick", 0x264B56, "E8 E5 00 00 00"),
+        // 264C40 combines the pad three times. State 0F gates the remaining chain on a
+        // non-zero physical pad, and states 10 and 11 each re-read the two native getters
+        // and overwrite the emulated accumulator the direction dispatch later reads, so a
+        // synthetic direction has to be injected at every one of them.
+        new(HookId.WorldNavigationPadGateInstruction,
+            "World navigation combined direction input (state 0F gate)", 0x265147,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        new(HookId.WorldNavigationPadSecondInstruction,
+            "World navigation combined direction input (state 10)", 0x265247,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
         new(HookId.WorldNavigationPadInstruction, "World navigation combined direction input", 0x26536F,
             Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
     ]);

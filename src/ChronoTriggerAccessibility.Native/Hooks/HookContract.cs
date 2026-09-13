@@ -129,6 +129,8 @@ public enum HookId
     FieldNavigationPadCallSite,
     WorldNavigationTickCallSite,
     WorldNavigationPadInstruction,
+    WorldNavigationPadGateInstruction,
+    WorldNavigationPadSecondInstruction,
 }
 
 public enum X86CallingConvention
