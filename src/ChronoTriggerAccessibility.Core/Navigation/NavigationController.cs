@@ -144,7 +144,7 @@ public sealed class NavigationController
     }
 
     private List<NavigationTarget> Eligible(NavigationFrame frame) => frame.Targets
-        .Where(target => target.Category == category && (target.Visible || target.Discovered ||
+        .Where(target => target.Category == category && (target.Visible || target.Discovered || target.GuideAvailable ||
             (target.Category == NavigationCategory.StoryEvents && target.IsStoryNote)) &&
             !string.IsNullOrWhiteSpace(target.Id) && !string.IsNullOrWhiteSpace(target.Label))
         .DistinctBy(target => target.Id).ToList();

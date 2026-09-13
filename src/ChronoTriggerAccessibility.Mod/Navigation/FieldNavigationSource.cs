@@ -8,21 +8,24 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     Func<int, string?>? areaName = null)
 {
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
     private bool storyUnavailable;
 
-    public void Reset() { discovered.Clear(); scene = null; lastInventory = null; }
+    public void Reset() { discovered.Clear(); guideGeometry.Clear(); scene = null; lastInventory = null; }
 
     public NavigationFrame? Capture(nint engine)
     {
         if (!FieldNavigationCapture.TryCapture(memory, (nuint)engine, out var field, out var error)) return Failed(error);
         if (!FieldMapCapture.TryCapture(memory, field, out var map, out error)) return Failed(error);
         if (!FieldEnvironmentCapture.TryViewport(memory, field, out var viewport)) return Failed("Native camera bounds are unavailable.");
-        if (!FieldEnvironmentCapture.TryTreasures(memory, field, map, out var treasures)) return Failed("Native treasure visibility state is unavailable.");
-        lastFailure = null;
         var story = FieldStoryCapture.Capture(memory, field);
+        if (!FieldEnvironmentCapture.TryTreasures(memory, field, map, out var treasures,
+            includeGuidePickups: field.SceneIdCoherent && story is { Point: >= 3 and <= 77 }))
+            return Failed("Native treasure state is unavailable.");
+        lastFailure = null;
         if (story is null && !storyUnavailable) diagnostic("Navigation story context is unavailable; field targets remain usable.");
         storyUnavailable = story is null;
         return Build(field, map, viewport, treasures, story);
@@ -41,6 +44,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var player = new NavigationPoint(field.LeadPlayer?.FineX ?? 0, field.LeadPlayer?.FineY ?? 0, map.PlayerLayer);
         var targets = new List<NavigationTarget>();
         var storyAnchors = new List<NavigationTarget>();
+        var storyCandidates = new List<NavigationTarget>();
         var activeIds = new HashSet<string>();
         foreach (var actor in field.Actors)
         {
@@ -53,14 +57,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
-                FutureAreaLabels.ActorLabel(field.SceneId, actor, story) : null;
-            Add(id, label ?? description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y));
+                FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) : null;
+            Add(id, label ?? description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y),
+                guideAvailable: label is not null && story is { Point: >= 3 and <= 77 });
         }
         foreach (var chest in treasures)
         {
             var position = Position(chest.FineX, chest.FineY);
-            Add($"chest:{chest.Index}", "Treasure chest", NavigationCategory.Objects, position,
-                Approach(position), TileVisible(chest.FineX / 256, chest.FineY / 256));
+            Add($"chest:{chest.Index}", chest.IsChest ? "Treasure chest" : "Item pickup", NavigationCategory.Objects, position,
+                Approach(position), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
+                guideAvailable: field.SceneIdCoherent && story is { Point: >= 3 and <= 77 });
         }
         if (field.SceneIdCoherent)
         foreach (var actor in field.Actors)
@@ -79,7 +85,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? At(actor.TileX * 256 + 128, actor.TileY * 256 + 128).Where(p => !graph.IsTerminal(p)).ToArray()
                 : Approach(position);
             Add($"landmark:{actor.Index}", label, NavigationCategory.Objects, position, approaches,
-                TileVisible(actor.TileX, actor.TileY), storyOnly: touch);
+                TileVisible(actor.TileX, actor.TileY), storyOnly: touch, guideAvailable: !touch);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -98,12 +104,28 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
             var key = $"exit:{id}";
+            var label = FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
+            var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
+            if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
+            var optionalGuide = optionalLabel is not null && story is { Point: >= 3 and <= 77 };
+            // Story objectives use the entire current native exit, including tiles
+            // outside the camera. Retain goals to keep an active route stable.
+            var retainedGuide = guideGeometry.TryGetValue(key, out var priorGuide)
+                ? priorGuide.ApproachPoints.Where(p => StillExitGoal(p, id)).ToArray() : [];
+            var guideGoals = retainedGuide.Concat(points.SelectMany(ExitApproach).Distinct().OrderBy(Distance))
+                .Distinct().Take(64).OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
             // Visibility discovers the destination. Its connected native footprint
             // supplies usable entry points even when the camera clips the stairs.
             var visible = points.Where(p => TileVisible(p.X / 256, p.Y / 256)).ToArray();
+            var guide = new NavigationTarget(key, label, NavigationCategory.Exits,
+                (visible.Length != 0 ? visible : points.ToArray()).MinBy(Distance), guideGoals,
+                visible.Length != 0, discovered.ContainsKey(key) || visible.Length != 0);
+            guideGeometry[key] = guide;
+            storyCandidates.Add(guide);
             if (visible.Length == 0)
             {
                 activeIds.Add(key);
+                if (optionalGuide) { targets.Add(guide with { GuideAvailable = true }); continue; }
                 if (discovered.TryGetValue(key, out var old)) targets.Add(old with
                 {
                     Visible = false, Discovered = true,
@@ -119,19 +141,35 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var footprint = ConnectedExitFootprint(points, visible.Concat(retained));
             var approaches = retained.Concat(footprint.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
-            Add(key, FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id),
-                NavigationCategory.Exits, position, approaches, true);
+            Add(key, label, NavigationCategory.Exits, position, approaches, true, storyCandidate: false, guideAvailable: optionalGuide);
         }
         if (field.SceneIdCoherent)
         foreach (var passage in FutureScriptedPassage.ForScene(field.SceneId, story, field.Actors))
         {
-            // Discover only the rendered, walkable part of a scripted boundary.
-            // This does not turn an unseen controller position into a destination.
+            // The script predicate supplies the full region for the story route;
+            // ordinary Exits still discover the rendered portion independently.
             var goals = new List<NavigationPoint>();
+            var allGoals = new List<NavigationPoint>();
             for (var y = Math.Max(0, passage.Top); y <= Math.Min(map.Height - 1, passage.Bottom); y++)
             for (var x = Math.Max(0, passage.Left); x <= Math.Min(map.Width - 1, passage.Right); x++)
-                if (TileVisible(x, y)) goals.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
+            {
+                var tileGoals = At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+                allGoals.AddRange(tileGoals);
+                if (TileVisible(x, y)) goals.AddRange(tileGoals);
+            }
             activeIds.Add(passage.Id);
+            var retainedGuide = guideGeometry.TryGetValue(passage.Id, out var priorGuide)
+                ? priorGuide.ApproachPoints.Where(allGoals.Contains).ToArray() : [];
+            var guideGoals = retainedGuide.Concat(allGoals.OrderBy(Distance)).Distinct().Take(64)
+                .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
+            if (guideGoals.Length != 0)
+            {
+                var guide = new NavigationTarget(passage.Id, passage.Label, NavigationCategory.Exits,
+                    guideGoals.MinBy(Distance), guideGoals, goals.Count != 0, discovered.ContainsKey(passage.Id) || goals.Count != 0);
+                guideGeometry[passage.Id] = guide;
+                storyCandidates.Add(guide);
+            }
+            else guideGeometry.Remove(passage.Id);
             var retained = discovered.TryGetValue(passage.Id, out var previous)
                 ? previous.ApproachPoints.Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var current) &&
                     current == p && !graph.IsTerminal(p)).ToArray() : [];
@@ -146,9 +184,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             (passage.StoryOnly ? storyAnchors : targets).Add(target);
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
+        foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);
         if (field.SceneIdCoherent)
         {
-            var available = targets.Concat(storyAnchors).ToArray();
+            var available = storyCandidates.ToArray();
             targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, available));
             targets.AddRange(EarlyStoryTargets.Build(field.SceneId, story, available, player));
             targets.AddRange(FutureStoryTargets.Build(field.SceneId, story, available, player));
@@ -167,7 +206,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"actors={field.Actors.Count}; usable={field.Actors.Count(a => a.IsUsable)}; " +
                 $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
                 $"exitCells={exitCellCount}; visibleExitCells={visibleExitCellCount}; " +
-                $"renderedChests={treasures.Count}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
+                $"renderedChests={treasures.Count(t => t.IsChest)}; guidePickups={treasures.Count(t => !t.IsChest)}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
                 $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}";
             if (inventory == lastInventory) return;
             lastInventory = inventory;
@@ -217,14 +256,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 foreach (var point in At(x, y)) yield return point;
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
-            IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false)
+            IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
+            bool guideAvailable = false)
         {
             activeIds.Add(id);
+            if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
+                visible || discovered.ContainsKey(id)));
             var output = storyOnly ? storyAnchors : targets;
-            if (visible)
+            if (visible || guideAvailable)
             {
-                var target = new NavigationTarget(id, label, category, position, approaches, true, true);
-                discovered[id] = target; output.Add(target);
+                var target = new NavigationTarget(id, label, category, position, approaches, visible,
+                    visible || discovered.ContainsKey(id)) { GuideAvailable = guideAvailable };
+                if (visible) discovered[id] = target;
+                output.Add(target);
             }
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with { Visible = false, Discovered = true });
         }

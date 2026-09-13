@@ -133,7 +133,7 @@ public sealed class EarlyStoryTests
         var prisoner = Actor(22, 11504, 2448) with { ClassTag = 4, VisualIndex = 41, DrawMode = 1 };
         var field = Field(72, prisoner);
         var before = source.Build(field, Map(), new(0, 0, 16384, 16384), [], State(46));
-        Assert.Contains(before.Targets, t => t.Label == "Speak to the prisoner at the guillotine");
+        Assert.Contains(before.Targets, t => t.Label == "Prisoner at the guillotine" && t.Category == NavigationCategory.People);
         // Native scene 72/22 parks Fritz at tile FF,FF after the rescue dialogue.
         var parked = Actor(22, 65535, 65535) with { ClassTag = 4, VisualIndex = 41, DrawMode = 1 };
         var after = source.Build(field with { Actors = [field.Actors[0], parked] }, Map(), new(0, 0, 16384, 16384), [], State(46));
@@ -157,14 +157,17 @@ public sealed class EarlyStoryTests
     }
 
     [Fact]
-    public void UndiscoveredSceneryDoesNotBecomeARouteAndTouchMarkersStayOutOfObjects()
+    public void UnseenStorySceneryBecomesARouteAndTouchMarkersStayOutOfObjects()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
         var pod = Actor(12, 1152, 1279) with { ActivationEnabled = 0 };
         var field = Field(8, pod);
         var state = State(10, 0x56, 1);
         var unseen = source.Build(field, Map(), new(0, 0, 256, 256), [], state);
-        Assert.True(Assert.Single(unseen.Targets).IsStoryNote);
+        var unseenStory = Assert.Single(unseen.Targets);
+        Assert.False(unseenStory.IsStoryNote);
+        Assert.False(unseenStory.Discovered);
+        Assert.NotEmpty(unseenStory.ApproachPoints);
         var seen = source.Build(field, Map(), new(0, 0, 2048, 2048), [], state);
         var story = Assert.Single(seen.Targets);
         Assert.Equal(NavigationCategory.StoryEvents, story.Category);

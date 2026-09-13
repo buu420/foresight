@@ -3,7 +3,7 @@ using ChronoTriggerAccessibility.Core.Navigation;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 /// <summary>Connected walking regions of the current native world collision map.
-/// Used to keep future-era story objectives on the player's side of the ruins.</summary>
+/// Used to keep guide destinations on the player's current walking region.</summary>
 internal sealed class WorldRegionIndex
 {
     private byte[]? map, properties;

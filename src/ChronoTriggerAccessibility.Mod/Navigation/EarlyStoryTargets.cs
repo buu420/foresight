@@ -4,7 +4,7 @@ using ChronoTriggerAccessibility.Native.Capture;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 /// <summary>Local objectives through the prison escape. The counter and passage
-/// flags select the chapter; only observed native targets supply route positions.</summary>
+/// flags select the chapter; active native targets supply route positions.</summary>
 public static class EarlyStoryTargets
 {
     public static IReadOnlyList<NavigationTarget> Build(int scene, FieldStoryState? state,
@@ -58,7 +58,7 @@ public static class EarlyStoryTargets
                 Exit("leave-canyon", "Leave Truce Canyon", [0], "Visit Truce and find out where you are.");
                 break;
             case 114 or 115 or 116 or 117 or 118 when p is >= 12 and < 15:
-                Note("truce", "Explore Truce", "Speak with the residents. Guardia Castle lies beyond the forest.");
+                Exit("truce", scene == 117 ? "Go downstairs" : "Leave for Guardia Forest", [0]);
                 break;
             case 119 when p is >= 12 and < 16:
                 Exit("castle", "Continue toward Guardia Castle", [1]);
@@ -89,7 +89,6 @@ public static class EarlyStoryTargets
                 break;
             case 129 when p is >= 18 and < 21:
                 Note("search-chapel", "Investigate the cathedral", "Speak with the nuns and examine what is visible in the chapel.");
-                foreach (var n in new[] { 9, 10, 11, 12 }) Known("nun-" + n, "Talk with the nun", $"actor:{n}:4:50");
                 Known("hairpin", "Examine the sparkle on the floor", "landmark:15");
                 break;
             case 129 when p is >= 21 and < 27:
@@ -102,7 +101,6 @@ public static class EarlyStoryTargets
                 break;
             case 130 when p is >= 21 and < 27:
                 Exit("inner-cathedral", "Continue into the cathedral", [5]);
-                Known("prison-switch", "Examine the wall switch", "landmark:35");
                 break;
             case 131 when p is >= 21 and < 27:
                 if (state.Flag(0xFF, 4) == true) Exit("cathedral-passage", "Continue through the passage", [1]);
@@ -110,7 +108,6 @@ public static class EarlyStoryTargets
                 if (state.Flag(0xFF, 2) == false) Known("right-switch", "Use the right wall switch", "landmark:24");
                 if (state.Flag(0xFF, 8) == false) Known("left-switch", "Use the left wall switch", "landmark:46");
                 if (state.Flag(0xFF, 4) == false) Known("inner-organ", "Play the organ", "actor:36:4:100");
-                Known("passage-sign", "Read the sign", "landmark:34");
                 break;
             case 132 when p is >= 21 and < 27:
                 Exit("rescue-leene", "Continue toward Queen Leene", [1]);
@@ -174,7 +171,6 @@ public static class EarlyStoryTargets
                 // One onward exit per disconnected floor. The other stairs lead
                 // back down; see the native connectivity audit in the release notes.
                 Exit("prison-upper-hall", "Continue toward the upper prison", [0, 2, 6, 12]);
-                Known("prisoner", "Speak to the prisoner at the guillotine", "actor:22:4:41");
                 break;
             case 30 when p is >= 46 and < 48:
                 Exit("leave-execution", "Leave the execution chamber", [0]);
@@ -183,8 +179,7 @@ public static class EarlyStoryTargets
                 Exit("return-inside-prison", "Return inside the prison tower", [0, 1]);
                 break;
             case 29 when p is >= 45 and < 48:
-                var guards = available.Where(t => t.Id is "actor:10:5:49" or "actor:11:5:49")
-                    .Where(t => t.Visible || t.Discovered).ToArray();
+                var guards = available.Where(t => t.Id is "actor:10:5:49" or "actor:11:5:49").ToArray();
                 if (guards.Length != 0)
                 {
                     var encounter = StoryTarget.BindAny("guardroom", "Approach the guards", guards,
@@ -196,7 +191,6 @@ public static class EarlyStoryTargets
                         .Where(a => a.Y / 256 == t.Position.Y / 256)).Distinct().ToArray() });
                     break;
                 }
-                Known("tank-document", "Read the document on the floor", "actor:12:4:162");
                 Exit("prison-bridge", "Continue onto the upper bridge", [0]);
                 break;
             case 28 when p is >= 45 and < 48:
@@ -225,7 +219,7 @@ public static class EarlyStoryTargets
             Bind(id, label, Enumerable.Range(0, 4).Select(c => $"actor:{actor}:{c}:{visual}").ToArray());
         void Known(string id, string label, string target)
         {
-            if (available.Any(t => t.Id == target && (t.Visible || t.Discovered))) Bind(id, label, [target]);
+            if (available.Any(t => t.Id == target)) Bind(id, label, [target]);
         }
         void Note(string id, string label, string instruction) => result.Add(StoryTarget.Note("story:" + id, label, instruction));
     }

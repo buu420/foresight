@@ -22,6 +22,9 @@ public interface INavigationGraph
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,
     NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered)
 {
+    /// <summary>A guide entry bound to a currently active native destination. It
+    /// can be selected before discovery without claiming it has been seen.</summary>
+    public bool GuideAvailable { get; init; }
     /// <summary>A current story reminder with no spatial claim. Its Position is unused.</summary>
     public bool IsStoryNote { get; init; }
     public string? Instruction { get; init; }

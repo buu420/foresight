@@ -42,21 +42,30 @@ public sealed class WorldNavigationSourceTests
     }
 
     [Fact]
-    public void CurrentStoryGoalsUseEligibleEntrancesWithoutRevealingHiddenLocations()
+    public void CurrentStoryGoalsUseUnseenEligibleEntrancesAndRetireWhenUnavailable()
     {
         var fair = Entrance(9,26,14,10,5,416,224);
         var source = Source(); var world = Snapshot([fair]) with { StoryPoint = 3 };
         Assert.Contains(source.Build(world, Label).Targets, t => t.Category == NavigationCategory.StoryEvents && !t.IsStoryNote);
         source.Reset();
         var hidden = world with { Viewport = new(0,0,64,64) };
-        Assert.DoesNotContain(source.Build(hidden, Label).Targets,
-            t => t.Category == NavigationCategory.StoryEvents && !t.IsStoryNote);
+        var unseen = Assert.Single(source.Build(hidden, Label).Targets, t => t.Category == NavigationCategory.StoryEvents);
+        Assert.Equal(NavigationCategory.StoryEvents, unseen.Category);
+        Assert.False(unseen.IsStoryNote);
+        Assert.False(unseen.Visible);
+        Assert.False(unseen.Discovered);
+        Assert.True(unseen.GuideAvailable);
+        var controller = new NavigationController();
+        var frame = source.Build(hidden, Label);
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
+        Assert.True(controller.Handle(NavigationCommand.ToggleWalk, frame, 16).AutoWalking);
+        Assert.Empty(source.Build(hidden with { Entrances = [fair with { Available = false }] }, Label).Targets);
         Assert.DoesNotContain(source.Build(world with { StoryPoint = 45 }, Label).Targets,
             t => t.Category == NavigationCategory.StoryEvents && t.Label.Contains("fair"));
     }
 
     [Theory]
-    [InlineData(51, 210, 212, 214)]
+    [InlineData(51, 212, 214, -1)]
     [InlineData(55, 223, 226, -1)]
     [InlineData(60, 228, -1, -1)]
     [InlineData(66, 226, -1, -1)]
@@ -97,6 +106,22 @@ public sealed class WorldNavigationSourceTests
         Assert.Equal(2, opened.Targets.Count(t => t.Category == NavigationCategory.StoryEvents));
         var closed = source.Build(world, id => "Dome " + id);
         Assert.Single(closed.Targets, t => t.Category == NavigationCategory.StoryEvents);
+    }
+
+    [Fact]
+    public void OptionalDomeIsAnExitBeforeDiscoveryAndNeverAStoryRequirement()
+    {
+        var dome = Entrance(2, 26, 19, 38, 210, 416, 304);
+        var world = Snapshot([dome]) with { StoryPoint = 51, Viewport = new(0, 0, 64, 64) };
+        world = world with { Motion = world.Motion with { World = 2 } };
+        var source = Source();
+        var optional = Assert.Single(source.Build(world, _ => "Trann Dome").Targets);
+        Assert.Equal(NavigationCategory.Exits, optional.Category);
+        Assert.True(optional.GuideAvailable);
+        Assert.False(optional.Discovered);
+        var blocked = new byte[512]; Array.Fill(blocked, (byte)0x11);
+        Assert.Empty(source.Build(world with { Properties = blocked }, _ => "Trann Dome").Targets);
+        Assert.Single(source.Build(world, _ => "Trann Dome").Targets);
     }
 
     private static WorldNavigationSource Source() => new(new EmptyMemory(), _ => { });

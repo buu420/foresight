@@ -41,6 +41,14 @@ public sealed class FieldEnvironmentCaptureTests
         Assert.True(FieldEnvironmentCapture.TryTreasures(m, Field, map, out chests)); Assert.Empty(chests);
         m.Word(0x150b8, 0); map.CollisionShapes[3] = 0;
         Assert.True(FieldEnvironmentCapture.TryTreasures(m, Field, map, out chests)); Assert.Empty(chests);
+        Assert.True(FieldEnvironmentCapture.TryTreasures(m, Field, map, out var pickups, includeGuidePickups: true));
+        var pickup = Assert.Single(pickups);
+        Assert.False(pickup.IsChest);
+        Assert.Equal(8, pickup.Index);
+        Assert.Equal((384, 384), (pickup.FineX, pickup.FineY));
+        m.Word(0x150b8, 1);
+        Assert.True(FieldEnvironmentCapture.TryTreasures(m, Field, map, out pickups, includeGuidePickups: true));
+        Assert.Empty(pickups);
     }
 
     private sealed class Memory : IReadableMemory

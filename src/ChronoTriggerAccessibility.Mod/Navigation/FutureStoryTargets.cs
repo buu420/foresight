@@ -4,7 +4,7 @@ using ChronoTriggerAccessibility.Native.Capture;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 /// <summary>First visit to 2300 AD through the End of Time. Script counters select
-/// objectives; observed native actors, scenery and passages supply their positions.
+/// objectives; active native actors, scenery and passages supply their positions.
 /// Evidence and special interaction limits: docs/future-story-navigation.md.</summary>
 public static class FutureStoryTargets
 {
@@ -20,7 +20,7 @@ public static class FutureStoryTargets
                 Exit("bangor", "Leave Bangor Dome and explore", 0);
                 break;
             case 210 when p < 55:
-                Note("trann", "Explore Trann Dome", "Speak with the residents. The Enertron and the way outside are in the Objects and Exits lists.");
+                Exit("trann", "Leave Trann Dome for Site 16", 0);
                 break;
             case 212 when p < 55:
                 Exit("site16-east", "Continue through Site 16", 1);
@@ -47,7 +47,7 @@ public static class FutureStoryTargets
                         Exit("arris-east", "Enter the eastern basement passage", 2);
                     else if (state.Flag(0xA4, 0x40) == false)
                         Bind("arris-console", "Use the right door console", ["actor:9:4:112"], "Use the input sequence the rat explained, then enter the passage on the right.");
-                    else Unavailable("arris", "The basement door's current state is unavailable. The consoles remain in Objects when discovered.");
+                    else Unavailable("arris", "The basement door's current state is unavailable. Active consoles are in Interactable Objects.");
                 }
                 else if (state.Flag(0xEC, 0x10) == true)
                     Exit("arris-rat", "Return to the rat in the rafters", 1);
@@ -214,7 +214,7 @@ public static class FutureStoryTargets
         void Unavailable(string id, string instruction) => Note(id, "Current objective", instruction);
         void Known(string id, string label, string target, string? instruction = null)
         {
-            if (available.Any(t => t.Id == target && (t.Visible || t.Discovered))) Bind(id, label, [target], instruction);
+            if (available.Any(t => t.Id == target)) Bind(id, label, [target], instruction);
         }
     }
 }

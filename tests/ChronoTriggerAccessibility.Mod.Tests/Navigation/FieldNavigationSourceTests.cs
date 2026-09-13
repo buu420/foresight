@@ -148,18 +148,18 @@ public sealed class FieldNavigationSourceTests
     }
 
     [Fact]
-    public void ExitTouchingCameraEdgeWithoutAnyVisibleAreaIsNotDiscovered()
+    public void StoryUsesAnUnseenExitWithoutMarkingItDiscovered()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
         var field = Field(Actor(0, 6308, 2303, party: true)) with { SceneId = 2 };
         var map = Map(64);
         map.ExitCells[13 * 64 + 23] = 0;
         var targets = source.Build(field, map, new(4096, 256, 8320, 3328), [], new(3, false)).Targets;
-        var note = Assert.Single(targets);
-        Assert.True(note.IsStoryNote);
-        Assert.False(note.Visible);
-        Assert.False(note.Discovered);
-        Assert.Empty(note.ApproachPoints);
+        var story = Assert.Single(targets);
+        Assert.False(story.IsStoryNote);
+        Assert.False(story.Visible);
+        Assert.False(story.Discovered);
+        Assert.NotEmpty(story.ApproachPoints);
     }
 
     [Theory]

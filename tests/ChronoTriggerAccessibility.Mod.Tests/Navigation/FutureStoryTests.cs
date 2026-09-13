@@ -85,7 +85,7 @@ public sealed class FutureStoryTests
     }
 
     [Fact]
-    public void NewSceneryUsesLivePositionsAndDropsRetiredOrUnseenMarkers()
+    public void GuideSceneryUsesLivePositionsAndDropsRetiredMarkers()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
         var marker = Actor(16, 1280, 1280);
@@ -100,7 +100,9 @@ public sealed class FutureStoryTests
             Map(), new(0, 0, 2048, 2048), [], State(51));
         Assert.DoesNotContain(inactive.Targets, t => t.Id == rest.Id);
         source.Reset();
-        Assert.DoesNotContain(source.Build(field, Map(), new(4096, 4096, 8192, 8192), [], State(51)).Targets, t => t.Id == rest.Id);
+        var unseen = Assert.Single(source.Build(field, Map(), new(4096, 4096, 8192, 8192), [], State(51)).Targets, t => t.Id == rest.Id);
+        Assert.True(unseen.GuideAvailable);
+        Assert.False(unseen.Discovered);
         Assert.DoesNotContain(source.Build(field with { SceneIdCoherent = false }, Map(), new(0, 0, 2048, 2048), [], State(51)).Targets,
             t => t.Id == rest.Id || t.Category == NavigationCategory.StoryEvents);
     }
@@ -129,7 +131,10 @@ public sealed class FutureStoryTests
         Assert.DoesNotContain(frame.Targets, t => t.Id == "landmark:8");
         Assert.Contains(frame.Targets, t => t.Category == NavigationCategory.Exits && t.Label == "Eastern highway");
         source.Reset();
-        Assert.True(Assert.Single(source.Build(field, Map(), new(0, 0, 256, 256), [], State(55)).Targets).IsStoryNote);
+        var unseen = Assert.Single(source.Build(field, Map(), new(0, 0, 256, 256), [], State(55)).Targets);
+        Assert.False(unseen.IsStoryNote);
+        Assert.False(unseen.Discovered);
+        Assert.NotEmpty(unseen.ApproachPoints);
     }
 
     [Fact]

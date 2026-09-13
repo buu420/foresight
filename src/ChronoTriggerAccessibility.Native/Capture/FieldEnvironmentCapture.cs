@@ -11,7 +11,10 @@ public readonly record struct FieldViewport(int Left, int Top, int Right, int Bo
         left < right && top < bottom && left < Right && right > Left && top < Bottom && bottom > Top;
 }
 
-public sealed record FieldTreasure(int Index, int FineX, int FineY);
+public sealed record FieldTreasure(int Index, int FineX, int FineY)
+{
+    public bool IsChest { get; init; } = true;
+}
 
 public static class FieldEnvironmentCapture
 {
@@ -34,12 +37,12 @@ public static class FieldEnvironmentCapture
     }
 
     /// <summary>179690 builds the active chest grid and resolves any shared-scene
-    /// treasure table aliases into field+2190/2194. Its open bits match 17D0C0. Only
-    /// rendered chest tiles (property0 bit 1) are exposed, never invisible pickups
-    /// or reward contents. The graphics byte must also be one of the four native
-    /// closed-chest tiles that 179690 replaces when opening a chest.</summary>
+    /// treasure table aliases into field+2190/2194. 179940 uses the same grid and
+    /// open bits for both chests and non-chest pickups; the graphics/property test
+    /// only chooses the chest animation. Guide pickups opt in to those active
+    /// non-chest records without exposing reward contents.</summary>
     public static bool TryTreasures(IReadableMemory memory, FieldNavigationSnapshot field, FieldMapSnapshot map,
-        out IReadOnlyList<FieldTreasure> treasures)
+        out IReadOnlyList<FieldTreasure> treasures, bool includeGuidePickups = false)
     {
         treasures = [];
         if (!Word(memory, field.Engine + 0xE44u, out var begin) || !Word(memory, field.Engine + 0xE48u, out var end) ||
@@ -60,13 +63,18 @@ public static class FieldEnvironmentCapture
             var id = cells[y * width + x];
             if (id >= 128) continue;
             if (id >= last - first) return false;
-            if (x >= map.Width || y >= map.Height || (map.CollisionShapes[y * map.Width + x] & 1) == 0) continue;
+            if (x >= map.Width || y >= map.Height) continue;
+            var isChest = (map.CollisionShapes[y * map.Width + x] & 1) != 0;
+            if (!isChest && !includeGuidePickups) continue;
             var global = first + id;
             if (!Word(memory, field.ActorBase + 0x110B4u + (uint)((global >> 3) & 63) * 4, out var opened)) return false;
             if ((opened & (1 << (global & 7))) != 0) continue;
-            if (!Read(memory, (uint)graphics + (uint)(y * width + x), tile)) return false;
-            if (tile[0] is not (0xFE or 0xEE or 0xE0 or 0xF0)) continue;
-            result.Add(new(global, x * 256 + 128, y * 256 + 128));
+            if (isChest)
+            {
+                if (!Read(memory, (uint)graphics + (uint)(y * width + x), tile)) return false;
+                if (tile[0] is not (0xFE or 0xEE or 0xE0 or 0xF0)) continue;
+            }
+            result.Add(new(global, x * 256 + 128, y * 256 + 128) { IsChest = isChest });
         }
         treasures = result.AsReadOnly();
         return true;

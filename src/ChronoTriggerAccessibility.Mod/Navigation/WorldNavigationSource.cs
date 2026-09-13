@@ -8,7 +8,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
 {
     private readonly NavigationTextCapture text = new(memory);
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
-    private readonly WorldRegionIndex futureRegions = new();
+    private readonly WorldRegionIndex regions = new();
     private nuint imageBase;
     private string? scene, lastFailure, lastInventory;
     public string MotionStage { get; private set; } = "not sampled";
@@ -39,7 +39,9 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         if (scene != identity) { Reset(); scene = identity; }
         var player = new NavigationPoint(world.Motion.PixelX * 16, world.Motion.PixelY * 16, 1);
         var graph = new WorldNavigationGraph(world.Map, world.Properties);
+        if (world.StoryPoint is not null) regions.Update(world.Map, world.Properties, graph);
         var targets = new List<NavigationTarget>();
+        var storyCandidates = new List<NavigationTarget>();
         var active = new HashSet<string>(StringComparer.Ordinal);
         var destinations = new Dictionary<string, int>(StringComparer.Ordinal);
         var groups = world.Entrances.Where(e => e.Available && e.NameIndex is > 0 and < 106 &&
@@ -51,23 +53,36 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             active.Add(key); destinations[key] = group.Key.Destination;
             var visible = group.Any(e => world.IsVisible((e.TileX * 16 + 8) * 16, e.TileY * 16 * 16));
             discovered.TryGetValue(key, out var known);
-            if (!visible && known is null) continue;
             var points = group.SelectMany(e => e.ContactPoints).Select(p => new NavigationPoint(p.X * 16, p.Y * 16, 1))
                 .Where(graph.CanStand).Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).Take(64).ToArray();
-            if (!visible)
-            {
-                var retained = known!.ApproachPoints.Where(points.Contains).ToArray();
-                if (retained.Length == 0) { discovered.Remove(key); continue; }
-                targets.Add(known with { Visible = false, Discovered = true, ApproachPoints = retained });
-                continue;
-            }
             var name = label(group.Key.NameIndex);
             if (string.IsNullOrWhiteSpace(name)) continue;
             var first = group.First();
             var position = points.Length == 0 ? new NavigationPoint((first.TileX * 16 + 8) * 16, first.TileY * 256, 1) :
                 points.MinBy(p => Math.Abs((long)p.X - player.X) + Math.Abs((long)p.Y - player.Y));
-            var target = new NavigationTarget(key, name, NavigationCategory.Exits, position, points, true, true)
+            var target = new NavigationTarget(key, name, NavigationCategory.Exits, position, points, visible, visible || known is not null)
             { Instruction = "Press Confirm to enter.", ArrivalInstruction = "Press Confirm to enter." };
+            storyCandidates.Add(target);
+            if (OptionalGuideAreas.WorldDestination(world.Motion.World, group.Key.Destination, world.StoryPoint))
+            {
+                var reachable = points.Where(p => regions.Connected(player, p)).ToArray();
+                if (reachable.Length != 0)
+                {
+                    target = target with { GuideAvailable = true, ApproachPoints = reachable,
+                        Position = reachable.MinBy(p => Math.Abs((long)p.X - player.X) + Math.Abs((long)p.Y - player.Y)) };
+                    if (visible) discovered[key] = target;
+                    targets.Add(target);
+                    continue;
+                }
+            }
+            if (!visible)
+            {
+                if (known is null) continue;
+                var retained = known!.ApproachPoints.Where(points.Contains).ToArray();
+                if (retained.Length == 0) { discovered.Remove(key); continue; }
+                targets.Add(known with { Visible = false, Discovered = true, ApproachPoints = retained });
+                continue;
+            }
             discovered[key] = target; targets.Add(target);
         }
         foreach (var key in discovered.Keys.Where(key => !active.Contains(key)).ToArray()) discovered.Remove(key);
@@ -86,16 +101,16 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
 
         void Bind(string id, string name, params int[] sceneIds)
         {
-            var eligible = targets.Where(t => t.Category == NavigationCategory.Exits &&
+            var eligible = storyCandidates.Where(t => t.Category == NavigationCategory.Exits &&
                 destinations.TryGetValue(t.Id, out var destination) && sceneIds.Contains(destination)).ToArray();
-            if (world.Motion.World == 2)
-                eligible = eligible.Select(t => t with { ApproachPoints = t.ApproachPoints
-                    .Where(p => futureRegions.Connected(player, p)).ToArray() }).Where(t => t.ApproachPoints.Count != 0)
+            eligible = eligible.Select(t => t with { ApproachPoints = t.ApproachPoints
+                    .Where(p => regions.Connected(player, p)).ToArray() }).Where(t => t.ApproachPoints.Count != 0)
                     .Select(t => t with { Position = t.ApproachPoints.MinBy(p => Math.Abs((long)p.X - player.X) + Math.Abs((long)p.Y - player.Y)) })
                     .ToArray();
             if (eligible.Length == 0) return;
             var anchor = eligible.MinBy(t => Math.Abs((long)t.Position.X - player.X) + Math.Abs((long)t.Position.Y - player.Y))!;
             targets.Add(anchor with { Id = "world-story:" + id, Label = name, Category = NavigationCategory.StoryEvents,
+                GuideAvailable = true,
                 ApproachPoints = eligible.SelectMany(t => t.ApproachPoints).Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).Take(64).ToArray() });
         }
         void AddStory()
@@ -103,10 +118,8 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             if (world.StoryPoint is not { } progress) return;
             if (world.Motion.World == 2 && progress is >= 51 and < 72)
             {
-                futureRegions.Update(world.Map, world.Properties, graph);
                 if (progress < 55)
                 {
-                    Bind("future-trann", "Explore Trann Dome", 210);
                     Bind("future-site16", "Cross Site 16 toward Arris Dome", 212);
                     Bind("future-arris", "Visit Arris Dome", 214);
                 }
@@ -129,7 +142,6 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
                 }
             }
             if (world.Motion.World != 1) return;
-            if (progress is >= 12 and < 15) Bind("truce", "Explore Truce and speak with its residents", 114, 115, 116, 117, 118);
             if (progress is >= 12 and < 18 || progress is >= 27 and < 33)
             {
                 Bind("forest", "Go through Guardia Forest", 119);

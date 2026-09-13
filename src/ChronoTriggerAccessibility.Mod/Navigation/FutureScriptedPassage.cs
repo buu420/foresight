@@ -2,7 +2,7 @@ using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-/// <summary>Visible map regions tested by native startup watchers, without a
+/// <summary>Map regions tested by native startup watchers, without a
 /// MapJump exit cell. Bounds are the exact player-tile predicates in the scripts,
 /// not guide coordinates. The field graph still supplies every usable goal.</summary>
 public sealed record FutureScriptedPassage(string Id, string Label, int Left, int Top, int Right, int Bottom, bool StoryOnly)

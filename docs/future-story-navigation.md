@@ -1,5 +1,7 @@
 # First journey through 2300 AD and the End of Time, 0.3.11
 
+This document records the 0.3.11 release. Its discovery restrictions were superseded by [0.3.12 guide navigation](guide-navigation-availability.md).
+
 This release extends the existing Story Events category beyond the prison escape. The controls, one-leg manual directions, movement input, and countable footsteps are unchanged.
 
 ## Coverage

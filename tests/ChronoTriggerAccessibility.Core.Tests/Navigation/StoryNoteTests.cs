@@ -7,7 +7,7 @@ public sealed class StoryNoteTests
 {
     private static NavigationTarget Note() => new("story:door", "Leave for the fair",
         NavigationCategory.StoryEvents, default, [], false, false)
-    { IsStoryNote = true, Instruction = "The front door has not been discovered in this area yet." };
+    { IsStoryNote = true, Instruction = "The scene is still in progress. Listen to the conversation." };
 
     [Fact]
     public void CurrentObjectiveCanBeRepeatedWithoutInventingABearingOrARoute()
@@ -15,7 +15,7 @@ public sealed class StoryNoteTests
         var frame = new NavigationFrame("room", true, new(2000, 2000, 1), [Note()], new NoSearch());
         var controller = new NavigationController();
         var selection = controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
-        Assert.Contains(selection.Speech, s => s.Contains("Leave for the fair") && s.Contains("not been discovered"));
+        Assert.Contains(selection.Speech, s => s.Contains("Leave for the fair") && s.Contains("still in progress"));
         Assert.DoesNotContain(selection.Speech, s => s.Contains("steps away") || s.Contains("another level"));
         foreach (var command in new[] { NavigationCommand.Repeat, NavigationCommand.Guide, NavigationCommand.ToggleWalk })
         {
@@ -23,7 +23,7 @@ public sealed class StoryNoteTests
             Assert.False(result.Guiding);
             Assert.False(result.AutoWalking);
             Assert.Equal(NavigationDirection.None, result.Direction);
-            Assert.Contains(result.Speech, s => s.Contains("not been discovered"));
+            Assert.Contains(result.Speech, s => s.Contains("still in progress"));
         }
     }
 
