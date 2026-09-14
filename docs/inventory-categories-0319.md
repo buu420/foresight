@@ -126,14 +126,17 @@ silence in the opposite direction — it is an invented reading.
 
 Derive emptiness from the row data instead, which the live snapshot already demonstrates. The
 builder pads an empty category to one record: rows `[0x2D0, 0x2D4)` spanned 12 bytes — a single
-record `[0, 0, 1773730048]`, encoded id `0` and quantity `0`. The native renderer's own rule is at
-`0x1C7FCD`, which skips any row whose `record + 4` is not positive. So:
+record `[0, 0, 1773730048]`, encoded id `0` and quantity `0`. A later Ghidra check corrected the
+earlier attribution: `0x1C7FCD` rejects item use when quantity is not positive; it is not a drawing
+rule. The builder `0x1C3080` zeros each record's first eight bytes, copies real records only when
+their quantity is positive, and keeps at least one record. See the
+[empty-row audit](inventory-empty-row-0320-native-audit.md).
 
-> A category is empty when every record in `[node+0x2D0, node+0x2D4)` has `record+4 <= 0`
-> (equivalently, when the renderer would draw no rows).
+The implemented empty-category rule is deliberately narrower than a scan of nonpositive rows:
+exactly one record with quantity zero, a valid category, and its matching visible heading.
 
 A truthful phrasing is the category name plus `"Empty"` — for example `Consumables, empty` — sourced
-entirely from `0x40 + [node+0x2F0]` and the row scan. If the touch page is supported later, that page
+entirely from `0x40 + [node+0x2F0]` and the verified placeholder. If the touch page is supported later, that page
 *may* use `0x48 + category`, because there it genuinely is on screen.
 
 ## 5. Uncertainty
