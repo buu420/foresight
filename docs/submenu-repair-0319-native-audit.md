@@ -1,6 +1,6 @@
 # Submenu repair investigation, 2026-09-14
 
-Status: fixes implemented for the captured Inventory category/empty-list failure and Equipment character-card failure. Both saved live frames now replay successfully through the production reader. In-game speech after deployment still needs player verification. Save-slot speech in 0.3.18 is confirmed working by the user.
+Status: fixes for the captured Inventory category/empty-list failure and Equipment character-card failure are deployed in 0.3.19. Both saved live frames replay successfully through the production reader. In-game speech after deployment still needs player verification. Save-slot speech in 0.3.18 is confirmed working by the user. See [release verification](submenu-release-0319.md).
 
 Repository: `.worktrees/navigation-20260910`, based on `6ad524c`.
 Executable SHA-256: `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`.
@@ -59,4 +59,4 @@ py -3 artifacts\research\submenus-0319\capture_menu.py
 
 It verifies the executable hash, resolves the actual loaded image base, requires the matching current log, validates the logged submenu class, and uses only process query/read access. It sends no input and writes no game memory. It saves the page fields, manager stacks, focus-map entries, visible-state markers, menu-owned text tree, Inventory row records, loaded text banks, and raw read segments to a timestamped JSON file beside the script. Selected control trees and their parent chains are captured separately because ScrollView containers are not all traversable through the base Node child vector.
 
-Use that snapshot to identify the exact rejecting gate: manager selection/disabled state, map resolution, control ownership/visibility, Inventory row data/text, rendered-label availability, or coherence. Follow with a regression fixture from the observed layout, implement the supported fix, test, then package/deploy with the game closed. Preserve working Save, battle, navigation, and footsteps.
+The Equipment character-card capture was saved before the game closed. A deeper equipment-selection capture was requested but was not obtained before deployment. On the next test, open Equipment and press X on Crono to enter the slot/item controls. Use that snapshot to identify any remaining rejecting gate: manager selection/disabled state, map resolution, control ownership/visibility, rendered-label availability, or coherence. Preserve working Save, battle, navigation, and footsteps.
