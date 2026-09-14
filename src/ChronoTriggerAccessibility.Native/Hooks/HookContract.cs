@@ -133,6 +133,12 @@ public enum HookId
     WorldNavigationPadInstruction,
     WorldNavigationPadGateInstruction,
     WorldNavigationPadSecondInstruction,
+    BattleHudRefresh,
+    BattleMenuDestructor,
+    BattleMessageDisplay,
+    BattleDamageNumber,
+    BattleMiss,
+    BattleDamageRender,
 }
 
 public enum X86CallingConvention
@@ -140,6 +146,20 @@ public enum X86CallingConvention
     MicrosoftThiscall,
     MicrosoftFastcall,
 }
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void BattleMenuMemberDelegate(nint menu);
+
+// Native string/vector temporaries occupy unused raw stack words. Forward every
+// word unchanged: both presenters clean up 0x1C bytes even where Ghidra omits args.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void BattleSevenWordDelegate(nint menu, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void BattleMissDelegate(nint menu, nint a1, nint a2, nint a3, nint a4);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void BattleRenderDelegate(nint menu, nint a1, nint a2);
 
 public enum NativeHookKind
 {

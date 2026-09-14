@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ChronoTriggerAccessibility.Core.Startup;
 using ChronoTriggerAccessibility.Mod.Dialogue;
+using ChronoTriggerAccessibility.Mod.Battle;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Extras;
 using ChronoTriggerAccessibility.Mod.Intro;
@@ -156,8 +157,19 @@ public sealed class Mod : ModBase
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); },
             footsteps.Suspend, World, context => World(context), footsteps.SetGuidance);
+        var battle = new BattleRuntime(navigationSpeech.Publish, new BattleKeyboard(),
+            NavigationKeyboard.IsGameForeground, _ =>
+            {
+                navigation.Suspend("battle state changed");
+                footsteps.Suspend();
+            });
+        var battleSession = new BattleSession(memory, battle, dispatcher.RecordDiagnostic);
+        var battleHooks = new BattleHookSet(hookFactory, battleSession.Tick, battleSession.Close,
+            battleSession.Message, battleSession.Number, battleSession.Miss, battleSession.Render,
+            battleSession.BindImageBase, battleSession.Disable);
         var navigationHooks = new FieldNavigationHookSet(asmHookFactory, (engine, pad) =>
         {
+            if (battle.IsActive) return pad;
             var accepted = navigation.OnInput(engine, pad);
             footsteps.OnInput(engine, accepted);
             return accepted;
@@ -165,9 +177,10 @@ public sealed class Mod : ModBase
             () => { navigation.Disable(); footsteps.Disable(); });
         var worldHooks = new WorldNavigationHookSet(asmHookFactory, (context, pad) =>
         {
+            if (battle.IsActive) return;
             var accepted = navigation.OnWorldInput(context, pad);
             footsteps.OnWorldInput(context, accepted);
-        }, navigation.ApplyWorldPad, image =>
+        }, (context, pad) => battle.IsActive ? pad : navigation.ApplyWorldPad(context, pad), image =>
         {
             navigationImageBase = image;
             worldSource.BindImageBase(image);
@@ -214,6 +227,7 @@ public sealed class Mod : ModBase
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
             .Concat(worldHooks.Registrations)
+            .Concat(battleHooks.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -228,6 +242,7 @@ public sealed class Mod : ModBase
             introTrace,
             navigationHooks,
             worldHooks,
+            battleHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -242,6 +257,7 @@ public sealed class Mod : ModBase
             introTrace,
             navigationHooks,
             worldHooks,
+            battleHooks,
             installer);
     }
 
@@ -269,4 +285,5 @@ public sealed record CompleteAccessibilityComposition(
     IntroTraceHookSet IntroTraceHookSet,
     FieldNavigationHookSet FieldNavigationHookSet,
     WorldNavigationHookSet WorldNavigationHookSet,
+    BattleHookSet BattleHookSet,
     ReloadedHookInstaller Installer);

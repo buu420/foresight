@@ -153,12 +153,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredTwentyEightUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredThirtyFourUniqueContracts()
     {
-        Assert.Equal(128, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(134, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

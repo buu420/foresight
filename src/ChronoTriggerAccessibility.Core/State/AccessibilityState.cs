@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Core.Announcements;
+using ChronoTriggerAccessibility.Core.Battle;
 using ChronoTriggerAccessibility.Core.Dialogue;
 using ChronoTriggerAccessibility.Core.Events;
 using ChronoTriggerAccessibility.Core.Menus;
@@ -18,6 +19,7 @@ public sealed class AccessibilityState
     private readonly NewGameNarrator newGameNarrator = new();
     private readonly MenuNarrator menuNarrator = new();
     private readonly DialogueNarrator dialogueNarrator = new();
+    private readonly BattleNarrator battleNarrator = new();
 
     public int Generation { get; private set; }
 
@@ -25,6 +27,7 @@ public sealed class AccessibilityState
     {
         return accessibilityEvent switch
         {
+            BattleAccessibilityEvent battleEvent => battleNarrator.Apply(battleEvent),
             // Explicit repeats must speak even when the destination has not changed.
             NavigationAnnouncement navigation when !string.IsNullOrWhiteSpace(navigation.Text) => [Interrupt(navigation.Text)],
             MenuAccessibilityEvent menuEvent => menuNarrator.Apply(menuEvent),
