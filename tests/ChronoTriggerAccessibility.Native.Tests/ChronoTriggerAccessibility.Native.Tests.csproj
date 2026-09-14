@@ -12,5 +12,6 @@
     <EmbeddedResource Include="Capture\navigation-collision-native-vectors.json" />
     <EmbeddedResource Include="Capture\field-submenu-native-0319.json" />
     <EmbeddedResource Include="Capture\field-submenu-native-0320.json" />
+    <EmbeddedResource Include="Capture\field-submenu-native-0321.json" />
   </ItemGroup>
 </Project>

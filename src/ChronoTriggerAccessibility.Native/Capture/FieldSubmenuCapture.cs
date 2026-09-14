@@ -12,10 +12,10 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 /// the player pressed.</para>
 /// <para>The selection is resolved the way the native focus setter at 0x1DD3E0 resolves it: the
 /// manager's focus key is looked up in the manager's own focusable map, which yields the
-/// <c>FocusableState</c> holding the focused control. Only that one control's subtree is read; the
-/// menu is never swept.</para>
+/// <c>FocusableState</c> holding the focused control. Party additionally correlates its icon
+/// controls with separate character cards; see docs/party-0321-native-audit.md.</para>
 /// </summary>
-public sealed class FieldSubmenuCapture(IReadableMemory memory)
+public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
 {
     public const uint ItemGroupTableRva = 0x39906C;
     public const int ItemGroupCount = 13;
@@ -164,6 +164,10 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     {
         try
         {
+            if (imageBase != 0 && node != 0 && Pointer(node, out var vtable) &&
+                vtable == imageBase + ClassicFormationNodeVtableRva)
+                return CaptureFormation(imageBase, node);
+
             if (imageBase == 0 || !TryReadPageState(imageBase, node, out var state))
             {
                 return null;
@@ -501,6 +505,14 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     private bool TryFindFocusableControl(nuint imageBase, nuint manager, uint key, out nuint control)
     {
         control = 0;
+        return TryFindManagerState(manager, key, out var state) &&
+            Pointer(state, out var stateVtable) && stateVtable == imageBase + FocusableStateVtableRva &&
+            Pointer(state + FocusableStateControlOffset, out control);
+    }
+
+    private bool TryFindManagerState(nuint manager, uint key, out nuint state)
+    {
+        state = 0;
         if (!Pointer(manager + FocusableMapOffset, out var map) ||
             !Pointer(map + MapSentinelOffset, out var sentinel))
         {
@@ -520,15 +532,7 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
                 continue;
             }
 
-            if (!Pointer(node + ListValueOffset, out var state) ||
-                !Pointer(state, out var stateVtable) || stateVtable != imageBase + FocusableStateVtableRva ||
-                !Pointer(state + FocusableStateControlOffset, out control))
-            {
-                control = 0;
-                return false;
-            }
-
-            return true;
+            return Pointer(node + ListValueOffset, out state);
         }
 
         return false;

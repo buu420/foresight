@@ -421,7 +421,6 @@ public sealed class FieldSubmenuCaptureTests
 
     [Theory]
     [InlineData(FieldSubmenuCapture.ClassicTechNodeVtableRva, "Tech", 0x22, "Tech")]
-    [InlineData(FieldSubmenuCapture.ClassicFormationNodeVtableRva, "Formation", 0x25, "Party")]
     [InlineData(FieldSubmenuCapture.EquipSteamNodeVtableRva, "Equipment", 0x20, "Equip")]
     public void TheOtherPagesReportTheLabelsRenderedInsideTheirFocusedControl(
         uint vtable, string kind, int captionId, string caption)
@@ -584,8 +583,8 @@ public sealed class FieldSubmenuCaptureTests
     public void AnInvisibleFocusedControlContributesNoText()
     {
         var world = World();
-        world.Pointer(Node, ImageBase + FieldSubmenuCapture.ClassicFormationNodeVtableRva);
-        world.Message(0x23, 0x25, "Party");
+        world.Pointer(Node, ImageBase + FieldSubmenuCapture.ClassicTechNodeVtableRva);
+        world.Message(0x23, 0x22, "Tech");
         var control = FocusPanel(world, "Crono");
         world.Byte(control + 0x1AD, 0);
 

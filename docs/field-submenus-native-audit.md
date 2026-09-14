@@ -220,10 +220,13 @@ conflict, but the two must not be conflated.
 
 ## 7. Tech and Formation
 
-Their selected detail is rendered into the focused control itself, so the capture reports the Labels
-inside that one control through `RenderedNodeTextCapture.Read`, which walks only that subtree. That
-yields the tech row with whatever MP and description the game renders beside it, and the party
-member on a Formation slot. Nothing outside the focused control is read.
+Tech character selectors read the Labels inside their focused control; the separate Tech detail
+reader handles ability rows. Formation uses icon-only buttons and separate character cards.
+Version 0.3.21 correlates keys 0..2 and 10..15 with those cards and handles native key 999 as a
+locked intended member with no focused control. It also reads the owned usable-combos panel.
+The [Party audit](party-0321-native-audit.md) provides the native writers, live capture, ownership
+checks and boundaries of runtime verification; the earlier generic focused-control assumption
+does not apply to Formation.
 
 ## 8. Gates applied to every page
 
@@ -234,8 +237,9 @@ member on a Formation slot. Nothing outside the focused control is read.
    (`0x3A60A0`) is refused by the generic label reader, because its subtree is every visible row.
    The Inventory row path does not use that reader, so a focused inventory list view is still served
    from its own row data.
-3. **Selection-sized.** More than twelve rendered Label lines is refused as a panel reached in
-   error. The Equipment detail container is a panel by design and has its own bound of 32.
+3. **Bounded rendered text.** Selected controls and Party cards allow up to 64 Label fragments
+   (a character card uses separate fragments for captions, values and colons). The Equipment
+   detail container is a panel by design and has its own bound of 32.
 4. **Inventory only.** The row path is taken only when the control also descends from the node's
    list view at `node + 0x2C8`; otherwise the focused control's own labels are reported, so standing
    on a category button never announces an inventory row.
