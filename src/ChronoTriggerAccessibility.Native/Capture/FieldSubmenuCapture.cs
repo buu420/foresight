@@ -108,11 +108,12 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     public const int ItemRowStride = 12;
     /// <summary>Encoded item id, pushed straight into the help updater at 0x1C75F7.</summary>
     public const int ItemRowEncodedIdOffset = 0;
-    /// <summary>Quantity; the row renderer skips the row when this is not positive (0x1C7FCD).</summary>
+    /// <summary>Quantity; the item-use handler refuses nonpositive quantities (0x1C7FCD).</summary>
     public const int ItemRowQuantityOffset = 4;
     /// <summary>Cursor row, -1 when nothing is selected (0x1C75E8, cleared at 0x1C5C6A).</summary>
     public const uint ItemCursorOffset = 0x2F8;
-    /// <summary>Help panel visibility, set at 0x1C76D1 and cleared at 0x1C7691.</summary>
+    /// <summary>Help mode, set for nonnegative encoded IDs at 0x1C76D1 and cleared at 0x1C7691.
+    /// This includes the empty placeholder's ID zero and does not prove nonempty help text.</summary>
     public const uint ItemHelpVisibleOffset = 0x2FC;
     /// <summary>Row picked up for reordering, -1 when none (0x1C5B94, reset at 0x1C75B8).</summary>
     public const uint ItemHeldRowOffset = 0x32C;
@@ -551,7 +552,7 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     /// <summary>
     /// Classic Inventory. The node keeps its rows in a plain vector of 12-byte records at
     /// +0x2D0/+0x2D4: the encoded item id the help updater consumes at 0x1C75F7 and the quantity
-    /// the row renderer requires to be positive at 0x1C7FCD. The cursor is +0x2F8 and the row the
+    /// the item-use handler requires to be positive at 0x1C7FCD. The cursor is +0x2F8 and the row the
     /// player has picked up to reorder is +0x32C.
     /// </summary>
     private FieldSubmenuSnapshot? CaptureInventoryRow(
