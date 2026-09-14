@@ -251,12 +251,40 @@ public sealed class DialogueCaptureTests
         AssertFails(memory, "visible page");
     }
 
-    [Fact]
-    public void TryCreateSnapshot_OrdinaryPhaseCannotExposeChoiceFlagAsDialogueLine()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void TryCreateSnapshot_PromptAdvanceToChoiceIsCompleteWithoutPrematureChoiceSpeech(int phase)
     {
-        var memory = CreateMemory(["Yes"], [0x10], currentLine: 0, pageBase: 0, phase: 0);
+        var memory = CreateMemory(
+            ["Guess winner?", "Sure!", "Not this time."], [0, 0x10, 0x10],
+            currentLine: 1, pageBase: 0, phase: phase);
 
-        AssertFails(memory, "choice flag");
+        var status = DialogueCapture.CaptureStatus(
+            memory, ImageBase, WindowAddress, out var snapshot, out var error);
+
+        Assert.Equal(DialogueCaptureStatus.Complete, status);
+        Assert.Empty(error);
+        Assert.Equal(1, snapshot.Cursor);
+        Assert.Equal(phase, snapshot.Phase);
+        Assert.Null(snapshot.Line);
+        Assert.Null(snapshot.Choices);
+    }
+
+    [Fact]
+    public void TryCreateSnapshot_ChoiceOnlyWindowCanOpenBeforeChoicesAreCommitted()
+    {
+        var memory = CreateMemory(
+            ["Steel Runner", "Green Ambler", "Catalack", "G.I. Jogger"],
+            [0x10, 0x10, 0x10, 0x10], currentLine: 0, pageBase: 0, phase: 0);
+
+        var status = DialogueCapture.CaptureStatus(
+            memory, ImageBase, WindowAddress, out var snapshot, out var error);
+
+        Assert.Equal(DialogueCaptureStatus.Complete, status);
+        Assert.Empty(error);
+        Assert.Null(snapshot.Line);
+        Assert.Null(snapshot.Choices);
     }
 
     [Theory]

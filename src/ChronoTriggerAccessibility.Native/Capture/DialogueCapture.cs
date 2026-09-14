@@ -251,13 +251,11 @@ public static class DialogueCapture
                 new ReadOnlyCollection<uint>(capturedFlags),
                 selectedChoice);
         }
-        else if (phase is 0 or 2 && cursor < strings.Count)
+        // MsgWindowUpdate can advance onto a choice while phase remains 0 or 2.
+        // The next update constructs the choice controls and commits phase 4.
+        // Until then, the parsed choice is neither ordinary dialogue nor an active choice.
+        else if (phase is 0 or 2 && cursor < strings.Count && (flags[cursor] & ChoiceFlag) == 0)
         {
-            if ((flags[cursor] & ChoiceFlag) != 0)
-            {
-                error = $"Dialogue ordinary phase {phase} current line {cursor} unexpectedly has the 0x10 choice flag.";
-                return false;
-            }
             if (string.IsNullOrWhiteSpace(strings[cursor]))
             {
                 error = $"Dialogue current line {cursor} is blank.";

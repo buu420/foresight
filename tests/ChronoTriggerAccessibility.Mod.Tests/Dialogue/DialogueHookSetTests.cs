@@ -328,6 +328,95 @@ public sealed class DialogueHookSetTests
             item => Assert.IsType<DialogueClosed>(item));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void RacePredictionTransitionsReadBothChoiceListsAndAllRunnerFocusChanges(int promptPhase)
+    {
+        const string prompt = "Try and guess the next winner?";
+        string[] answers = ["Sure!", "Not this time."];
+        string[] promptLines = [prompt, .. answers];
+        uint[] promptFlags = [0, 0x10, 0x10];
+        string[] runners =
+        [
+            "No. 1   Steel Runner", "No. 2   Green Ambler",
+            "No. 3   Catalack", "No. 4   G.I. Jogger",
+        ];
+        uint[] runnerFlags = [0x10, 0x10, 0x10, 0x10];
+        var harness = CreateHarness();
+        harness.Memory.SetSnapshot(Window, promptLines, promptFlags,
+            cursor: 0, pageBase: 0, phase: 0, choiceCount: 0, selectedIndex: -1, active: 1);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        // The native update advances the cursor before it commits the choice controls.
+        harness.Memory.SetSnapshot(Window, promptLines, promptFlags,
+            cursor: 1, pageBase: 0, phase: promptPhase, choiceCount: 0, selectedIndex: -1, active: 1);
+        harness.Update();
+        harness.Update();
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Collection(harness.Dispatcher.Events,
+            item => Assert.IsType<DialogueOpened>(item),
+            item => Assert.Equal(new DialogueLinePresented(0, 0, prompt), item));
+
+        harness.Memory.SetSnapshot(Window, promptLines, promptFlags,
+            cursor: 3, pageBase: 0, phase: 4, choiceCount: 2, selectedIndex: -1, active: 1);
+        harness.Update();
+        harness.Update();
+        harness.Memory.SetSnapshot(Window, promptLines, promptFlags,
+            cursor: 3, pageBase: 0, phase: 4, choiceCount: 2, selectedIndex: 0, active: 1);
+        harness.Update();
+        harness.Assembly.Invoke(Window);
+        harness.Close();
+
+        // The next window contains four choices and no ordinary prompt line.
+        harness.Memory.SetSnapshot(Window, runners, runnerFlags,
+            cursor: 0, pageBase: 0, phase: 0, choiceCount: 0, selectedIndex: -1, active: 1);
+        harness.Open();
+        harness.Update();
+        Assert.Single(harness.Dispatcher.Events.OfType<DialogueChoicesPresented>());
+        Assert.Single(harness.Dispatcher.Events.OfType<DialogueLinePresented>());
+        harness.Memory.SetSnapshot(Window, runners, runnerFlags,
+            cursor: 4, pageBase: 0, phase: 4, choiceCount: 4, selectedIndex: -1, active: 1);
+        harness.Update();
+        harness.Update();
+        for (var index = 0; index < runners.Length; index++)
+        {
+            harness.Memory.SetSnapshot(Window, runners, runnerFlags,
+                cursor: 4, pageBase: 0, phase: 4, choiceCount: 4, selectedIndex: index, active: 1);
+            harness.Update();
+            harness.Update();
+        }
+        harness.Assembly.Invoke(Window);
+        harness.Close();
+        harness.Memory.SetOrdinary(Window, ["Good luck!"], cursor: 0, pageBase: 0);
+        harness.Open();
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Collection(harness.Dispatcher.Events.OfType<DialogueChoicesPresented>(),
+            item => AssertChoices(item, answers, -1),
+            item => AssertChoices(item, runners, -1));
+        Assert.Equal(
+            new[] { new DialogueChoiceFocused(answers[0], 0, 2) }
+                .Concat(runners.Select((label, index) => new DialogueChoiceFocused(label, index, 4))),
+            harness.Dispatcher.Events.OfType<DialogueChoiceFocused>());
+        Assert.Equal(
+            [new DialogueChoiceActivated(answers[0]), new DialogueChoiceActivated(runners[3])],
+            harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        Assert.Equal(2, harness.Dispatcher.Events.Count(item => item is DialogueClosed));
+        Assert.Equal(new DialogueLinePresented(0, 0, "Good luck!"), harness.Dispatcher.Events.Last());
+
+        var narrator = new DialogueNarrator();
+        var speech = harness.Dispatcher.Events.SelectMany(narrator.Apply).Select(item => item.Text).ToArray();
+        Assert.Contains(prompt, speech);
+        Assert.All(answers.Concat(runners), label => Assert.Contains(label, speech));
+        Assert.All(runners.Select((label, index) => $"{label}, {index + 1} of 4"),
+            focused => Assert.Contains(focused, speech));
+        Assert.Contains($"{runners[3]} selected.", speech);
+        Assert.Equal("Good luck!", speech.Last());
+    }
+
     [Fact]
     public void SameUpdateMovementThenConfirmUsesFreshPreCloseChoiceAndPublishesFocusFirst()
     {
@@ -932,7 +1021,7 @@ public sealed class DialogueHookSetTests
             }
         }
 
-        private void SetSnapshot(
+        public void SetSnapshot(
             nuint window,
             IReadOnlyList<string> strings,
             IReadOnlyList<uint> flags,
@@ -971,7 +1060,21 @@ public sealed class DialogueHookSetTests
                 for (var index = 0; index < strings.Count; index++)
                 {
                     var address = checked(stringBase + (nuint)(index * MsvcStringReader.LayoutSize));
-                    segments[address] = CreateInlineString(strings[index]);
+                    var encoded = Encoding.UTF8.GetBytes(strings[index]);
+                    if (encoded.Length < 16)
+                    {
+                        segments[address] = CreateInlineString(strings[index]);
+                    }
+                    else
+                    {
+                        var dataAddress = checked(window + 0x8000u + (nuint)(index * 0x1000));
+                        var layout = new byte[MsvcStringReader.LayoutSize];
+                        WriteUInt32(layout, 0, checked((uint)dataAddress));
+                        WriteUInt32(layout, 0x10, checked((uint)encoded.Length));
+                        WriteUInt32(layout, 0x14, checked((uint)encoded.Length));
+                        segments[address] = layout;
+                        segments[dataAddress] = encoded;
+                    }
                 }
                 var flagBytes = new byte[flags.Count * sizeof(uint)];
                 for (var index = 0; index < flags.Count; index++)
