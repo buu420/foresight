@@ -42,8 +42,19 @@ Manifest SHA-256:
 
 ## Deployment and player check
 
-The package is ready; installation is waiting for the player to close the running game.
-After installation, reopen Party to check actual speech. The live evidence in this release covers
+Installed September 14, 2026 after the player closed the game. All **25 deployment checks passed**,
+including the existing launch redirect and x86 .NET 9.0.17 runtime. Every installed file matched its
+source: **28 mod files, 45 loader/shared-hook files, and two native launcher/installer executables**.
+The installed assembly's product version and DLL/manifest hashes match the tested package above;
+the game executable is unchanged.
+
+Installed mod:
+`X:\SteamLibrary\steamapps\common\Chrono Trigger\Reloaded-II\Mods\chrono.trigger.accessibility`.
+
+Previous installation retained at:
+`X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260914-180427`.
+
+Relaunch normally and reopen Party to check actual speech. The live evidence in this release covers
 only the locked single-member screen. Multi-member selection, reserve members, swaps, and populated
 combo lists are supported by native-code research and synthetic tests, not live player verification.
 
