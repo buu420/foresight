@@ -2,7 +2,7 @@
 
 Research for the requested battle accessibility subsystem, 2026-09-14. The first sections record the initial audit; the integration section below records the implemented reader. All findings below are offline observations of the supported executable, SHA256 `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`, image base `0x400000`. Addresses are RVAs.
 
-The companion command, target and lifecycle investigation is [battle-interface-native-audit.md](battle-interface-native-audit.md). Evidence is retained under `artifacts/research/battle-0317/`. The next test release is 0.3.17.
+The companion command, target and lifecycle investigation is [battle-interface-native-audit.md](battle-interface-native-audit.md). Evidence is retained under `artifacts/research/battle-0317/`. Version 0.3.17 is installed as a test release.
 
 ## Party HP and MP
 
@@ -116,4 +116,10 @@ Claude reviewed capture bounds, slot versus character indexing, six hook ABIs, l
 
 Battle uses the existing synchronous Prism dispatcher only for changed selections, discrete results, and requested inspections. The pinned [Prism NVDA backend](https://github.com/ethindp/prism/blob/9911156998b52fee91fb2cb4f71ac793d4e546c7/source/backends/nvda.cpp) submits controller RPC without waiting for speech completion. The bridge call itself is synchronous, and alternative backends can take longer; no universal nonblocking or measured battle-latency claim is made. The battle lock has no reverse acquisition from the semantic dispatcher. Hook disabling precedes speech detachment during shutdown.
 
-The Release regression suite passed 1,304 tests: Core 132, Native 603, Mod 561, Prism 8. The final manifest uses canonical LF line endings and is checked byte-for-byte by the manifest and packaging tests. All 134 hook signatures match the installed executable. The real-game checks listed above remain pending. Deployment evidence will be retained at `artifacts/research/release-0317/deployment-proof.json` after the transaction succeeds.
+The Release regression suite passed 1,304 tests: Core 132, Native 603, Mod 561, Prism 8. The final manifest uses canonical LF line endings and is checked byte-for-byte by the manifest and packaging tests. All 134 hook signatures match the installed executable. The real-game checks listed above remain pending. Deployment evidence is retained at `artifacts/research/release-0317/deployment-proof.json`. The canonical LF manifest/package checks were rerun after line-ending normalization: all three passed.
+
+Version 0.3.17 was built from commit `72803f41fd7596ef0d061277a5e3e8713e8845df` and deployed while the game was closed. All 25 deployment checks passed, including the existing launch redirect and unchanged game executable. All 28 installed mod files, 45 loader/shared-hook files, and both launcher binaries match their packaged or vendored SHA256 values. The previous installation is retained in `Accessibility/Backups/20260914-030434`. The verified source was fast-forwarded into main, preserving unrelated untracked files.
+
+- Installed Mod DLL SHA256: `9268D0EEE683832ECF5D5047F9E65F8554BE5D6157965BB7B1CF828737159B23`.
+- Installed manifest SHA256: `CE8A15AECDA59894EC841CAE64FD2936DE0707832BF0401BDC5BE64FAD09E743`.
+- Real battle execution remains unverified; no game input was sent during this release.

@@ -84,8 +84,10 @@ Files: update README.md, ModConfig.json, manifest/package tests and release evid
 
 - [x] Review implementation against all seven spec acceptance checks and obtain Claude's bounded code review.
 - [x] Run full solution tests, exact hook-byte verification and git diff --check; fix any demonstrated failures and rerun affected checks.
-- [ ] Bump version to 0.3.17, commit the verified source, package using tools/Package-Mod.ps1 and deploy using tools/Deploy-Mod.ps1 while the game is closed.
-- [ ] Compare deployed mod/loader/shared-hook hashes, retain transactional backup and merge the verified branch into the clean main checkout without changing unrelated files.
-- [ ] Report installed version, controls, test evidence and the remaining live battle test. Do not call a feature live-verified from synthetic fixtures.
+- [x] Bump version to 0.3.17, commit the verified source, package using tools/Package-Mod.ps1 and deploy using tools/Deploy-Mod.ps1 while the game is closed.
+- [x] Compare deployed mod/loader/shared-hook hashes, retain transactional backup and merge the verified branch into the clean main checkout without changing unrelated files.
+- [x] Report installed version, controls, test evidence and the remaining live battle test. Do not call a feature live-verified from synthetic fixtures.
 
 Final offline verification: 1,304 Release tests (132 Core, 603 Native, 561 Mod, 8 Prism), 134 exact hook signatures. Initial suite failures were stale 0.3.16 manifest expectations; the version, description and canonical LF SHA256 are updated. Claude completed the bounded review; native semantics that remain unproven are not assigned in speech. Live encounter checks remain pending.
+
+Release completed: code commit `72803f41fd7596ef0d061277a5e3e8713e8845df`; installed 0.3.17; 25 deployment checks passed; 28 mod files, 45 loader/shared-hook files and both launchers match; backup `Accessibility/Backups/20260914-030434`. Source integrated into main. Live battle testing remains pending, as reported to the player.
