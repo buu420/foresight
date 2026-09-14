@@ -16,7 +16,7 @@ public static class StoryTarget
         var nearest = choices.FirstOrDefault();
         if (nearest is null) return Note("story:" + key, label,
             (instruction is null ? "" : instruction + " ") +
-            "The destination is not active in the current area.");
+            "The mod cannot locate this destination yet.");
         return nearest with { Id = "story:" + key, Label = label, Category = NavigationCategory.StoryEvents,
             GuideAvailable = true,
             // Share the search budget across alternatives. A large exit on another
@@ -31,7 +31,7 @@ public static class StoryTarget
         var target = available.FirstOrDefault(t => t.Id == id);
         return target is null
             ? Note("story:" + id, label, (instruction is null ? "" : instruction + " ") +
-                "The destination is not active in the current area.")
+                "The mod cannot locate this destination yet.")
             : target with { Id = "story:" + id, Label = label, Category = NavigationCategory.StoryEvents,
                 GuideAvailable = true, Instruction = instruction };
     }

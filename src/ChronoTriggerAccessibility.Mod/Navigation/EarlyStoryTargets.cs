@@ -56,7 +56,9 @@ public static class EarlyStoryTargets
                 else Bind("try-telepod", "Try the left Telepod", ["landmark:12"], "Step onto the left pod, as Lucca requested.");
                 break;
             case 8 when p == 12:
-                Bind("follow-marle", "Pick up Marle's pendant", ["actor:11:4:99"]);
+                var pendant = StoryTarget.BindAny("follow-marle", "Pick up Marle's pendant", available,
+                    ["actor:11:4:99"], player, "The pendant is on the left Telepod.");
+                result.Add(pendant with { ArrivalInstruction = "Face the pendant and use confirm to pick it up." });
                 break;
             case 113 when p < 15:
                 Exit("leave-clearing", "Explore Truce Canyon", [0]);
@@ -253,11 +255,15 @@ public static class EarlyStoryTargets
     public static bool IsTouchLandmark(int scene, int actor) =>
         (scene, actor) is (8, 12) or (120, 17) or (122, 24);
 
-    // Atel_0074 actor 15 uses 54/10 to show the dropped pendant. Its pickup
-    // script sets 54/20 and clears 54/10. The native +152 byte can be zero
-    // while this scripted pickup is present, so it cannot gate this target.
+    // These two script pickups can be drawn while the native +152 activation
+    // byte is zero. Atel_0074 actor 15 uses the dropped/collected bits; Atel_0028
+    // actor 11 checks story point 12 before drawing the Telepod pendant.
     public static bool IsScriptedPickupAvailable(int scene, FieldStoryState? state, FieldActorSnapshot actor) =>
-        scene == 439 && state is { Point: 6 } &&
-        actor.Index == 15 && actor.ClassTag == 4 && actor.VisualIndex == 99 && actor.ActivationBinding != 0 &&
-        state.Flag(0x54, 0x10) == true && state.Flag(0x54, 0x20) == false;
+        actor.ClassTag == 4 && actor.VisualIndex == 99 && actor.ActivationBinding != 0 &&
+        (scene, actor.Index, state?.Point) switch
+        {
+            (439, 15, 6) => state!.Flag(0x54, 0x10) == true && state.Flag(0x54, 0x20) == false,
+            (8, 11, 12) => true,
+            _ => false,
+        };
 }

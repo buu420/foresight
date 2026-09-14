@@ -50,7 +50,7 @@ public sealed class ModManifestTests
         Assert.Equal("chrono.trigger.accessibility", root.GetProperty("ModId").GetString());
         Assert.Equal("Chrono Trigger Accessibility", root.GetProperty("ModName").GetString());
         Assert.Equal("Chrono Trigger Accessibility Project", root.GetProperty("ModAuthor").GetString());
-        Assert.Equal("0.3.14", root.GetProperty("ModVersion").GetString());
+        Assert.Equal("0.3.15", root.GetProperty("ModVersion").GetString());
         Assert.Equal("Screen-reader access for Chrono Trigger startup, menus, Settings, Extras, field dialogue, and local/world navigation.", root.GetProperty("ModDescription").GetString());
         Assert.Equal("ChronoTriggerAccessibility.Mod.dll", root.GetProperty("ModDll").GetString());
         Assert.Equal(string.Empty, root.GetProperty("ModIcon").GetString());
@@ -74,7 +74,7 @@ public sealed class ModManifestTests
         Assert.Equal(string.Empty, root.GetProperty("ProjectUrl").GetString());
 
         Assert.Equal(
-            "34EFF8EB60497C8394C79C77F28EF1516EB2F64CAD3CBE4FF96C70941D595E3D",
+            "D864B32441024BD1703A461B3543A32EA713C9CAEAE32574F8EF72F046FF6596",
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))));
     }
 
