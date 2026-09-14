@@ -8,6 +8,7 @@ using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Navigation;
 using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Mod.Reloaded;
+using ChronoTriggerAccessibility.Mod.SaveLoad;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Settings;
 using ChronoTriggerAccessibility.Mod.Startup;
@@ -181,6 +182,7 @@ public sealed class Mod : ModBase
         var steamSettings = new SteamSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var touchSettings = new TouchSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var topMenu = new TopMenuHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
+        var saveLoad = new SaveLoadConfirmationHookSet(sharedFanout, memory, dispatcher);
 
         var startupTitle = new StartupTitleHookSet(
             sharedFanout,
@@ -197,7 +199,8 @@ public sealed class Mod : ModBase
 
         // Root shared-hook owners are constructed only after the complete, ordered observer
         // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
-        sharedFanout.ConfigureObservers([startupTitle, newGame, extras, steamSettings, touchSettings, topMenu]);
+        sharedFanout.ConfigureObservers(
+            [startupTitle, newGame, extras, steamSettings, touchSettings, topMenu, saveLoad]);
         var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder);
         var registrations = startupTitle.Registrations
@@ -206,6 +209,7 @@ public sealed class Mod : ModBase
             .Concat(steamSettings.Registrations)
             .Concat(touchSettings.Registrations)
             .Concat(topMenu.Registrations)
+            .Concat(saveLoad.Registrations)
             .Concat(dialogue.Registrations)
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
@@ -219,6 +223,7 @@ public sealed class Mod : ModBase
             steamSettings,
             touchSettings,
             topMenu,
+            saveLoad,
             dialogue,
             introTrace,
             navigationHooks,
@@ -232,6 +237,7 @@ public sealed class Mod : ModBase
             steamSettings,
             touchSettings,
             topMenu,
+            saveLoad,
             dialogue,
             introTrace,
             navigationHooks,
@@ -258,6 +264,7 @@ public sealed record CompleteAccessibilityComposition(
     SteamSettingsHookSet SteamSettingsHookSet,
     TouchSettingsHookSet TouchSettingsHookSet,
     TopMenuHookSet TopMenuHookSet,
+    SaveLoadConfirmationHookSet SaveLoadConfirmationHookSet,
     DialogueHookSet DialogueHookSet,
     IntroTraceHookSet IntroTraceHookSet,
     FieldNavigationHookSet FieldNavigationHookSet,

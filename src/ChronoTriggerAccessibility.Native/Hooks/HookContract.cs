@@ -39,6 +39,8 @@ public enum HookId
     EndingDetailCallback,
     ExtrasLogTransition,
     ExtrasDetailTransition,
+    SaveLoadConfirmationBuilder,
+    SaveLoadNodeDestructor,
     MenuNodeConfigSteamConstructor,
     MenuNodeConfigSteamBuilder,
     MenuNodeConfigSteamDestructor,
@@ -337,6 +339,17 @@ public delegate void ExtrasLogTransitionDelegate(nint payload);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ExtrasDetailTransitionDelegate(nint payload);
+
+// nsMenu::MenuNodeSaveLoadSteam::openConfirm at RVA 0x21A1D0. The mode that selects the
+// prompt lives on the node at +0x2CC; the slot argument is the save file the confirmation
+// is about, and is 0 for the Resume and bookmark modes that confirm on open.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SaveLoadConfirmationBuilderDelegate(nint node, int slot);
+
+// nsMenu::MenuNodeSaveLoadSteam::~MenuNodeSaveLoadSteam at RVA 0x218860, the body the
+// deleting destructor at 0x218930 calls. It rewrites the vtable at 0x218888.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SaveLoadNodeDestructorDelegate(nint node);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint MenuNodeConfigSteamConstructorDelegate(nint instance, int context);

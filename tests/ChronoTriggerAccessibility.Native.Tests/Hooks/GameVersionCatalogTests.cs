@@ -43,6 +43,8 @@ public sealed class GameVersionCatalogTests
         { HookId.EndingDetailCallback, "Ending Detail callback", 0x1D35A0, "558BEC8B4508568BF183E800745983E801744083E8010F85", typeof(EndingDetailCallbackDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.ExtrasLogTransition, "Extras Ending Log transition", 0x2A5E20, "558BEC6AFF6810AC770064A1000000005083EC5CA1D0A07F", typeof(ExtrasLogTransitionDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.ExtrasDetailTransition, "Extras Ending Detail transition", 0x2A60C0, "558BEC6AFF68CEAC770064A1000000005081EC80010000A1D0A07F0033C58945F0", typeof(ExtrasDetailTransitionDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SaveLoadConfirmationBuilder, "MenuNodeSaveLoadSteam confirmation builder", 0x21A1D0, "558BEC6AFF68EC3F770064A1000000005081ECA0000000A1D0A07F0033C58945", typeof(SaveLoadConfirmationBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SaveLoadNodeDestructor, "MenuNodeSaveLoadSteam destructor", 0x218860, "558BEC6AFF68C75B760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(SaveLoadNodeDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamConstructor, "MenuNodeConfigSteam constructor", 0x1ECB00, "558BEC6AFF681044760064A1000000005056A1D0A07F0033C5508D45F464A300", typeof(MenuNodeConfigSteamConstructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamBuilder, "MenuNodeConfigSteam builder", 0x1ED020, "558BEC6AFF684102770064A1000000005081EC640E0000A1D0A07F0033C58945", typeof(MenuNodeConfigSteamBuilderDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuNodeConfigSteamDestructor, "MenuNodeConfigSteam destructor", 0x1EC970, "558BEC6AFF689EC6760064A100000000505657A1D0A07F0033C5508D45F464A3", typeof(MenuNodeConfigSteamDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -151,12 +153,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredTwentyFourUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredTwentyEightUniqueContracts()
     {
-        Assert.Equal(126, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(126, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(126, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(126, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(128, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(128, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -332,6 +334,8 @@ public sealed class GameVersionCatalogTests
         AssertSignature<EndingDetailCallbackDelegate>(typeof(nint), typeof(int), typeof(int));
         AssertSignature<ExtrasLogTransitionDelegate>(typeof(nint));
         AssertSignature<ExtrasDetailTransitionDelegate>(typeof(nint));
+        AssertSignature<SaveLoadConfirmationBuilderDelegate>(typeof(nint), typeof(int));
+        AssertSignature<SaveLoadNodeDestructorDelegate>(typeof(nint));
         AssertSignatureWithReturn<MenuNodeConfigSteamConstructorDelegate>(typeof(nint), typeof(nint), typeof(int));
         AssertSignature<MenuNodeConfigSteamBuilderDelegate>(typeof(nint));
         AssertSignature<MenuNodeConfigSteamDestructorDelegate>(typeof(nint));

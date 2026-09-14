@@ -26,8 +26,15 @@ public static class EarlyStoryTargets
                 Actor("meet-girl", "Approach the young woman", 3, 1);
                 break;
             case 439 when p == 6:
-                Actor("girl-pendant", state.Flag(0x54, 0x20) == true ? "Return the pendant to the young woman" : "Talk with the young woman", 3, 1);
-                if (state.Flag(0x54, 0x10) == true) Known("pendant", "Pick up the fallen pendant", "actor:15:4:99");
+                if (state.Flag(0x54, 0x20) == true)
+                    Actor("girl-pendant", "Return the pendant to the young woman", 3, 1);
+                else if (state.Flag(0x55, 4) == true && state.Flag(0x54, 0x10) == true)
+                    Bind("pendant", "Pick up the fallen pendant", ["actor:15:4:99"]);
+                else
+                {
+                    Actor("girl-pendant", "Talk with the young woman", 3, 1);
+                    if (state.Flag(0x54, 0x10) == true) Known("pendant", "Pick up the fallen pendant", "actor:15:4:99");
+                }
                 break;
             case 439 when p is >= 8 and < 12:
                 if (state.Flag(0x55, 0x80) is null)
@@ -245,4 +252,12 @@ public static class EarlyStoryTargets
 
     public static bool IsTouchLandmark(int scene, int actor) =>
         (scene, actor) is (8, 12) or (120, 17) or (122, 24);
+
+    // Atel_0074 actor 15 uses 54/10 to show the dropped pendant. Its pickup
+    // script sets 54/20 and clears 54/10. The native +152 byte can be zero
+    // while this scripted pickup is present, so it cannot gate this target.
+    public static bool IsScriptedPickupAvailable(int scene, FieldStoryState? state, FieldActorSnapshot actor) =>
+        scene == 439 && state is { Point: 6 } &&
+        actor.Index == 15 && actor.ClassTag == 4 && actor.VisualIndex == 99 && actor.ActivationBinding != 0 &&
+        state.Flag(0x54, 0x10) == true && state.Flag(0x54, 0x20) == false;
 }

@@ -52,8 +52,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
             // People includes visible characters without a talk action, such as
-            // Crono's cat. The native confirm filter only gates interactable objects.
-            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate) continue;
+            // Crono's cat. Objects require activation or an audited script pickup gate.
+            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate &&
+                !(field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor))) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
@@ -207,7 +208,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
                 $"exitCells={exitCellCount}; visibleExitCells={visibleExitCellCount}; " +
                 $"renderedChests={treasures.Count(t => t.IsChest)}; guidePickups={treasures.Count(t => !t.IsChest)}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
-                $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}";
+                $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}; " +
+                $"storyFlags={string.Join(",", FieldStoryCapture.ObjectiveGlobalIndices.Select(index =>
+                    $"{index:X}={story?.Global(index)?.ToString("X2") ?? "?"}"))}";
             if (inventory == lastInventory) return;
             lastInventory = inventory;
             diagnostic($"Navigation inventory: scene={field.SceneId}; {inventory}; viewport={viewport}.");
