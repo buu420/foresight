@@ -108,19 +108,26 @@ public sealed class FieldSubmenuCaptureTests
         Assert.Equal("Weapons, category", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
     }
 
-    [Fact]
-    public void TheNativeBlankPlaceholderRowAnnouncesAnEmptyInventory()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void TheNativeBlankPlaceholderRowAnnouncesAnEmptyInventory(byte helpMode)
     {
         var world = EmptyInventory();
+        world.Byte(Node + 0x2FC, helpMode);
+        world.Message(0x1D, 0, "Description for item zero, not for the empty placeholder.");
         world.Int32(Manager + 0x2C4, 8);
         FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);
         Assert.Equal("Consumables. Empty.", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
     }
 
-    [Fact]
-    public void ABlankRowWithinANonemptyInventoryIsNotMistakenForAnEmptyCategory()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ABlankRowWithinANonemptyInventoryIsNotMistakenForAnEmptyCategory(byte helpMode)
     {
         var world = EmptyInventory();
+        world.Byte(Node + 0x2FC, helpMode);
         world.Pointer(Node + 0x2D4, Rows + 24);
         world.Int32(Manager + 0x2C4, 8);
         FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);

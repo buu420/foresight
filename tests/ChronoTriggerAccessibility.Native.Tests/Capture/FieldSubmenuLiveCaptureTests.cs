@@ -10,10 +10,10 @@ namespace ChronoTriggerAccessibility.Native.Tests.Capture;
 /// 2026-09-14. These retain the actual ASLR base and retail control/Label layout.</summary>
 public sealed class FieldSubmenuLiveCaptureTests
 {
-    private static (NavigationMemory Memory, uint Image, uint Node) Frame(string name)
+    private static (NavigationMemory Memory, uint Image, uint Node) Frame(string name, string version = "0319")
     {
         using var stream = typeof(FieldSubmenuLiveCaptureTests).Assembly.GetManifestResourceStream(
-            "ChronoTriggerAccessibility.Native.Tests.Capture.field-submenu-native-0319.json")!;
+            $"ChronoTriggerAccessibility.Native.Tests.Capture.field-submenu-native-{version}.json")!;
         using var json = JsonDocument.Parse(stream);
         var frame = json.RootElement.GetProperty("frames").GetProperty(name);
         var memory = new NavigationMemory();
@@ -58,5 +58,15 @@ public sealed class FieldSubmenuLiveCaptureTests
         var (memory, image, node) = Frame("equipment_character");
         memory.Word(0x27488670 + FieldSubmenuCapture.NodeParentOffset, 0);
         Assert.Null(new FieldSubmenuCapture(memory).Capture(image, node));
+    }
+
+    [Fact]
+    public void TheCapturedEmptyItemListReadsWithItsHelpModeEnabled()
+    {
+        var (memory, image, node) = Frame("inventory_empty_row", "0320");
+        var result = new FieldSubmenuCapture(memory).Capture(image, node);
+        Assert.NotNull(result);
+        Assert.Equal("Inventory", result.Title);
+        Assert.Equal("Consumables. Empty.", result.Text);
     }
 }

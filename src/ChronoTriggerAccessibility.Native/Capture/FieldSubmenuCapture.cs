@@ -577,7 +577,9 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
             return null;
         }
 
-        if (count == 1 && cursor == 0 && held == -1 && helpVisible == 0 &&
+        // The retail game enables help mode even on the blank placeholder. Its quantity and
+        // matching category heading establish emptiness; it has no item description to read.
+        if (count == 1 && cursor == 0 && held == -1 &&
             TryReadEmptyInventory(imageBase, node, out var category, out var categoryName))
         {
             rowKey = key;
