@@ -7,10 +7,10 @@ using Xunit;
 namespace ChronoTriggerAccessibility.Native.Tests.Capture;
 
 /// <summary>
-/// Fixtures are built from the audited native addresses in docs/field-submenus-native-audit.md
-/// sections 3 to 9, laid out in a byte-accurate sparse memory: a real MenuNodeBase manager stack, a
-/// real focusable map in the manager, a real FocusableState, a real cocos control tree and a real
-/// TextManager. Every read the capture performs is a real width-correct read.
+/// Synthetic sparse-memory fixtures for the audited fields. These exercise capture rules; they
+/// are not live menu dumps and do not establish that a retail control contains these test labels.
+/// Inventory uses the native focus relationship from 1C5D79: keys 0 through 7 are header controls,
+/// and an item row's key is its zero-based index plus 8.
 /// </summary>
 public sealed class FieldSubmenuCaptureTests
 {
@@ -36,8 +36,8 @@ public sealed class FieldSubmenuCaptureTests
     private const nuint ChildFocusMap = 0x21900000;
     private const nuint ChildSentinel = 0x21A00000;
 
-    private const int RowFocusKey = 3;
-    private const int CategoryFocusKey = 9;
+    private const int RowFocusKey = 9;
+    private const int CategoryFocusKey = 3;
     private const int SlotFocusKey = 4;
 
     /// <summary>The image table at RVA 0x39906C that 0x1C76A5 adds to an encoded item id.</summary>
@@ -67,7 +67,7 @@ public sealed class FieldSubmenuCaptureTests
         Assert.NotNull(snapshot);
         Assert.Equal("Inventory", snapshot!.Kind);
         Assert.Equal("Item", snapshot.Title);
-        Assert.Equal("inventory:3:1:8197:-1", snapshot.FocusIdentity);
+        Assert.Equal("inventory:9:1:8197:-1", snapshot.FocusIdentity);
         Assert.Equal("Mid Ether, 7", snapshot.Text);
     }
 
@@ -81,9 +81,62 @@ public sealed class FieldSubmenuCaptureTests
 
         // The row cursor still points at Mid Ether, but the player is not on the list.
         Assert.NotNull(snapshot);
-        Assert.Equal("Inventory:control:9", snapshot!.FocusIdentity);
+        Assert.Equal("Inventory:control:3", snapshot!.FocusIdentity);
         Assert.Equal("Consumables", snapshot.Text);
         Assert.DoesNotContain("Mid Ether", snapshot.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnInventoryCategoryIconReadsItsNativeCategoryAndEmptyList()
+    {
+        var world = EmptyInventory();
+        var icon = FocusPanel(world);
+        world.Int32(Manager + 0x2C4, 2);
+        FocusEntry(world, FocusMapSentinel, 2, FocusMapSentinel + 0x300, icon);
+
+        var snapshot = new FieldSubmenuCapture(world).Capture(ImageBase, Node);
+        Assert.NotNull(snapshot);
+        Assert.Equal("Consumables, category. Empty.", snapshot.Text);
+    }
+
+    [Fact]
+    public void ACategoryIconCannotBorrowAnotherCategorysEmptyState()
+    {
+        var world = EmptyInventory();
+        FocusPanel(world); // key 3 is Weapons; the committed category is still Consumables.
+        world.Message(0x23, 0x41, "Weapons");
+        Assert.Equal("Weapons, category", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
+    }
+
+    [Fact]
+    public void TheNativeBlankPlaceholderRowAnnouncesAnEmptyInventory()
+    {
+        var world = EmptyInventory();
+        world.Int32(Manager + 0x2C4, 8);
+        FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);
+        Assert.Equal("Consumables. Empty.", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
+    }
+
+    [Fact]
+    public void ABlankRowWithinANonemptyInventoryIsNotMistakenForAnEmptyCategory()
+    {
+        var world = EmptyInventory();
+        world.Pointer(Node + 0x2D4, Rows + 24);
+        world.Int32(Manager + 0x2C4, 8);
+        FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);
+        Assert.Null(new FieldSubmenuCapture(world).Capture(ImageBase, Node));
+    }
+
+    [Fact]
+    public void CharacterCardsKeepAllTheLiveStatFragments()
+    {
+        var world = World();
+        world.Pointer(Node, ImageBase + FieldSubmenuCapture.EquipSteamNodeVtableRva);
+        world.Message(0x23, 0x20, "Equipment");
+        FocusPanel(world, "Crono", "LV", "1", ":", "HP", "43/", "70", ":",
+            "MP", "8/", "8", ":", "EXP", "10", ":", "Next", "10", ":");
+        Assert.Equal("Crono LV 1. HP 43/70. MP 8/8. EXP 10. Next 10",
+            new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
     }
 
     [Fact]
@@ -105,11 +158,13 @@ public sealed class FieldSubmenuCaptureTests
     {
         var world = World();
         world.Int32(Node + 0x2F8, 0);
+        world.Int32(Manager + 0x2C4, 8);
+        FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);
 
         var snapshot = new FieldSubmenuCapture(world).Capture(ImageBase, Node);
 
         Assert.Equal("Tonic, 12", snapshot!.Text);
-        Assert.Equal("inventory:3:0:1:-1", snapshot.FocusIdentity);
+        Assert.Equal("inventory:8:0:1:-1", snapshot.FocusIdentity);
     }
 
     [Fact]
@@ -117,6 +172,8 @@ public sealed class FieldSubmenuCaptureTests
     {
         var world = World();
         world.Int32(Node + 0x2F8, 2);
+        world.Int32(Manager + 0x2C4, 10);
+        FocusEntry(world, FocusMapSentinel, 10, FocusMapSentinel + 0x100, 0x20A00000);
 
         // Row 2 only exists at begin + 24. A four byte stride would land inside row 0.
         Assert.Equal("Ether, 3", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
@@ -131,7 +188,7 @@ public sealed class FieldSubmenuCaptureTests
         var snapshot = new FieldSubmenuCapture(world).Capture(ImageBase, Node);
 
         Assert.Equal("Mid Ether, 7, picked up", snapshot!.Text);
-        Assert.Equal("inventory:3:1:8197:1", snapshot.FocusIdentity);
+        Assert.Equal("inventory:9:1:8197:1", snapshot.FocusIdentity);
     }
 
     [Fact]
@@ -187,6 +244,14 @@ public sealed class FieldSubmenuCaptureTests
         var world = World();
         world.Int32(Node + 0x2F8, -1);
 
+        Assert.Null(new FieldSubmenuCapture(world).Capture(ImageBase, Node));
+    }
+
+    [Fact]
+    public void AnInventoryCursorThatHasNotCaughtUpWithTheFocusKeyIsRetried()
+    {
+        var world = World();
+        world.Int32(Node + 0x2F8, 0); // focus 9 still belongs to row 1
         Assert.Null(new FieldSubmenuCapture(world).Capture(ImageBase, Node));
     }
 
@@ -315,7 +380,7 @@ public sealed class FieldSubmenuCaptureTests
         var world = World();
         world.Pointer(Node, ImageBase + FieldSubmenuCapture.ClassicTechNodeVtableRva);
         world.Message(0x23, 0x22, "Tech");
-        FocusPanel(world, [.. Enumerable.Range(0, 13).Select(index => $"Row {index}")]);
+        FocusPanel(world, [.. Enumerable.Range(0, 65).Select(index => $"Row {index}")]);
 
         Assert.Null(new FieldSubmenuCapture(world).Capture(ImageBase, Node));
     }
@@ -364,7 +429,7 @@ public sealed class FieldSubmenuCaptureTests
         Assert.NotNull(snapshot);
         Assert.Equal(kind, snapshot!.Kind);
         Assert.Equal(caption, snapshot.Title);
-        Assert.Equal($"{kind}:control:9", snapshot.FocusIdentity);
+        Assert.Equal($"{kind}:control:3", snapshot.FocusIdentity);
         Assert.Equal("Cyclone, 8 MP, Cuts through a group.", snapshot.Text);
     }
 
@@ -404,7 +469,7 @@ public sealed class FieldSubmenuCaptureTests
         // page falls all the way back to the selector on its own stack.
         var snapshot = new FieldSubmenuCapture(world).Capture(ImageBase, Node);
         Assert.Equal("Selector", snapshot!.Text);
-        Assert.Equal("Equipment:control:9", snapshot.FocusIdentity);
+        Assert.Equal("Equipment:control:3", snapshot.FocusIdentity);
     }
 
     [Fact]
@@ -449,14 +514,14 @@ public sealed class FieldSubmenuCaptureTests
 
         var snapshot = new FieldSubmenuCapture(world).Capture(ImageBase, Node);
 
-        // The page node's own manager still reports the character selector at key 9; the slot the
+        // This fixture's parent manager reports the character selector at key 3; the slot the
         // player is on lives on the child's stack at key 4.
         Assert.Equal("Equipment:control:4", snapshot!.FocusIdentity);
         Assert.Equal("Weapon, Silver Sword", snapshot.Text);
 
         // Remove the child's stack and the page falls back to the parent's selector.
         world.Pointer(child + 0x2C0, 0);
-        Assert.Equal("Equipment:control:9",
+        Assert.Equal("Equipment:control:3",
             new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.FocusIdentity);
     }
 
@@ -465,7 +530,7 @@ public sealed class FieldSubmenuCaptureTests
     {
         var world = World(); Equipment(world);
         world.Byte(ChildManager + 0x290, 1);
-        Assert.Equal("Equipment:control:9", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.FocusIdentity);
+        Assert.Equal("Equipment:control:3", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.FocusIdentity);
     }
 
     [Fact]
@@ -560,7 +625,7 @@ public sealed class FieldSubmenuCaptureTests
 
     /// <summary>
     /// A classic Inventory page: three rows, the cursor on the second, nothing picked up, the help
-    /// panel hidden, and one manager on the node's stack whose focus key 3 resolves through its
+    /// panel hidden, and one manager on the node's stack whose focus key 9 resolves through its
     /// focusable map to a control parented to the row list.
     /// </summary>
     private static FixtureMemory World()
@@ -573,6 +638,7 @@ public sealed class FieldSubmenuCaptureTests
         }
 
         world.Pointer(Node, ImageBase + FieldSubmenuCapture.ClassicItemNodeVtableRva);
+        world.Pointer(Node + 0x2DC, Manager);
         world.Pointer(Node + 0x2C0, ManagerStack);
         world.Pointer(ManagerStack, ImageBase + FieldSubmenuCapture.ManagerStackVtableRva);
         world.Pointer(ManagerStack + 4, StackEntries);
@@ -613,10 +679,24 @@ public sealed class FieldSubmenuCaptureTests
         return world;
     }
 
+    private static FixtureMemory EmptyInventory()
+    {
+        var world = World();
+        world.Pointer(Node + 0x2D4, Rows + 12);
+        world.Int32(Node + 0x2F8, 0);
+        world.Int32(Node + 0x2F0, 0);
+        Row(world, 0, encoded: 0, quantity: 0);
+        var caption = ControlOf(world, "Consumables", 0x23000000);
+        world.Pointer(caption + 0x16C, Node);
+        world.Pointer(Node + 0x2F4, caption);
+        world.Message(0x23, 0x40, "Consumables");
+        return world;
+    }
+
     /// <summary>
     /// Turns the page into Equipment: the node becomes MenuNodeEquipSteam, its CharaEquipManager
     /// child hangs off it with its own manager stack focused on the Weapon slot, and the page
-    /// node's own manager still reports the character selector at key 9.
+    /// node's own manager still reports this fixture's character selector at key 3.
     /// </summary>
     private static nuint Equipment(FixtureMemory world)
     {
@@ -648,7 +728,7 @@ public sealed class FieldSubmenuCaptureTests
     /// <summary>Moves the manager's focus onto a control that is not part of the row list.</summary>
     private static void FocusCategoryButton(FixtureMemory world) => FocusPanel(world, "Consumables");
 
-    /// <summary>Points the manager at key 9, whose control is a standalone panel of labels.</summary>
+    /// <summary>Points the manager at key 3, whose control is a synthetic panel of labels.</summary>
     private static nuint FocusPanel(FixtureMemory world, params string[] labels)
     {
         var control = ControlOf(world, labels, 0x20B00000);

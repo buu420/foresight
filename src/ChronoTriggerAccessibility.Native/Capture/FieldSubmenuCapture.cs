@@ -94,8 +94,14 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     public const uint EquipmentDetailPanelOffset = 0x2EC;
 
     // ClassicMenuNodeItem fields.
-    /// <summary>The list view the row accessor 0x1C1B60 is called on (0x1C5BA2).</summary>
+    /// <summary>The scroll view owning the row controls (0x1C5048); 0x1C5890 scrolls to a row.</summary>
     public const uint ItemListViewOffset = 0x2C8;
+    public const uint ItemManagerOffset = 0x2DC;
+    public const uint ItemCategoryOffset = 0x2F0;
+    public const uint ItemCategoryLabelOffset = 0x2F4;
+    public const int FirstItemCategoryKey = 2;
+    public const int ItemCategoryCount = 6;
+    public const int FirstItemCategoryCaption = 0x40;
     /// <summary>Row vector begin; records are 12 bytes (0x1C75EE, 0x1C6627 divides by 12).</summary>
     public const uint ItemRowsBeginOffset = 0x2D0;
     public const uint ItemRowsEndOffset = 0x2D4;
@@ -129,8 +135,9 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     private const int MaximumManagerDepth = 64;
     private const int MaximumFocusableEntries = 512;
     private const int MaximumAncestorDepth = 64;
-    /// <summary>One control's own labels; more than this is a panel, not a selection.</summary>
-    private const int MaximumRenderedLines = 12;
+    /// <summary>A selected character card has 18 Label fragments, including colon separators.
+    /// This bounds fragments within the independently selected control, not menu rows.</summary>
+    private const int MaximumRenderedLines = 64;
     /// <summary>The equipment detail panel is a panel by design, so it gets its own bound.</summary>
     private const int MaximumPanelLines = 32;
 
@@ -199,12 +206,17 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
         }
 
         var lines = rendered.Read(state.Control);
-        if (lines is null || lines.Count == 0 || lines.Count > MaximumRenderedLines)
+        if (lines is null || lines.Count > MaximumRenderedLines)
         {
             return null;
         }
 
-        var body = string.Join(", ", lines);
+        // Retail Inventory category controls contain sprites. Their names live in the native
+        // category table and the separate heading, not in those controls' child labels.
+        if (lines.Count == 0)
+            return state.Kind == InventoryKind ? CaptureInventoryCategory(imageBase, node, caption, state) : null;
+
+        var body = JoinRenderedLines(lines);
         if (state.Kind == EquipmentKind && TryReadEquipmentDetail(imageBase, node, out var detail))
         {
             body = $"{body}. {detail}";
@@ -251,8 +263,60 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
             return false;
         }
 
-        detail = string.Join(", ", lines);
+        detail = JoinRenderedLines(lines);
         return !string.IsNullOrWhiteSpace(detail);
+    }
+
+    private static string JoinRenderedLines(IReadOnlyList<string> lines)
+    {
+        if (!lines.Contains(":")) return string.Join(", ", lines);
+        var clauses = new List<string>();
+        var words = new List<string>();
+        foreach (var line in lines.Append(":"))
+        {
+            if (line != ":") { words.Add(line); continue; }
+            if (words.Count > 0) clauses.Add(string.Join(" ", words).Replace("/ ", "/", StringComparison.Ordinal));
+            words.Clear();
+        }
+        return string.Join(". ", clauses);
+    }
+
+    private FieldSubmenuSnapshot? CaptureInventoryCategory(
+        nuint imageBase, nuint node, string caption, in PageState state)
+    {
+        if (state.FocusKey < FirstItemCategoryKey || state.FocusKey >= FirstItemCategoryKey + ItemCategoryCount ||
+            !Pointer(node + ItemManagerOffset, out var manager) || manager != state.Manager) return null;
+        var category = (int)state.FocusKey - FirstItemCategoryKey;
+        var name = text.Get(imageBase, MenuCaptionBank, FirstItemCategoryCaption + category);
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var body = $"{name}, category";
+        if (TryReadEmptyInventory(imageBase, node, out var emptyCategory, out _) && emptyCategory == category)
+            body += ". Empty.";
+        if (!Pointer(node + ItemManagerOffset, out var again) || again != manager) return null;
+        return new(InventoryKind, caption, $"inventory:category:{category}", body);
+    }
+
+    private bool TryReadEmptyInventory(nuint imageBase, nuint node, out int category, out string name)
+    {
+        category = -1;
+        name = string.Empty;
+        // 1C31A2 pads an empty category to one blank record. A blank row in a larger vector
+        // does not establish emptiness. The visible heading must agree with the committed category.
+        if (!Pointer(node + ItemRowsBeginOffset, out var begin) ||
+            !Pointer(node + ItemRowsEndOffset, out var end) || end != begin + ItemRowStride ||
+            !Int32(begin + ItemRowQuantityOffset, out var quantity) || quantity != 0 ||
+            !Int32(node + ItemCategoryOffset, out category) || category is < 0 or >= ItemCategoryCount ||
+            !Pointer(node + ItemCategoryLabelOffset, out var label) || !HasAncestor(label, node)) return false;
+        var expected = text.Get(imageBase, MenuCaptionBank, FirstItemCategoryCaption + category);
+        var heading = rendered.Read(label);
+        if (expected is null || heading is null || heading.Count != 1 || heading[0] != expected ||
+            !Pointer(node + ItemRowsBeginOffset, out var b2) || b2 != begin ||
+            !Pointer(node + ItemRowsEndOffset, out var e2) || e2 != end ||
+            !Int32(begin + ItemRowQuantityOffset, out var q2) || q2 != quantity ||
+            !Int32(node + ItemCategoryOffset, out var c2) || c2 != category ||
+            !Pointer(node + ItemCategoryLabelOffset, out var l2) || l2 != label || !HasAncestor(label, node)) return false;
+        name = expected;
+        return true;
     }
 
     private static int CaptionMessageId(string kind) => kind switch
@@ -471,8 +535,8 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
 
     /// <summary>
     /// Whether the focused control really belongs to the inventory row list rather than to the
-    /// category buttons or a character panel that share the page. The list view is the object the
-    /// row accessor 0x1C1B60 is invoked on at 0x1C5BA2.
+    /// category buttons or a character panel that share the page. Row controls are added to this
+    /// scroll view at 0x1C5048; 0x1C1B60 creates the picked-up row's overlay sprite.
     /// </summary>
     private bool IsUnderItemList(nuint node, nuint control)
     {
@@ -505,12 +569,21 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
         var count = (int)((end - begin) / ItemRowStride);
         if (count == 0 || !Int32(node + ItemCursorOffset, out var cursor) ||
             cursor < 0 || cursor >= count ||
+            state.FocusKey != (uint)(cursor + 8) ||
+            !Pointer(node + ItemManagerOffset, out var itemManager) || itemManager != state.Manager ||
             !Int32(node + ItemHeldRowOffset, out var held) || held >= count ||
-            !Byte(node + ItemHelpVisibleOffset, out var helpVisible) ||
-            !TryReadRow(imageBase, begin, cursor, out var name, out var quantity, out var encoded))
+            !Byte(node + ItemHelpVisibleOffset, out var helpVisible))
         {
             return null;
         }
+
+        if (count == 1 && cursor == 0 && held == -1 && helpVisible == 0 &&
+            TryReadEmptyInventory(imageBase, node, out var category, out var categoryName))
+        {
+            rowKey = key;
+            return new(InventoryKind, caption, $"inventory:empty:{category}", $"{categoryName}. Empty.");
+        }
+        if (!TryReadRow(imageBase, begin, cursor, out var name, out var quantity, out var encoded)) return null;
 
         var body = $"{name}, {quantity.ToString(CultureInfo.InvariantCulture)}";
         if (held >= 0 && held != cursor &&
@@ -548,7 +621,8 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
     private bool TryReadRowKey(nuint node, out string key)
     {
         key = string.Empty;
-        if (!Pointer(node + ItemRowsBeginOffset, out var begin) ||
+        if (!Pointer(node + ItemManagerOffset, out var manager) ||
+            !Pointer(node + ItemRowsBeginOffset, out var begin) ||
             !Pointer(node + ItemRowsEndOffset, out var end) ||
             !Int32(node + ItemCursorOffset, out var cursor) ||
             !Int32(node + ItemHeldRowOffset, out var held) ||
@@ -557,7 +631,7 @@ public sealed class FieldSubmenuCapture(IReadableMemory memory)
             return false;
         }
 
-        key = $"{begin}:{end}:{cursor}:{held}:{helpVisible}";
+        key = $"{manager}:{begin}:{end}:{cursor}:{held}:{helpVisible}";
         if (cursor < 0)
         {
             return true;
