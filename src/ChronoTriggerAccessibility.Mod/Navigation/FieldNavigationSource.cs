@@ -83,7 +83,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var touch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
                 FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
             var approaches = touch
-                ? At(actor.TileX * 256 + 128, actor.TileY * 256 + 128).Where(p => !graph.IsTerminal(p)).ToArray()
+                ? TouchApproach(actor)
                 : Approach(position);
             Add($"landmark:{actor.Index}", label, NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: touch, guideAvailable: !touch);
@@ -249,6 +249,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             return new[] { (x - 256, y), (x + 256, y), (x, y - 256), (x, y + 256) }
                 .SelectMany(pair => At(pair.Item1, pair.Item2)).Where(point => !graph.IsTerminal(point))
                 .Distinct().ToArray();
+        }
+        IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
+        {
+            // Scene 8's left pod marker sits at the bottom of a blocked map tile.
+            // Its native contact reaches the floor below it. Aim eight pixels
+            // below the live marker, aligned to the four-pixel routing lattice.
+            // Other touch landmarks retain their separately audited tile goals.
+            var (x, y) = (field.SceneId, actor.Index) == (8, 12)
+                ? ((actor.FineX + 32) / 64 * 64, (actor.FineY + 128 + 32) / 64 * 64)
+                : (actor.TileX * 256 + 128, actor.TileY * 256 + 128);
+            return At(x, y).Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
         }
         IEnumerable<NavigationPoint> ExitApproach(NavigationPoint p)
         {

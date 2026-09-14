@@ -239,7 +239,7 @@ public static class EarlyStoryTargets
         (IsTouchLandmark(scene, actor.Index) || actor.IsActivationCandidate)
         ? (scene, actor.Index, state.Point) switch
         {
-            (8, 12, 10) => "Left Telepod",
+            (8, 12, 10) when actor.ActivationBinding != 0 && state.Flag(0x56, 1) == true => "Left Telepod",
             (120, 17, >= 16 and < 18) => "Foot of the queen's staircase",
             (122, 24, >= 27 and < 33) => "Inside the queen's chamber",
             (129, 13, >= 18 and < 27) => "Organ",

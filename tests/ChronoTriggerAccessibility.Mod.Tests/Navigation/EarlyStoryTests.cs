@@ -172,7 +172,7 @@ public sealed class EarlyStoryTests
         var story = Assert.Single(seen.Targets);
         Assert.Equal(NavigationCategory.StoryEvents, story.Category);
         Assert.False(story.IsStoryNote);
-        Assert.All(story.ApproachPoints, p => { Assert.Equal(4, p.X / 256); Assert.Equal(4, p.Y / 256); });
+        Assert.Equal(new NavigationPoint(1152, 1408, 1), Assert.Single(story.ApproachPoints));
         Assert.NotEmpty(story.ApproachPoints);
         Assert.Empty(source.Build(field with { SceneIdCoherent = false }, Map(), new(0, 0, 2048, 2048), [], state).Targets);
     }
