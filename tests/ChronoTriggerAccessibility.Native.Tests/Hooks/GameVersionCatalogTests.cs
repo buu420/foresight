@@ -9,6 +9,13 @@ public sealed class GameVersionCatalogTests
 {
     public static TheoryData<HookId, string, uint, string, Type, X86CallingConvention> ExpectedContracts => new()
     {
+        { HookId.ClassicFieldMenuReplace, "Classic field submenu replacement", 0x2A5270, "558BEC56578BF98B8F9002000085C974128B01FF", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TouchFieldMenuReplace, "Touch field submenu replacement", 0x2BD050, "558BEC56578BF98B8F9402000085C974128B01FF", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SaveSlotOpen, "Steam save file list open", 0x218A20, "558BEC6AFF682E34770064A1000000005083EC74", typeof(SaveSlotOpenDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuManagerDispatch, "Menu manager completed callback", 0x1DD4C0, "558BEC83B9BC0200000074298B450C8B89BC0200", typeof(SubmenuManagerDispatchDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.InventoryHelpRefresh, "Inventory selected item details", 0x1C7610, "558BEC6AFF68E0C1760064A1000000005083EC38", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.SaveSlotDetailsRefresh, "Save file selected details", 0x218FE0, "558BEC6AFF688C3E770064A1000000005081ECD8", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.MenuManagerUpdate, "Menu manager completed update", 0x1DCF10, "558BEC83E4F883EC14538BD9565780BB90020000", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B9110, "558BEC6AFF68A1AD760064A100000000", typeof(TextManagerGetMsgDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.OpeTextResolver, "Ope localized text resolver", 0x1B9060, "558BEC518B41048B112BC28B4D0CC1", typeof(OpeTextResolverDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.SceneManagerCreate, "SceneManager::create", 0x297860, "558BEC6AFF68F873760064A100000000", typeof(SceneManagerCreateDelegate), X86CallingConvention.MicrosoftFastcall },
@@ -153,12 +160,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredThirtyFourUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredFortyOneUniqueContracts()
     {
-        Assert.Equal(134, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(134, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(141, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

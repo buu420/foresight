@@ -76,6 +76,8 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
     private readonly IReadableMemory memory;
     private readonly ISemanticEventDispatcher dispatcher;
     private readonly MsvcStringReader stringReader;
+    private readonly Action<nuint>? nodeClosing;
+    private readonly Action<nuint>? nodeConfirming;
     private readonly object lifecycleGate = new();
     private readonly object stateGate = new();
     private readonly IReadOnlyList<IHookRegistration> registrations;
@@ -88,12 +90,16 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
     public SaveLoadConfirmationHookSet(
         IRuntimeNativeHookFactory hookFactory,
         IReadableMemory memory,
-        ISemanticEventDispatcher dispatcher)
+        ISemanticEventDispatcher dispatcher,
+        Action<nuint>? nodeClosing = null,
+        Action<nuint>? nodeConfirming = null)
     {
         this.hookFactory = hookFactory ?? throw new ArgumentNullException(nameof(hookFactory));
         this.memory = memory ?? throw new ArgumentNullException(nameof(memory));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         stringReader = new MsvcStringReader(memory);
+        this.nodeClosing = nodeClosing;
+        this.nodeConfirming = nodeConfirming;
         RequiredHookIds = new ReadOnlyCollection<HookId>(DedicatedHookIds.ToArray());
         registrations = new ReadOnlyCollection<IHookRegistration>(
         [
@@ -340,7 +346,11 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
                     {
                         try
                         {
-                            instrument = RunIfActive(epoch, () => scope = BeginScope((nuint)node, epoch));
+                            instrument = RunIfActive(epoch, () =>
+                            {
+                                nodeConfirming?.Invoke((nuint)node);
+                                scope = BeginScope((nuint)node, epoch);
+                            });
                         }
                         catch (Exception exception)
                         {
@@ -388,7 +398,7 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
                     {
                         RunIfActive(epoch, () => boundary.Run(
                             "MenuNodeSaveLoadSteam destructor capture",
-                            () => CloseConfirmation((nuint)node)));
+                            () => { CloseConfirmation((nuint)node); nodeClosing?.Invoke((nuint)node); }));
                     }
 
                     original()(node);

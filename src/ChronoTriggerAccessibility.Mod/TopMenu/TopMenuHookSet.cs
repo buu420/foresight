@@ -1059,6 +1059,9 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
         }
     }
 
+    /// <summary>The submenu reader has already announced the child during native dispatch.</summary>
+    public Func<bool>? SubmenuOwnsSpeech { get; set; }
+
     private bool TryBeginActionTransaction(
         TopMenuStyle style,
         nuint context,
@@ -1145,7 +1148,8 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             }
             try
             {
-                if (transaction.PendingEvent is not null)
+                if (transaction.PendingEvent is not null &&
+                    !(transaction.PendingEvent is MenuUnsupported && SubmenuOwnsSpeech?.Invoke() == true))
                 {
                     dispatcher.Publish(transaction.PendingEvent);
                 }

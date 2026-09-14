@@ -26,6 +26,8 @@ public sealed class MenuNarrator
             return accessibilityEvent switch
             {
                 MenuPresented presented => Present(presented),
+                MenuContentPresented content => PresentContent(content),
+                MenuContentChanged content => ChangeContent(content),
                 MenuFocusChanged changed => ChangeFocus(changed),
                 MenuActivated activated => Activate(activated),
                 MenuExited exited => Exit(exited),
@@ -93,6 +95,28 @@ public sealed class MenuNarrator
 
         lastFocusText = text;
         return [Interrupt(text)];
+    }
+
+    private IReadOnlyList<Announcement> PresentContent(MenuContentPresented content)
+    {
+        if (!IsIdentified(content.Owner) || string.IsNullOrWhiteSpace(content.Title) ||
+            string.IsNullOrWhiteSpace(content.Text)) return Fail("Submenu presentation is missing its owner or visible text.");
+        active = true;
+        activeOwner = content.Owner;
+        confirmationChoices = null;
+        lastConfirmationPrompt = null;
+        lastConfirmationText = null;
+        lastFocusText = content.Text;
+        return [Interrupt(WithPeriod(content.Title)), Queue(content.Text)];
+    }
+
+    private IReadOnlyList<Announcement> ChangeContent(MenuContentChanged content)
+    {
+        if (!active || activeOwner != content.Owner) return NoAnnouncements;
+        if (string.IsNullOrWhiteSpace(content.Text)) return Fail("Submenu selection has no visible text.");
+        if (lastFocusText == content.Text) return NoAnnouncements;
+        lastFocusText = content.Text;
+        return [Interrupt(content.Text)];
     }
 
     private IReadOnlyList<Announcement> Activate(MenuActivated activated)

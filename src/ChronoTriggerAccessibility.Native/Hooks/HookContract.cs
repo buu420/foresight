@@ -139,6 +139,13 @@ public enum HookId
     BattleDamageNumber,
     BattleMiss,
     BattleDamageRender,
+    ClassicFieldMenuReplace,
+    TouchFieldMenuReplace,
+    SaveSlotOpen,
+    MenuManagerDispatch,
+    InventoryHelpRefresh,
+    SaveSlotDetailsRefresh,
+    MenuManagerUpdate,
 }
 
 public enum X86CallingConvention
@@ -146,6 +153,15 @@ public enum X86CallingConvention
     MicrosoftThiscall,
     MicrosoftFastcall,
 }
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SubmenuNodeWordDelegate(nint node, nint value);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte SaveSlotOpenDelegate(nint node, int mode, int showBack);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SubmenuManagerDispatchDelegate(nint manager, int action, int key);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void BattleMenuMemberDelegate(nint menu);

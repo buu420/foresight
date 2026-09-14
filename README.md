@@ -1,10 +1,18 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.17 adds battle reading: active commands, Tech and Item selections, targets, party HP/MP shortcuts, visible damage/healing, status changes, and battle messages/results. This is a test release; native research and automated checks do not establish live battle coverage. See [battle feedback research](docs/battle-feedback-native-audit.md) and [battle interface research](docs/battle-interface-native-audit.md) for the evidence.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.18 adds keyboard submenu reading for Inventory, Equipment, Techs, Party, and the Save/Load file list. The player reports that the preceding battle release works; the new submenu readers still need an in-game screen-reader test. Native evidence is recorded in [the submenu audit](docs/field-submenus-native-audit.md) and [the Save and Tech audit](docs/field-save-slots-native-audit.md).
 
 The 0.3.16 repair remains included for "No route to Try the left Telepod is available" during the first demonstration. The route now approaches the pad's walkable contact area using its live marker position. See [telepod-demo-navigation.md](docs/telepod-demo-navigation.md) for evidence and validation limits. The second pendant pickup after Marle disappears, the first fair pendant, Resume confirmation speech, and race choice-flag repairs remain included. Current Story Events remain routable before discovery, with named optional guide targets in People, Interactable Objects, and Exits. Coverage continues through the first journey across 2300 AD and the first visit to the End of Time. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. It retains world automatic walking, world/local transition recovery, and the Settings speech repair. Intro audio descriptions remain pending.
 
-Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Vehicles, shops, and the Inventory, Equipment, and Bookmark subpages remain outside the implemented coverage.
+Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish live gameplay coverage. Vehicles, shops, and the touch-interface Inventory, Equipment, Tech, and Party subpages remain outside the implemented coverage.
+
+## In-game menus
+
+Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the focused control and its visible detail panel. Techs reads the selected row and its rendered description, component names, and MP/requirements panel. Party reads the focused control's visible text. These readers follow native focus and do not select or change anything for you.
+
+Save/Load reads the selected file number, its displayed card text, and the visible party and save details. Empty files do not read an old preview. Save, overwrite, Bookmark, and Resume confirmations use the existing prompt and Yes/No reader. While a confirmation is open, file-list updates cannot interrupt it. Brief redraws are retried; a persistent unreadable selection is announced and logged, with recovery on the next valid capture.
+
+The new submenu coverage applies to the classic keyboard interface and Steam Equipment/Save pages. Automated fixtures check selection changes, ownership, visible text, quantities, details, and confirmation transitions. Live keyboard and speech coverage is still unverified for these additions.
 
 ## Battle
 

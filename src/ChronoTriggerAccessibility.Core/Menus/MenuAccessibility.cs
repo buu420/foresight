@@ -48,6 +48,10 @@ public sealed record MenuPresented : MenuAccessibilityEvent
 
 public sealed record MenuFocusChanged(MenuFocus? Focus) : MenuAccessibilityEvent;
 
+public sealed record MenuContentPresented(MenuOwner Owner, string Title, string Text) : MenuAccessibilityEvent;
+
+public sealed record MenuContentChanged(MenuOwner Owner, string Text) : MenuAccessibilityEvent;
+
 public sealed record MenuActivated(string Label) : MenuAccessibilityEvent;
 
 public sealed record MenuExited(MenuOwner? Owner) : MenuAccessibilityEvent;

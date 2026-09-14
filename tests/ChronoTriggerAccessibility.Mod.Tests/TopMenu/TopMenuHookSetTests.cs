@@ -215,6 +215,27 @@ public sealed class TopMenuHookSetTests
     }
 
     [Fact]
+    public void ChildMenuSpeechIsNotOverwrittenByTheOldUnsupportedAnnouncement()
+    {
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        var childPresented = false;
+        harness.Set.SubmenuOwnsSpeech = () => childPresented;
+        harness.Factory.SetOriginal<TopMenuActionDispatcherDelegate>(HookId.ClassicTopMenuActionDispatcher, _ =>
+        {
+            childPresented = true;
+            harness.Dispatcher.Publish(new MenuContentPresented(new("field-submenu", 42), "Save", "File 1. Empty"));
+        });
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+        harness.DispatchAction(0);
+        Assert.IsType<MenuContentPresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
     public void FocusAndUnsupportedDispatcherUseNativeKeysRatherThanVisualPositions()
     {
         var harness = CreateHarness(TopMenuStyle.Classic);

@@ -15,6 +15,7 @@ using ChronoTriggerAccessibility.Mod.Settings;
 using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Mod.Template;
 using ChronoTriggerAccessibility.Mod.TopMenu;
+using ChronoTriggerAccessibility.Mod.Menus;
 using ChronoTriggerAccessibility.Native.Memory;
 using ChronoTriggerAccessibility.Native.Capture;
 using Reloaded.Hooks.ReloadedII.Interfaces;
@@ -195,7 +196,13 @@ public sealed class Mod : ModBase
         var steamSettings = new SteamSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var touchSettings = new TouchSettingsHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var topMenu = new TopMenuHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
-        var saveLoad = new SaveLoadConfirmationHookSet(sharedFanout, memory, dispatcher);
+        var submenuSource = new FieldSubmenuSource(memory);
+        var submenuSession = new FieldSubmenuSession(submenuSource.Capture, submenuSource.Title,
+            submenuSource.ConfirmationActive, NavigationKeyboard.IsGameForeground, dispatcher.Publish, dispatcher.RecordDiagnostic);
+        var submenuHooks = new FieldSubmenuHookSet(hookFactory, submenuSource, submenuSession);
+        topMenu.SubmenuOwnsSpeech = () => submenuSession.HasContext;
+        var saveLoad = new SaveLoadConfirmationHookSet(sharedFanout, memory, dispatcher,
+            node => submenuSession.Close(node), submenuSession.Pause);
 
         var startupTitle = new StartupTitleHookSet(
             sharedFanout,
@@ -228,6 +235,7 @@ public sealed class Mod : ModBase
             .Concat(navigationHooks.Registrations)
             .Concat(worldHooks.Registrations)
             .Concat(battleHooks.Registrations)
+            .Concat(submenuHooks.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -243,6 +251,7 @@ public sealed class Mod : ModBase
             navigationHooks,
             worldHooks,
             battleHooks,
+            submenuHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -258,6 +267,7 @@ public sealed class Mod : ModBase
             navigationHooks,
             worldHooks,
             battleHooks,
+            submenuHooks,
             installer);
     }
 
@@ -286,4 +296,5 @@ public sealed record CompleteAccessibilityComposition(
     FieldNavigationHookSet FieldNavigationHookSet,
     WorldNavigationHookSet WorldNavigationHookSet,
     BattleHookSet BattleHookSet,
+    FieldSubmenuHookSet FieldSubmenuHookSet,
     ReloadedHookInstaller Installer);
