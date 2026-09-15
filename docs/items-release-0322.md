@@ -53,3 +53,27 @@ still needed when another item is obtained. Battle replay is also distinct from 
 DLL in a running game.
 
 Build, test and deployment evidence is retained under `artifacts/research/release-0322/`.
+
+## Installed build
+
+Installed September 14, 2026 while the game was closed. All **25 deployment checks passed**,
+including the existing launch redirect and x86 .NET 9.0.17 runtime. The installed file sets and
+hashes match the package and dependencies: **28 mod files, 45 loader/shared-hook files and two
+native launcher/installer executables**. The supported game executable is unchanged.
+
+Package code commit: `a47ff9876aa61a897e8a7c89198a9d13a3c46014`.
+The final package build had zero warnings/errors; the installed DLL product version is
+`1.0.0+a47ff9876aa61a897e8a7c89198a9d13a3c46014`.
+
+DLL SHA-256:
+`B7744637EB3B249B6A955288E8B4578803572C3858E69DFBAE45022E2D251808`.
+
+Manifest SHA-256:
+`4451E8EDC2E482320A0D60D5A943DB6BE5F4B2461A33F07B12DB6848BFE549FB`.
+
+Previous installation:
+`X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260914-192841`.
+
+Launch normally. Check the empty battle Item announcement; when another consumable is available,
+check its selected-character speech and updated HP/MP after use. No further item acquisition is
+required solely for this development session.
