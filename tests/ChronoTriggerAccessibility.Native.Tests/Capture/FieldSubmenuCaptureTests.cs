@@ -12,7 +12,7 @@ namespace ChronoTriggerAccessibility.Native.Tests.Capture;
 /// Inventory uses the native focus relationship from 1C5D79: keys 0 through 7 are header controls,
 /// and an item row's key is its zero-based index plus 8.
 /// </summary>
-public sealed class FieldSubmenuCaptureTests
+public sealed partial class FieldSubmenuCaptureTests
 {
     private const nuint ImageBase = 0x00400000;
     private const nuint Node = 0x20000000;
@@ -803,6 +803,7 @@ public sealed class FieldSubmenuCaptureTests
     /// <summary>Sparse byte-accurate memory: every read is served at its real width.</summary>
     private sealed class FixtureMemory : IReadableMemory
     {
+        public Action<nuint>? BeforeRead { get; set; }
         private readonly Dictionary<nuint, byte> bytes = [];
         private readonly Dictionary<int, nuint> banks = [];
         private nuint nextFree = 0x40000000;
@@ -852,6 +853,7 @@ public sealed class FieldSubmenuCaptureTests
 
         public bool TryRead(nuint address, Span<byte> destination)
         {
+            BeforeRead?.Invoke(address);
             if (address == 0 || (ulong)address + (ulong)destination.Length > uint.MaxValue) return false;
             for (var index = 0; index < destination.Length; index++)
             {

@@ -105,10 +105,10 @@ public sealed partial class FieldSubmenuCapture
             (ulong)manager, focus, (uint)currentIndex, (uint)reserveIndex, (uint)held, (uint)preview,
             (ulong)panel, (ulong)currentPanel, (ulong)comboPanel,
         };
-        if (!TryReadFormationVector(currentPanel + ChildrenBeginOffset, 4, 3, version, out var activeCards, out var activeSlots) ||
+        if (!TryReadBoundedVector(currentPanel + ChildrenBeginOffset, 4, 3, version, out var activeCards, out var activeSlots) ||
             activeSlots != 3 ||
-            !TryReadFormationVector(node + 0x30C, 4, 6, version, out var reserveCards, out var reserveSlots) ||
-            !TryReadFormationVector(comboPanel + ChildrenBeginOffset, 4, MaximumRows, version, out _, out _) ||
+            !TryReadBoundedVector(node + 0x30C, 4, 6, version, out var reserveCards, out var reserveSlots) ||
+            !TryReadBoundedVector(comboPanel + ChildrenBeginOffset, 4, MaximumRows, version, out _, out _) ||
             !TryReadFormationMembers(imageBase, node + 0x2CC, node + 0x2E4, manager, currentPanel, panel,
                 activeCards, activeSlots, true, version, out var current) ||
             current.Length == 0 || currentIndex < 0 || currentIndex >= current.Length ||
@@ -142,8 +142,8 @@ public sealed partial class FieldSubmenuCapture
     {
         members = [];
         var maximum = current ? 3 : 6;
-        if (!TryReadFormationVector(recordsAt, 8, maximum, version, out var records, out var count) ||
-            !TryReadFormationVector(buttonsAt, 4, maximum, version, out var buttons, out var buttonCount) ||
+        if (!TryReadBoundedVector(recordsAt, 8, maximum, version, out var records, out var count) ||
+            !TryReadBoundedVector(buttonsAt, 4, maximum, version, out var buttons, out var buttonCount) ||
             count > cardCount || count != buttonCount) return false;
 
         members = new FormationMember[count];
@@ -168,7 +168,7 @@ public sealed partial class FieldSubmenuCapture
         return true;
     }
 
-    private bool TryReadFormationVector(
+    private bool TryReadBoundedVector(
         nuint address, int stride, int maximum, List<ulong> version, out nuint begin, out int count)
     {
         begin = 0;

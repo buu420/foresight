@@ -37,6 +37,20 @@ public sealed class BattleSessionTests
     }
 
     [Fact]
+    public void AnEmptyItemPanelSpeaksOnceAndCanBeRepeatedWhileActiveBattleUpdatesContinue()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        m.U32(Menu + 0x6A8, 2); m.U32(Canvas + 0x19E90, 2);
+        m.String(0x302030, "Item");
+        var runtime = new BattleRuntime(events.Add, new BattleKeyboard(_ => false, () => true), () => true, _ => { });
+        var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
+        for (var i = 0; i < 120; i++) session.Tick(Menu);
+        Assert.Equal("Crono: Item. Empty.", Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
+        runtime.Handle(BattleCommand.Repeat);
+        Assert.Equal("Crono: Item. Empty.", Assert.Single(events.OfType<BattleInspectionRequested>()).Text);
+    }
+
+    [Fact]
     public void PersistentCaptureFailureIsAnnouncedOnceAndTeardownStillWorks()
     {
         var events = new List<AccessibilityEvent>(); var logs = new List<string>();

@@ -180,9 +180,14 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             }
 
             string? rowKey = null;
-            var snapshot = state.Kind == InventoryKind && IsUnderItemList(node, state.Control)
-                ? CaptureInventoryRow(imageBase, node, caption, state, out rowKey)
-                : CaptureFocusedControl(imageBase, node, caption, state);
+            FieldSubmenuSnapshot? snapshot;
+            if (state.Kind == InventoryKind && Pointer(node + 0x314, out var itemUseManager) &&
+                itemUseManager == state.Manager)
+                snapshot = CaptureItemUseTarget(imageBase, node, caption, state);
+            else
+                snapshot = state.Kind == InventoryKind && IsUnderItemList(node, state.Control)
+                    ? CaptureInventoryRow(imageBase, node, caption, state, out rowKey)
+                    : CaptureFocusedControl(imageBase, node, caption, state);
 
             // Nothing that selects the page, the control or the row may move while we read.
             if (snapshot is null || !TryReadPageState(imageBase, node, out var recheck) || recheck != state ||

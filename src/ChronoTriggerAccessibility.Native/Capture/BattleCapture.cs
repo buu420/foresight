@@ -561,9 +561,33 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
         var canvas = state.Canvas;
         if (state.ActingSlot is < 0 or >= PartySlotCount ||
             state.ItemCursor is < 0 or >= VisibleListRows || state.ItemPage < 0 ||
-            !Int32(canvas + ItemCountOffset, out var count) || count is < 1 or > MaximumItemEntries)
+            !Int32(canvas + ItemCountOffset, out var count) || count is < 0 or > MaximumItemEntries)
         {
             return false;
+        }
+
+        if (count == 0)
+        {
+            // The native renderer still visits six cells when the list is empty. Its row
+            // renderer skips zero quantities/ids (RVA 1EAB3/1EACE); do not describe stale
+            // rendered rows or a retained page as an empty list. See battle-lists-0322-fix.md.
+            Span<byte> rows = stackalloc byte[VisibleListRows * ItemEntryStride];
+            if (state.ItemCursor != 0 || state.ItemPage != 0 ||
+                !memory.TryRead(canvas + ItemIdOffset, rows)) return false;
+            for (var i = 0; i < VisibleListRows; i++)
+            {
+                var row = rows.Slice(i * ItemEntryStride, ItemEntryStride);
+                if (BinaryPrimitives.ReadInt32LittleEndian(row) != 0 &&
+                    BinaryPrimitives.ReadInt32LittleEndian(row.Slice(ItemQuantityOffset)) != 0)
+                    return false;
+            }
+            if (!TryReadCharacterName(canvas, state.ActingSlot, out var character)) return false;
+            var label = Compose(character, Text(imageBase, BaseCommandBank, ItemMessageId));
+            Span<byte> again = stackalloc byte[VisibleListRows * ItemEntryStride];
+            if (!Int32(canvas + ItemCountOffset, out var countAgain) || countAgain != 0 ||
+                !memory.TryRead(canvas + ItemIdOffset, again) || !rows.SequenceEqual(again)) return false;
+            focus = ($"item:empty:{state.ActingSlot}", label is null ? null : $"{label}. Empty.");
+            return true;
         }
 
         var entry = state.ItemPage + state.ItemCursor;
