@@ -69,7 +69,7 @@ public sealed class TelepodDemoTests
     }
 
     [Theory]
-    [InlineData("binding")]
+    [InlineData("calls-disabled")]
     [InlineData("coordinates")]
     [InlineData("class")]
     [InlineData("party")]
@@ -83,7 +83,7 @@ public sealed class TelepodDemoTests
         var pad = field.Actors.Single(a => a.Index == 12);
         pad = invalid switch
         {
-            "binding" => pad with { ActivationBinding = 0 },
+            "calls-disabled" => pad with { ScriptCallsEnabled = false },
             "coordinates" => pad with { CoordinatesCoherent = false },
             "class" => pad with { ClassTag = 4 },
             "party" => pad with { IsPartyMember = true },
@@ -121,7 +121,7 @@ public sealed class TelepodDemoTests
 
     private static FieldActorSnapshot Actor(int index, int x, int y, int cls) =>
         new(index, x >> 8, x, x & 255, y >> 8, y, y & 255, 0, 1, 0, 0, cls,
-            0, 0, 128, false, true, true, true);
+            0, 0, 0, false, true, true, true);
 
     private static FieldMapSnapshot Map()
     {

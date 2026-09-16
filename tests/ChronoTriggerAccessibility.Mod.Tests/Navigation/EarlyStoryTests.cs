@@ -35,6 +35,22 @@ public sealed class EarlyStoryTests
     }
 
     [Fact]
+    public void QueensRoomRequiresSpeakingWithTheGuardBeforeApproachingTheQueen()
+    {
+        var guard = Target("actor:9:4:51");
+        var queen = Target("actor:20:4:69") with { ApproachPoints = [new(2048, 2048, 1)] };
+        var waiting = Assert.Single(EarlyStoryTargets.Build(122, State(15, 0xA0, 0), [guard, queen], default));
+        Assert.Equal("Speak with the guard outside the queen's room", waiting.Label);
+        Assert.Equal(guard.ApproachPoints, waiting.ApproachPoints);
+        Assert.Contains("confirm", waiting.ArrivalInstruction);
+        var moved = Assert.Single(EarlyStoryTargets.Build(122, State(15, 0xA0, 0x20), [guard, queen], default));
+        Assert.Equal("Approach the queen", moved.Label);
+        Assert.Equal(queen.ApproachPoints, moved.ApproachPoints);
+        var unknown = Assert.Single(EarlyStoryTargets.Build(122, State(15), [guard, queen], default));
+        Assert.True(unknown.IsStoryNote);
+    }
+
+    [Fact]
     public void NativeFairFlagsAdvanceTheExhibitAndRetireThePendant()
     {
         var people = new[] { Target("actor:17:4:80"), Target("exit:1") };

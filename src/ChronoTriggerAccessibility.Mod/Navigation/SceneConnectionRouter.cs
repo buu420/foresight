@@ -52,7 +52,30 @@ public sealed class SceneConnectionRouter
         }
         if (candidates.Count == 0) return [];
         var best = candidates.Min(c => c.Distance);
-        return candidates.Where(c => c.Distance == best).Select(c => c.Target).DistinctBy(t => t.Id).ToArray();
+        return candidates.Where(c => c.Distance == best)
+            .SelectMany(c => CastleTowerLandings(scene, c.Target, available, liveFieldDestinations))
+            .DistinctBy(t => t.Id).ToArray();
+    }
+
+    private static IEnumerable<NavigationTarget> CastleTowerLandings(int scene, NavigationTarget target,
+        IReadOnlyList<NavigationTarget> available, IReadOnlyDictionary<int, int>? liveDestinations)
+    {
+        // Map68 holds three disconnected landings. The audited native tables for
+        // 468/480 ascend through exits0,1,2 and descend through3,4,5; the first
+        // two hops re-enter the same scene. Scene-only look-ahead otherwise drops
+        // those hops. Supply all three native goals so the live graph picks the
+        // reachable flight, as the early-story binder already does.
+        if (scene is not (468 or 480)) return [target];
+        var first = target.Id switch { "exit:2" => 0, "exit:5" => 3, _ => -1 };
+        if (first < 0) return [target];
+        var entries = GameNavigationCatalog.ForScene(scene)!.Exits;
+        int? Destination(int id) => liveDestinations is not null
+            ? liveDestinations.TryGetValue(id, out var destination) ? destination : null
+            : entries.FirstOrDefault(e => e.Id == id)?.Destination;
+        if (Destination(first) != scene || Destination(first + 1) != scene ||
+            Destination(first + 2) != entries.First(e => e.Id == first + 2).Destination) return [target];
+        var ids = Enumerable.Range(first, 3).Select(i => $"exit:{i}").ToHashSet();
+        return available.Where(t => ids.Contains(t.Id));
     }
 
     public int? Distance(int scene, FieldStoryState state, params int[] goals)

@@ -1,6 +1,6 @@
 namespace ChronoTriggerAccessibility.Core.Navigation;
 
-public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Route, bool LimitReached);
+public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Route, bool LimitReached, string? IntermediateId = null);
 
 public static class NavigationPathfinder
 {
@@ -57,7 +57,7 @@ public static class NavigationPathfinder
                 queue.Enqueue(next, (cost.Distance + estimate, cost.Turns, estimate, order++));
             }
         }
-        return new(null, false);
+        return graph is IStagedNavigationGraph staged ? staged.FindStage(start, goals, maximumVisited) : new(null, false);
 
         double Estimate(NavigationPoint point) => goals.Min(goal => Distance(point, goal));
         static double Distance(NavigationPoint from, NavigationPoint to) =>

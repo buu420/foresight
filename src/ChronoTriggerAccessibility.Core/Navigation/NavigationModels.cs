@@ -19,6 +19,12 @@ public interface INavigationGraph
     bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => point == goal;
 }
 
+/// <summary>A live passage that must open before the final route can be walked.</summary>
+public interface IStagedNavigationGraph : INavigationGraph
+{
+    NavigationSearchResult FindStage(NavigationPoint start, IReadOnlyList<NavigationPoint> goals, int maximumVisited);
+}
+
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,
     NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered)
 {

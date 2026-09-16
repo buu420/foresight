@@ -31,6 +31,7 @@ public static class OpeningStoryTargets
             (439, 3, 3, 1) => "Young woman",
             (5, 17, 4, 0x50) => "Fairgoer by the fountain",
             (72, 22, 4, 41) => "Prisoner at the guillotine",
+            (122, 9, 4, 51) => "Guard outside the queen's room",
             (29, 12, 4, 162) => "Document on the floor",
             _ => null,
         };

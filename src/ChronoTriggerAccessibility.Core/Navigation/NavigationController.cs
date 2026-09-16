@@ -19,11 +19,15 @@ public sealed class NavigationController
     private NavigationPoint observedPosition;
     private long lastManualActivity;
     private long instructionRevision;
+    private string? intermediateId;
+    private IReadOnlyList<NavigationPoint> plannedGoals = [];
+    private long? passageWaitStarted;
+    private long nextPassageCheck;
 
     public bool IsActive => guiding;
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
-        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}";
+        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={destination?.ApproachPoints.Count ?? 0}; stage={intermediateId ?? "none"}";
     private static string PointText(NavigationPoint? point) => point is { } p ? $"({p.X},{p.Y},{p.Layer})" : "none";
 
     public NavigationResult Cancel(string reason)
@@ -193,6 +197,9 @@ public sealed class NavigationController
         var search = NavigationPathfinder.Search(frame.Graph, frame.Player, destination!.ApproachPoints);
         planRevision++;
         route = search.Route;
+        if (intermediateId != search.IntermediateId) passageWaitStarted = null;
+        intermediateId = search.IntermediateId;
+        plannedGoals = destination.ApproachPoints.ToArray();
         nextPoint = 1;
         if (route is not null) return true;
         speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." : $"No route to {destination.Label} is available.");
@@ -214,13 +221,52 @@ public sealed class NavigationController
         }
         // The chosen approach remains valid when a wide exit exposes additional
         // cells or their order changes. Do not restart speech for alternative goals.
-        var mustReplan = route is null || !currentTarget.ApproachPoints.Contains(route[^1]);
+        var leftContact = passageWaitStarted is not null && route is not null && !Arrived(frame.Player, route[^1]);
+        var mustReplan = leftContact || route is null || (intermediateId is null
+            ? !currentTarget.ApproachPoints.Contains(route[^1])
+            : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
         destination = currentTarget;
         if (mustReplan)
         {
+            if (leftContact)
+            {
+                passageWaitStarted = null;
+                announcedDirection = NavigationDirection.None;
+                lastProgress = now;
+                lastPosition = frame.Player;
+            }
             if (!Plan(frame, speech)) return;
         }
         if (route is null) return;
+        if (intermediateId is not null && Arrived(frame.Player, route[^1]))
+        {
+            nextPoint = route.Count;
+            if (passageWaitStarted is null)
+            {
+                passageWaitStarted = now;
+                nextPassageCheck = now;
+                var contactLabel = frame.Targets.FirstOrDefault(t => t.Id == intermediateId)?.Label;
+                speech.Add(contactLabel is null ? "Waiting for the passage to open." : $"Waiting for {contactLabel} to open.");
+            }
+            if (now < nextPassageCheck) return;
+            var waitingSince = passageWaitStarted.Value;
+            if (!Plan(frame, speech)) return;
+            if (intermediateId is not null && Arrived(frame.Player, route![^1]))
+            {
+                nextPoint = route.Count;
+                if (now < waitingSince || now - waitingSince >= 3000)
+                {
+                    speech.Add("Navigation stopped: the passage did not open.");
+                    Stop();
+                }
+                else nextPassageCheck = now + 250;
+                return;
+            }
+            passageWaitStarted = null;
+            announcedDirection = NavigationDirection.None;
+            lastProgress = now;
+            lastPosition = frame.Player;
+        }
         if (Arrived(frame.Player, route[^1]))
         {
             speech.Add(Arrival(destination));
@@ -256,6 +302,7 @@ public sealed class NavigationController
             }
             if (route!.Count == 1)
             {
+                if (intermediateId is not null) return;
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;
@@ -378,6 +425,9 @@ public sealed class NavigationController
         destination = null;
         announcedDirection = NavigationDirection.None;
         waitingForManualStop = false;
+        intermediateId = null;
+        plannedGoals = [];
+        passageWaitStarted = null;
     }
 
     private bool Near(NavigationPoint a, NavigationPoint b) =>

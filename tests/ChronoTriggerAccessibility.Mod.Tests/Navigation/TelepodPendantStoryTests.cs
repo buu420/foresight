@@ -86,14 +86,14 @@ public sealed class TelepodPendantStoryTests
     [InlineData(8, 12, 11, 4, 99, 1, 0, true)]
     [InlineData(8, 12, 11, 4, 99, 1, 128, false)]
     public void TelepodPickupDoesNotPromoteAnUnrelatedInactiveOrIncoherentActor(
-        int scene, int point, int index, int actorClass, int visual, int draw, int binding, bool coherent)
+        int scene, int point, int index, int actorClass, int visual, int draw, int callsEnabled, bool coherent)
     {
         var field = Field();
         field = field with
         {
             SceneId = scene, SceneIdCoherent = coherent,
             Actors = [field.Actors[0], field.Actors[1] with
-            { Index = index, ClassTag = actorClass, VisualIndex = visual, DrawMode = draw, ActivationBinding = binding }],
+            { Index = index, ClassTag = actorClass, VisualIndex = visual, DrawMode = draw, ActivationBinding = 0, ScriptCallsEnabled = callsEnabled != 0 }],
         };
         var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, Map(),
             new(0, 0, 4096, 4096), [], State() with { Point = point });

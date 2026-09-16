@@ -35,7 +35,7 @@ public static class FutureAreaLabels
     public static string? Landmark(int scene, FieldStoryState? state, FieldActorSnapshot actor)
     {
         if (state is not { Point: >= 51 and <= 77 } || !actor.IsUsable || actor.ClassTag != 7 ||
-            actor.IsPartyMember || (!IsTouchLandmark(scene, actor.Index) && !actor.IsActivationCandidate)) return null;
+            actor.IsPartyMember || !actor.ScriptCallsEnabled) return null;
         return (scene, actor.Index, state.Point) switch
         {
             (208, 8, _) or (210, 17, _) or (217, 9, _) => "Sealed door",

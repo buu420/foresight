@@ -79,7 +79,17 @@ public static class EarlyStoryTargets
                 Exit("up-queen-tower", "Continue up to the queen's chamber", [0, 1, 2]);
                 break;
             case 122 when p == 15:
-                Bind("queen", "Approach the queen", ["actor:20:4:69"]);
+                // Atel0242 actor9's confirm handler moves him aside and sets
+                // G0A0:20 at055A. Reaching the queen first would hit that guard.
+                if (state.Flag(0xA0, 0x20) is null)
+                    Note("queen-room", "The queen's room", "The guard's current progress is unavailable. Speak with the guard outside the room.");
+                else if (state.Flag(0xA0, 0x20) == false)
+                {
+                    var guard = StoryTarget.BindAny("queen-guard", "Speak with the guard outside the queen's room",
+                        available, ["actor:9:4:51"], player);
+                    result.Add(guard with { ArrivalInstruction = "Face the guard and use confirm to speak." });
+                }
+                else Bind("queen", "Approach the queen", ["actor:20:4:69"]);
                 break;
             case 122 when p is >= 16 and < 27:
                 Exit("return-hall", "Return to the castle's main hall", [0]);
@@ -236,10 +246,12 @@ public static class EarlyStoryTargets
     public static string? Landmark(int scene, FieldStoryState? state, FieldActorSnapshot actor,
         IReadOnlyList<FieldActorSnapshot> actors) =>
         state is { Point: >= 3 and <= 48 } && actor.IsUsable && actor.ClassTag == 7 && !actor.IsPartyMember &&
-        (IsTouchLandmark(scene, actor.Index) || actor.IsActivationCandidate)
+        actor.ScriptCallsEnabled
         ? (scene, actor.Index, state.Point) switch
         {
-            (8, 12, 10) when actor.ActivationBinding != 0 && state.Flag(0x56, 1) == true => "Left Telepod",
+            (8, 12, 10) when state.Flag(0x56, 1) == true => "Left Telepod",
+            (120, 9 or 10, _) when state.Local(6) == 0 => "Stairway past the guards",
+            (122, 8, _) when state.Local(7) == 0 => "Passage into the queen's room",
             (120, 17, >= 16 and < 18) => "Foot of the queen's staircase",
             (122, 24, >= 27 and < 33) => "Inside the queen's chamber",
             (129, 13, >= 18 and < 27) => "Organ",
@@ -259,7 +271,7 @@ public static class EarlyStoryTargets
     // byte is zero. Atel_0074 actor 15 uses the dropped/collected bits; Atel_0028
     // actor 11 checks story point 12 before drawing the Telepod pendant.
     public static bool IsScriptedPickupAvailable(int scene, FieldStoryState? state, FieldActorSnapshot actor) =>
-        actor.ClassTag == 4 && actor.VisualIndex == 99 && actor.ActivationBinding != 0 &&
+        actor.ClassTag == 4 && actor.VisualIndex == 99 && actor.ScriptCallsEnabled &&
         (scene, actor.Index, state?.Point) switch
         {
             (439, 15, 6) => state!.Flag(0x54, 0x10) == true && state.Flag(0x54, 0x20) == false,

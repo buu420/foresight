@@ -7,6 +7,28 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 
 public sealed class FullStoryTargetsTests
 {
+    [Theory]
+    [InlineData(468, 122, 0)]
+    [InlineData(468, 120, 3)]
+    [InlineData(480, 121, 0)]
+    [InlineData(480, 120, 3)]
+    public void LaterCastleVisitsIncludeTheIntermediateTowerLandings(int scene, int goal, int first)
+    {
+        var exits = Enumerable.Range(0, 6).Select(i => Target($"exit:{i}")).ToArray();
+        var choices = new SceneConnectionRouter().Next(scene, new(165, false), [goal], exits);
+        Assert.Equal(Enumerable.Range(first, 3).Select(i => $"exit:{i}").Order(), choices.Select(t => t.Id).Order());
+    }
+
+    [Fact]
+    public void ChangedNativeTowerConnectionsDoNotOfferTheOldIntermediateLandings()
+    {
+        var exits = Enumerable.Range(0, 6).Select(i => Target($"exit:{i}")).ToArray();
+        var destinations = new Dictionary<int, int> { [0] = 497, [1] = 480, [2] = 121 };
+        var choices = new SceneConnectionRouter().Next(480, new(165, false), [121], exits,
+            liveFieldDestinations: destinations);
+        Assert.Equal("exit:2", Assert.Single(choices).Id);
+    }
+
     [Fact]
     public void BindsEndOfTimeObjectiveToPillarRegionWithoutAVisibleActor()
     {

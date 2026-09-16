@@ -147,6 +147,13 @@ print(json.dumps(simplify(rows), sort_keys=True))'''
         self.assertTrue(complete)
         self.assertEqual(['Terrain'], [a['Kind'] for a in actions])
 
+    def test_terrain_copy_preserves_native_bounds_planes_and_guard(self):
+        actions, complete = paths(bytes.fromhex('120600000de856e5030005021e263b750600'), [], 0)
+        self.assertTrue(complete)
+        terrain = next(a for a in actions if a['Kind'] == 'Terrain')
+        self.assertEqual(dict(Left=3, Top=0, Right=5, Bottom=2, X=30, Y=38, Flags=59), terrain['Copy'])
+        self.assertEqual([dict(Source='Local', Index=6, Operation=0, Value=0, Expected=True)], terrain['Guards'])
+
 
 if __name__ == '__main__':
     unittest.main()

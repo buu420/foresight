@@ -102,12 +102,13 @@ public sealed class GuideAvailabilityTests
     public void OptionalObjectRequiresAnActiveInteractionAndRetiresWhenDisabled()
     {
         var source = Source();
-        var lunch = Actor(28, 1408, 1408) with { ClassTag = 4, VisualIndex = 101, DrawMode = 1 };
+        var lunch = Actor(28, 1408, 1408) with { ClassTag = 4, VisualIndex = 101, DrawMode = 1,
+            ActivationEnabled = 0, ActivationBinding = 0 };
         var frame = source.Build(Field(439, lunch), Map(), new(0, 0, 256, 256), [], new(3, false));
         var item = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.Objects);
         Assert.Equal("Wrapped lunch", item.Label);
         Assert.True(item.GuideAvailable);
-        var after = source.Build(Field(439, lunch with { ActivationEnabled = 0 }), Map(), new(0, 0, 256, 256), [], new(3, false));
+        var after = source.Build(Field(439, lunch with { ScriptCallsEnabled = false }), Map(), new(0, 0, 256, 256), [], new(3, false));
         Assert.DoesNotContain(after.Targets, t => t.Id == item.Id);
     }
 

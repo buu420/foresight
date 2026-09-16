@@ -414,10 +414,36 @@ public sealed class FieldNavigationCaptureTests
         return memory;
     }
 
+    [Theory]
+    [InlineData(0xE8)]
+    [InlineData(0x30)]
+    public void UnreadableScriptCallGateReportsCaptureFailureRatherThanDroppingAPickup(uint offset)
+    {
+        var memory = CreateValidMemory().Remove(Actors + offset);
+        Assert.False(FieldNavigationCapture.TryCapture(memory, Engine, out _, out var error));
+        Assert.Contains("not fully readable", error);
+    }
+
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(1, 0, false)]
+    [InlineData(0, 128, false)]
+    public void PersistentScriptCallGatesAreIndependentOfIdleAndCameraBits(byte disabled, byte calls, bool expected)
+    {
+        var memory = CreateValidMemory();
+        memory.AddByte(Actors + 0xE8u, disabled).AddByte(Actors + 0x30u, calls)
+            .AddByte(Actors + FieldNavigationCapture.ActorActivationEnabledOffset, 0)
+            .AddInt32(Actors + FieldNavigationCapture.ActorActivationBindingOffset, 0);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(expected, snapshot.Actors[0].ScriptCallsEnabled);
+        Assert.False(snapshot.Actors[0].IsActivationCandidate);
+    }
+
     private static void AddActor(TestMemory memory, int index, int fineX, int fineY, int facing, int drawMode)
     {
         var actor = Actors + (nuint)(index * (int)FieldNavigationCapture.ActorStride);
         memory
+            .AddByte(actor + 0xE8u, 0).AddByte(actor + 0x30u, 0)
             .AddInt32(actor + FieldNavigationCapture.ActorFractionXOffset, fineX & 0xFF)
             .AddInt32(actor + FieldNavigationCapture.ActorTileXOffset, fineX >> 8)
             .AddInt32(actor + FieldNavigationCapture.ActorFineXOffset, fineX)
@@ -437,6 +463,8 @@ public sealed class FieldNavigationCaptureTests
     private sealed class TestMemory : IReadableMemory
     {
         private readonly Dictionary<nuint, byte[]> segments = [];
+
+        public TestMemory Remove(nuint address) { segments.Remove(address); return this; }
 
         public TestMemory AddByte(nuint address, byte value)
         {

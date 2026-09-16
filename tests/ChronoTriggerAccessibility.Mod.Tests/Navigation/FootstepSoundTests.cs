@@ -3,6 +3,10 @@ using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 
+// These exercise the real 150ms audio deadline. CPU-heavy pathfinding fixtures
+// must not starve their background worker and turn a valid stale-beat rejection
+// into an unrelated three-second test timeout.
+[Collection("Real-time footstep audio")]
 public sealed class FootstepSoundTests
 {
     [Fact]
@@ -61,3 +65,6 @@ public sealed class FootstepSoundTests
         public void Dispose() { }
     }
 }
+
+[CollectionDefinition("Real-time footstep audio", DisableParallelization = true)]
+public sealed class FootstepSoundCollection;

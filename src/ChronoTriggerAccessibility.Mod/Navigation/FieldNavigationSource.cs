@@ -55,16 +55,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
-            var scriptedContact = story is not null && actor.ActivationBinding != 0 &&
+            var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
+                scriptInfo?.Actions.Any(a => a.Available(story)) == true;
+            var scriptedContact = scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
             // These pickups have an initialization-time gate in addition to the
             // contact handler. Preserve the audited gate when the sprite lingers.
             if ((field.SceneId, actor.Index) is (8, 11) or (439, 15))
-                scriptedContact = field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor);
+                scriptedAction = scriptedContact = field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor);
             // People includes visible characters without a talk action, such as
             // Crono's cat. Objects require activation or an audited script pickup gate.
-            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate && !scriptedContact &&
-                !(field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor))) continue;
+            if (description.Category == NavigationCategory.Objects && (!actor.ScriptCallsEnabled ||
+                !actor.IsActivationCandidate && !scriptedAction &&
+                !(field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor)))) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
@@ -74,7 +77,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
                 ProtectContactPassage(id, actor);
             Add(id, label ?? description.Label, description.Category, position, touchOnly ? TouchApproach(actor) : Approach(position), viewport.Contains(position.X, position.Y),
-                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedContact));
+                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction));
         }
         foreach (var chest in treasures)
         {
@@ -96,8 +99,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
             if (knownTouch && label is null) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
-            var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember &&
-                actor.ActivationBinding != 0 && (actor.IsActivationCandidate || metadata.Touch)
+            var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => a.Available(story)).ToArray() : [];
             if (label is null && scripted.Length != 0)
                 label = scripted.Any(a => a.Kind == "Item") ? "Item pickup" :
@@ -109,6 +111,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var approaches = touch
                 ? TouchApproach(actor)
                 : Approach(position);
+            if (scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
+                approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
+                    .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage($"landmark:{actor.Index}", actor);
@@ -249,7 +254,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
-            player, targets.AsReadOnly(), scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
+            player, targets.AsReadOnly(), guideActive
+                ? FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals)
+                : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
             { AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId) };
 
         void ReportInventory()
@@ -273,7 +280,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             diagnostic("Navigation actor facts: " + string.Join(" | ", field.Actors.Take(32).Select(a =>
                 $"id={a.Index},class=0x{a.ClassTag:X},visual=0x{a.VisualIndex:X},draw=0x{a.DrawMode:X}," +
                 $"loaded={a.LoadedFlag},usable={a.IsUsable},party={a.IsPartyMember}," +
-                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},pos=({a.FineX},{a.FineY})")) + ".");
+                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},scriptCalls={a.ScriptCallsEnabled},pos=({a.FineX},{a.FineY})")) + ".");
         }
 
         // Scripts park retired actors at tile FF,FF without necessarily clearing

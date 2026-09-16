@@ -35,6 +35,9 @@ public sealed record FieldActorSnapshot(
     bool FacingValid,
     bool DrawModeKnown)
 {
+    /// <summary>Persistent call gates at actor+E8 and actor+30 bit80, tested by
+    /// native confirm/touch dispatch (17FA20 / 16EF30). Neither is camera culling.</summary>
+    public bool ScriptCallsEnabled { get; init; } = true;
     /// <summary>
     /// True when <see cref="ClassTag"/> names a real class in CTViewer's
     /// <c>SceneActorClass</c> space (0..6). 7 is Undefined, i.e. a slot no load path
@@ -53,7 +56,9 @@ public sealed record FieldActorSnapshot(
     /// <summary>
     /// Reproduces the native interaction filter at 0x1760B0 exactly: the activation byte
     /// and binding must both be non-zero, the class tag must not carry the removed bit,
-    /// and party members are never their own targets.
+    /// and party members are never their own targets. This is a transient scan
+    /// state, not a standing capability: 161560 owns +152, while 17A6C0/17A860
+    /// clear +20 outside the camera. Guide eligibility must use script contracts.
     /// </summary>
     public bool IsActivationCandidate =>
         ActivationEnabled != 0 &&
@@ -482,7 +487,9 @@ public static class FieldNavigationCapture
             !Int32(memory, address + ActorClassTagOffset, out var classTag) ||
             !Int32(memory, address + ActorRenderPriorityPackedOffset, out var renderPriority) ||
             !Int32(memory, address + ActorActivationBindingOffset, out var activationBinding) ||
-            !Byte(memory, address + ActorActivationEnabledOffset, out var activationEnabled))
+            !Byte(memory, address + ActorActivationEnabledOffset, out var activationEnabled) ||
+            !Byte(memory, address + 0xE8u, out var scriptDisabled) ||
+            !Byte(memory, address + 0x30u, out var callFlags))
         {
             // Readability is a pointer-chain property, so this stays fatal.
             error = $"Field actor {index} at 0x{address:X} is not fully readable.";
@@ -504,7 +511,10 @@ public static class FieldNavigationCapture
             index, tileX, fineX, fractionX, tileY, fineY, fractionY,
             facing, drawMode, loadedFlag, visualIndex, classTag, renderPriority,
             activationEnabled, activationBinding, isPartyMember,
-            coordinatesCoherent, facingValid, drawModeKnown);
+            coordinatesCoherent, facingValid, drawModeKnown)
+        {
+            ScriptCallsEnabled = scriptDisabled == 0 && (callFlags & 0x80) == 0,
+        };
         error = string.Empty;
         return true;
     }

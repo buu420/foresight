@@ -88,7 +88,7 @@ public sealed class FutureStoryTests
     public void GuideSceneryUsesLivePositionsAndDropsRetiredMarkers()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
-        var marker = Actor(16, 1280, 1280);
+        var marker = Actor(16, 1280, 1280) with { ActivationEnabled = 0, ActivationBinding = 0 };
         var field = Field(210, marker);
         var first = source.Build(field, Map(), new(0, 0, 2048, 2048), [], State(51));
         var rest = Assert.Single(first.Targets, t => t.Id == "landmark:16");
@@ -96,7 +96,7 @@ public sealed class FutureStoryTests
         Assert.Equal(new(1280, 1280, 1), rest.Position);
         var away = source.Build(field, Map(), new(4096, 4096, 8192, 8192), [], State(51));
         Assert.Contains(away.Targets, t => t.Id == rest.Id && !t.Visible && t.Discovered);
-        var inactive = source.Build(field with { Actors = [field.Actors[0], marker with { ActivationEnabled = 0 }] },
+        var inactive = source.Build(field with { Actors = [field.Actors[0], marker with { ScriptCallsEnabled = false }] },
             Map(), new(0, 0, 2048, 2048), [], State(51));
         Assert.DoesNotContain(inactive.Targets, t => t.Id == rest.Id);
         source.Reset();

@@ -221,6 +221,8 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                                   ArrivalX=a[3], ArrivalY=a[4])
                 if kind == 'Progress':
                     record['Value'] = a[0]
+                if kind == 'Terrain':
+                    record['Copy'] = dict(zip(('Left', 'Top', 'Right', 'Bottom', 'X', 'Y', 'Flags'), a))
                 if kind == 'Encounter':
                     record['Value'] = int.from_bytes(a, 'little')
                 if kind == 'Switch':
