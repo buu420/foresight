@@ -215,10 +215,9 @@ public sealed class ReloadedNativeHookFactory :
 
         var contract = GameVersionCatalog.Hooks.SingleOrDefault(candidate => candidate.Id == id)
             ?? throw new ArgumentOutOfRangeException(nameof(id), id, "The hook ID is not present in the verified catalog.");
-        var worldInstruction = (id is HookId.WorldNavigationPadInstruction
-                or HookId.WorldNavigationPadGateInstruction
-                or HookId.WorldNavigationPadSecondInstruction) &&
-            contract.Kind == NativeHookKind.AssemblyInstructionSite &&
+        // Every audited six-byte world pad combine site (walking, Epoch, Dactyl) is the same
+        // `or edi,[esi+0x331C]` instruction executed before the managed probe.
+        var worldInstruction = contract.Kind == NativeHookKind.AssemblyInstructionSite &&
             contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("0BBE1C330000"));
         if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction)
         {

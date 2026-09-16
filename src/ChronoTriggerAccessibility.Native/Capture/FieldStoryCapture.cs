@@ -6,7 +6,17 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 public sealed record FieldStoryState(int Point, bool MotherIntroducedFriend)
 {
     public IReadOnlyDictionary<int, int> Globals { get; init; } = new Dictionary<int, int>();
+    public IReadOnlyDictionary<int, int> Locals { get; init; } = new Dictionary<int, int>();
+    public IReadOnlyDictionary<int, int> Extended { get; init; } = new Dictionary<int, int>();
+    public IReadOnlyDictionary<int, int>? Inventory { get; init; }
+    public IReadOnlyList<int>? Party { get; init; }
+    public int? Gold { get; init; }
     public int? Global(int index) => Globals.TryGetValue(index, out var value) ? value : null;
+    public int? Local(int index) => Locals.TryGetValue(index, out var value) ? value : null;
+    public int? Extra(int index) => Extended.TryGetValue(index, out var value) ? value : null;
+    public int? ItemCount(int item) => Inventory?.GetValueOrDefault(item, 0);
+    public int? PartyContains(int character, bool activeOnly) => Party is { Count: 9 }
+        ? Party.Take(activeOnly ? 3 : 9).Contains(character) ? 1 : 0 : null;
     public bool? Flag(int index, int mask) => Global(index) is { } value ? (value & mask) != 0 : null;
 }
 
@@ -28,16 +38,20 @@ public static class FieldStoryCapture
             if (!field.SceneIdCoherent || !Matches() ||
                 !Word((nuint)field.ActorBase + 0x110B0u, out var point) ||
                 !Word((nuint)field.ActorBase + 0x115B0u, out var flags)) return null;
-            var globals = new Dictionary<int, int>();
-            foreach (var index in ObjectiveGlobalIndices)
-            {
-                var address = (nuint)field.ActorBase + 0x110B0u + (nuint)(index * 4);
-                if (Word(address, out var value) && Word(address, out var again) && value == again)
-                    globals[index] = value & 255;
-            }
+            var globals = StoryMemoryCapture.StableWords(memory, (nuint)field.ActorBase + 0x110B0u, 512, 4, true);
+            // PC local operands index pairs of expanded byte cells. Opcode 12
+            // uses the first byte. 6E reads extended cells at A+6798 (169C39).
+            var locals = StoryMemoryCapture.StableWords(memory, (nuint)field.ActorBase + 0x118B0u, 256, 8, true);
+            // Installed scripts use extended indices through 78 (a word read).
+            // Stop before the actor array; its moving coordinates are not flags.
+            var extended = StoryMemoryCapture.StableWords(memory, (nuint)field.ActorBase + 0x6798u, 80, 4, false);
+            var inventory = StoryMemoryCapture.Inventory(memory, field.ActorBase);
+            var party = StoryMemoryCapture.Party(memory, field.ActorBase);
+            var gold = StoryMemoryCapture.Gold(memory, field.ActorBase);
             if (!Matches() || !Word((nuint)field.ActorBase + 0x110B0u, out var repeated) || repeated != point ||
                 !Word((nuint)field.ActorBase + 0x115B0u, out var repeatedFlags) || flags != repeatedFlags) return null;
-            return new(point & 255, (flags & 1) != 0) { Globals = globals };
+            return new(point & 255, (flags & 1) != 0)
+            { Globals = globals, Locals = locals, Extended = extended, Inventory = inventory, Party = party, Gold = gold };
         }
         catch { return null; }
 
@@ -50,5 +64,6 @@ public static class FieldStoryCapture
             if (address == 0 || (ulong)address + 3 > uint.MaxValue || !memory.TryRead(address, bytes)) return false;
             value = BinaryPrimitives.ReadInt32LittleEndian(bytes); return true;
         }
+
     }
 }

@@ -153,11 +153,14 @@ public sealed class Mod : ModBase
         });
         NavigationFrame? Field(nint engine) => areas.Observe(navigationSource.Capture(engine));
         NavigationFrame? World(nint context) => areas.Observe(worldSource.Capture(context));
+        NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));
+        var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); },
-            footsteps.Suspend, World, context => World(context), footsteps.SetGuidance);
+            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); },
+            footsteps.Suspend, World, context => World(context), footsteps.SetGuidance,
+            Flight, worldSource.IsVehicleActive);
         var battle = new BattleRuntime(navigationSpeech.Publish, new BattleKeyboard(),
             NavigationKeyboard.IsGameForeground, _ =>
             {
@@ -181,12 +184,22 @@ public sealed class Mod : ModBase
             if (battle.IsActive) return;
             var accepted = navigation.OnWorldInput(context, pad);
             footsteps.OnWorldInput(context, accepted);
+            var motion = worldSource.CaptureMotion(context);
+            prompts.Observe(context, worldSource.CaptureVehicles(context),
+                motion is { } walking ? walking.X / 16 : -1, motion is { } y ? y.Y / 16 : -1);
         }, (context, pad) => battle.IsActive ? pad : navigation.ApplyWorldPad(context, pad), image =>
         {
             navigationImageBase = image;
             worldSource.BindImageBase(image);
-        });
+        }, (context, pad, kind) =>
+        {
+            // Vehicle ticks fire for parked vehicles too; only the active flying
+            // transport may pump navigation, and flight never reaches the footsteps.
+            if (battle.IsActive || !navigation.OnVehicleInput(context, pad, kind)) return;
+            prompts.Observe(context, worldSource.CaptureVehicles(context));
+        }, (context, pad, kind) => battle.IsActive ? pad : navigation.ApplyVehiclePad(context, pad, kind));
         dispatcher = new NavigationDispatcher(dispatcher, navigation);
+        var timeGauge = new TimeGaugeHookSet(hookFactory, memory, dispatcher);
 
         var sharedFanout = new SharedNativeHookFanoutFactory(
             hookFactory,
@@ -234,6 +247,7 @@ public sealed class Mod : ModBase
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
             .Concat(worldHooks.Registrations)
+            .Concat(timeGauge.Registrations)
             .Concat(battleHooks.Registrations)
             .Concat(submenuHooks.Registrations)
             .ToArray();
@@ -250,6 +264,7 @@ public sealed class Mod : ModBase
             introTrace,
             navigationHooks,
             worldHooks,
+            timeGauge,
             battleHooks,
             submenuHooks,
         };
@@ -266,6 +281,7 @@ public sealed class Mod : ModBase
             introTrace,
             navigationHooks,
             worldHooks,
+            timeGauge,
             battleHooks,
             submenuHooks,
             installer);
@@ -295,6 +311,7 @@ public sealed record CompleteAccessibilityComposition(
     IntroTraceHookSet IntroTraceHookSet,
     FieldNavigationHookSet FieldNavigationHookSet,
     WorldNavigationHookSet WorldNavigationHookSet,
+    TimeGaugeHookSet TimeGaugeHookSet,
     BattleHookSet BattleHookSet,
     FieldSubmenuHookSet FieldSubmenuHookSet,
     ReloadedHookInstaller Installer);

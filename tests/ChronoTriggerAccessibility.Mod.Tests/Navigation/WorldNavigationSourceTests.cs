@@ -69,7 +69,7 @@ public sealed class WorldNavigationSourceTests
     [InlineData(55, 223, 226, -1)]
     [InlineData(60, 228, -1, -1)]
     [InlineData(66, 226, -1, -1)]
-    [InlineData(77, -1, -1, -1)]
+    [InlineData(77, 226, -1, -1)]
     public void FutureWorldObjectivesAdvanceAndUseTheCorrectSideOfEachRuin(int point, int a, int b, int c)
     {
         var destinations = new[] { 210, 212, 213, 214, 223, 225, 226, 228 };

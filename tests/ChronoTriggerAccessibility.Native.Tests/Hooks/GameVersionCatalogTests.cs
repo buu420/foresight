@@ -16,6 +16,8 @@ public sealed class GameVersionCatalogTests
         { HookId.InventoryHelpRefresh, "Inventory selected item details", 0x1C7610, "558BEC6AFF68E0C1760064A1000000005083EC38", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.SaveSlotDetailsRefresh, "Save file selected details", 0x218FE0, "558BEC6AFF688C3E770064A1000000005081ECD8", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuManagerUpdate, "Menu manager completed update", 0x1DCF10, "558BEC83E4F883EC14538BD9565780BB90020000", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TimeGaugeSceneInit, "AgeSelectScene::init", 0x2989B0, "558BEC6AFF68BF95770064A100000000", typeof(TimeGaugeSceneInitDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.TimeGaugeSceneUpdate, "AgeSelectScene::update", 0x2996D0, "558BEC83E4F851A1DCC3810085C05356", typeof(TimeGaugeSceneUpdateDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B9110, "558BEC6AFF68A1AD760064A100000000", typeof(TextManagerGetMsgDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.OpeTextResolver, "Ope localized text resolver", 0x1B9060, "558BEC518B41048B112BC28B4D0CC1", typeof(OpeTextResolverDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.SceneManagerCreate, "SceneManager::create", 0x297860, "558BEC6AFF68F873760064A100000000", typeof(SceneManagerCreateDelegate), X86CallingConvention.MicrosoftFastcall },
@@ -160,12 +162,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredFortyOneUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredFortyNineUniqueContracts()
     {
-        Assert.Equal(141, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(141, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(149, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(149, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(149, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(149, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]
@@ -371,6 +373,45 @@ public sealed class GameVersionCatalogTests
         AssertSignatureWithReturn<TouchTopMenuDeletingDestructorDelegate>(typeof(nint), typeof(nint), typeof(uint));
         AssertSignature<TopMenuActionDispatcherDelegate>(typeof(nint));
         AssertSignature<NativeCallSiteProbeDelegate>();
+    }
+
+    [Theory]
+    [InlineData(HookId.WorldNavigationEpochTickCallSite, "World navigation Epoch task tick", 0x2766EA, 0x28E1D0, "E8E17A0100")]
+    [InlineData(HookId.WorldNavigationDactylTickCallSite, "World navigation Dactyl task tick", 0x276718, 0x28A1E0, "E8C33A0100")]
+    public void VehicleTickCallSite_IsAnExactFiveByteDirectCallToItsVehicleTask(
+        HookId id, string symbol, uint probeRva, uint targetRva, string expectedHex)
+    {
+        var contract = GameVersionCatalog.Get(id);
+        Assert.Equal(symbol, contract.Symbol);
+        Assert.Equal(probeRva, contract.Rva);
+        Assert.Equal(expectedHex, Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.AssemblyCallSite, contract.Kind);
+        Assert.Null(contract.DelegateType);
+        Assert.Null(contract.CallingConvention);
+        var displacement = BinaryPrimitives.ReadInt32LittleEndian(contract.ExpectedBytes.AsSpan()[1..]);
+        Assert.Equal(targetRva, checked((uint)(probeRva + 5 + displacement)));
+    }
+
+    [Theory]
+    [InlineData(HookId.WorldNavigationEpochPadGateInstruction, 0x28E8C2)]
+    [InlineData(HookId.WorldNavigationEpochPadInstruction, 0x28EAB9)]
+    [InlineData(HookId.WorldNavigationDactylPadGateInstruction, 0x28A761)]
+    [InlineData(HookId.WorldNavigationDactylPadInstruction, 0x28A94C)]
+    public void VehiclePadSite_IsTheSameSixByteCombineInstructionAsWalking(HookId id, uint rva)
+    {
+        var contract = GameVersionCatalog.Get(id);
+        Assert.Equal(rva, contract.Rva);
+        Assert.Equal("0BBE1C330000", Convert.ToHexString(contract.ExpectedBytes.AsSpan()));
+        Assert.Equal(NativeHookKind.AssemblyInstructionSite, contract.Kind);
+        Assert.Null(contract.DelegateType);
+        Assert.Null(contract.CallingConvention);
+    }
+
+    [Fact]
+    public void TimeGaugeDelegatesPreserveTheAuditedThiscallContracts()
+    {
+        AssertSignatureWithReturn<TimeGaugeSceneInitDelegate>(typeof(byte), typeof(nint));
+        AssertSignature<TimeGaugeSceneUpdateDelegate>(typeof(nint), typeof(float));
     }
 
     [Fact]

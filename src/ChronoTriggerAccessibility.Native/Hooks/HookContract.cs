@@ -146,6 +146,14 @@ public enum HookId
     InventoryHelpRefresh,
     SaveSlotDetailsRefresh,
     MenuManagerUpdate,
+    WorldNavigationEpochTickCallSite,
+    WorldNavigationDactylTickCallSite,
+    WorldNavigationEpochPadGateInstruction,
+    WorldNavigationEpochPadInstruction,
+    WorldNavigationDactylPadGateInstruction,
+    WorldNavigationDactylPadInstruction,
+    TimeGaugeSceneInit,
+    TimeGaugeSceneUpdate,
 }
 
 public enum X86CallingConvention
@@ -482,6 +490,18 @@ public delegate void FieldOpcodeDispatcherDelegate(nint context, int opcode);
 
 [Function(CallingConventions.Cdecl)]
 public delegate uint FieldNavigationPadProbeDelegate(nint engine, uint originalPad);
+
+// AgeSelectScene::init at RVA 0x2989B0 (cocos2d::Layer::init override, vtable 0x3AF778
+// slot 158). The time gauge is created through SceneManager::create(29) when the world
+// scene dispatches NextScene action 5 for master action 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte TimeGaugeSceneInitDelegate(nint scene);
+
+// AgeSelectScene::update(float) at RVA 0x2996D0 (vtable slot 122). It polls the input
+// manager directly, moves the highlighted slot at +0x2B8, commits through 0x29A150 and
+// sets the closing flag at +0x17E4 before NextScene(0) pops the scene.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void TimeGaugeSceneUpdateDelegate(nint scene, float deltaSeconds);
 
 [Function(CallingConventions.Cdecl)]
 public delegate void SteamSettingsRenderedValueProbeDelegate(nint text);

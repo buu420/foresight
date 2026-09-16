@@ -155,7 +155,7 @@ public sealed class FieldNavigationSourceTests
         var map = Map(64);
         map.ExitCells[13 * 64 + 23] = 0;
         var targets = source.Build(field, map, new(4096, 256, 8320, 3328), [], new(3, false)).Targets;
-        var story = Assert.Single(targets);
+        var story = Assert.Single(targets, target => target.Category == NavigationCategory.StoryEvents);
         Assert.False(story.IsStoryNote);
         Assert.False(story.Visible);
         Assert.False(story.Discovered);

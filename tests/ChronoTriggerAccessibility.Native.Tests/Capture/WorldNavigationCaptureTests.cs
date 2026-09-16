@@ -91,6 +91,24 @@ public sealed class WorldNavigationCaptureTests
     }
 
     [Theory]
+    [InlineData(0, 603, 205, 603, 205)]
+    [InlineData(1, 603, 205, 603, 205)]
+    [InlineData(2, 607, 205, 611, 205)]
+    public void WalkingPhaseUsesTheLivePlayerTaskAndItsCommittedEndpoint(int state, int x, int y, int endX, int endY)
+    {
+        const nuint actor = 0xB30;
+        var memory = FullMemory().Short(Data + 0x2E04E, (ushort)actor)
+            .Short(Data + 0x2E000 + actor, 0x3404).Byte(Data + 0x2E002 + actor, (byte)state)
+            .Short(Data + 0x2E014 + actor, (ushort)x).Short(Data + 0x2E018 + actor, (ushort)y)
+            .Short(Data + 0x2E02A + actor, 611).Short(Data + 0x2E02C + actor, 205)
+            .Short(Data + 0x2E283, (ushort)x).Short(Data + 0x2E285, (ushort)y);
+        Assert.Equal(new WorldPixelPoint(endX, endY), WorldNavigationCapture.Capture(memory, Image, Context, out _)?.WalkingEndpoint);
+        memory.Short(Data + 0x2E000 + actor, 0x42DD);
+        Assert.Null(WorldNavigationCapture.Capture(memory, Image, Context, out _)?.WalkingEndpoint);
+        Assert.Equal(x, WorldNavigationCapture.Motion(memory, Image, Context, out _)?.PixelX);
+    }
+
+    [Theory]
     [InlineData(0, 3, 106)]
     [InlineData(1, 12, 111)]
     [InlineData(2, 53, 111)]

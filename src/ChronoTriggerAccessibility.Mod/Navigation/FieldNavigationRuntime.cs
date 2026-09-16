@@ -1,6 +1,10 @@
 using ChronoTriggerAccessibility.Core.Navigation;
+using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
+
+/// <summary>Which native input boundary currently drives navigation.</summary>
+public enum NavigationMode { Field, World, Epoch, Dactyl }
 
 /// <summary>Runs only at the game's accepted field-input boundary. It returns one
 /// ordinary pad value; it never holds OS keys or writes player coordinates.</summary>
@@ -8,7 +12,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     Func<bool> isForeground, Func<long> clock, Action<string> speak, Action<string> diagnostic,
     Action<nint>? observe = null, Action? resetDiscoveries = null, Action? resetMotion = null,
     Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null,
-    Action<NavigationLeg?>? synchronizeFootsteps = null)
+    Action<NavigationLeg?>? synchronizeFootsteps = null,
+    Func<nint, VehicleKind, NavigationFrame?>? vehicleCapture = null,
+    Func<nint, VehicleKind, bool>? vehicleActive = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -18,7 +24,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private long lastObservation = -1;
     private long lastDiagnostic = -1;
     private string lastRouteState = "none";
-    private bool worldMode;
+    private NavigationMode mode;
     private uint worldDirection;
     private long worldPadCalls;
     private long worldPadApplied;
@@ -26,12 +32,35 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private uint worldPadLastInput;
     private string worldPadLastReject = "none";
 
-    public uint OnWorldInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, true);
+    public uint OnWorldInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, NavigationMode.World);
+
+    /// <summary>Runs at a vehicle task's tick. A parked or foreign vehicle task must not
+    /// disturb the walking controller, so nothing happens unless the capture proves this
+    /// vehicle is the player's current flying transport. Returns that verdict.</summary>
+    public bool OnVehicleInput(nint currentEngine, uint originalPad, VehicleKind kind)
+    {
+        if (!enabled || vehicleCapture is null) return false;
+        if (vehicleActive?.Invoke(currentEngine, kind) != true)
+        {
+            lock (gate)
+                if (engine == currentEngine && mode == Mode(kind)) Suspend("vehicle control ended");
+            return false;
+        }
+        ProcessInput(currentEngine, originalPad, Mode(kind));
+        return true;
+    }
+
+    public static NavigationMode Mode(VehicleKind kind) => kind == VehicleKind.Epoch ? NavigationMode.Epoch : NavigationMode.Dactyl;
 
     /// <summary>Runs at each native world pad-combine site. Counters distinguish
     /// requested directions from callbacks that accepted them. Position changes
     /// remain the evidence that the game actually moved.</summary>
-    public uint ApplyWorldPad(nint currentEngine, uint originalPad)
+    public uint ApplyWorldPad(nint currentEngine, uint originalPad) => ApplyPad(currentEngine, originalPad, NavigationMode.World);
+
+    public uint ApplyVehiclePad(nint currentEngine, uint originalPad, VehicleKind kind) =>
+        ApplyPad(currentEngine, originalPad, Mode(kind));
+
+    private uint ApplyPad(nint currentEngine, uint originalPad, NavigationMode padMode)
     {
         lock (gate)
         {
@@ -40,7 +69,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             var now = clock();
             var reject =
                 !enabled ? "disabled" :
-                !worldMode ? "not world mode" :
+                mode == NavigationMode.Field ? "not world mode" :
+                mode != padMode ? $"not {padMode} mode" :
                 engine != currentEngine ? "different context" :
                 !isForeground() ? "background" :
                 lastCall < 0 ? "no tick yet" :
@@ -94,14 +124,16 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate) { resetDiscoveries?.Invoke(); resetMotion?.Invoke(); lastObservation = -1; }
     }
 
-    public uint OnInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, false);
+    public uint OnInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, NavigationMode.Field);
 
-    private uint ProcessInput(nint currentEngine, uint originalPad, bool world)
+    private uint ProcessInput(nint currentEngine, uint originalPad, NavigationMode current)
     {
         lock (gate)
         {
             if (!enabled) return originalPad;
             worldDirection = 0;
+            var flight = current is NavigationMode.Epoch or NavigationMode.Dactyl;
+            var kind = current == NavigationMode.Dactyl ? VehicleKind.Dactyl : VehicleKind.Epoch;
             try
             {
                 var now = clock();
@@ -112,18 +144,23 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     return originalPad;
                 }
                 if (lastCall >= 0 && (now < lastCall || now - lastCall > 250)) Suspend("player input was paused");
-                if (engine != 0 && (engine != currentEngine || worldMode != world))
+                if (engine != 0 && (engine != currentEngine || mode != current))
                 {
                     Suspend("area changed");
                     lastObservation = -1;
                 }
-                worldMode = world;
+                mode = current;
                 engine = currentEngine;
                 lastCall = now;
                 var commands = keyboard.Poll();
                 if (!controller.IsActive && commands.Count == 0)
                 {
-                    var observer = world ? worldObserve : observe;
+                    Action<nint>? observer = current switch
+                    {
+                        NavigationMode.Field => observe,
+                        NavigationMode.World => worldObserve,
+                        _ => vehicleCapture is null ? null : context => vehicleCapture(context, kind),
+                    };
                     if (observer is not null && (lastObservation < 0 || now - lastObservation >= 500))
                     {
                         try { observer(currentEngine); }
@@ -132,7 +169,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     }
                     return originalPad;
                 }
-                var frame = world ? worldCapture?.Invoke(currentEngine) : capture(currentEngine);
+                var frame = current switch
+                {
+                    NavigationMode.Field => capture(currentEngine),
+                    NavigationMode.World => worldCapture?.Invoke(currentEngine),
+                    _ => vehicleCapture?.Invoke(currentEngine, kind),
+                };
                 if (frame is null || !frame.CanNavigate)
                 {
                     Suspend("navigation state is unavailable");
@@ -159,17 +201,19 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
                 {
                     if (controller.IsActive || commands.Count != 0) lastRouteState = controller.DiagnosticState;
-                    diagnostic($"Navigation: command={string.Join(",", commands)}; scene={frame.Scene}; " +
+                    diagnostic($"Navigation: command={string.Join(",", commands)}; mode={current}; scene={frame.Scene}; " +
                         $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
                         $"input=0x{originalPad:X}; pad=0x{DirectionBits(result.Direction):X}; " +
                         $"guiding={result.Guiding}; walking={result.AutoWalking}; " +
-                        (world ? WorldPadDiagnostic() + "; " : string.Empty) +
+                        (current != NavigationMode.Field ? WorldPadDiagnostic() + "; " : string.Empty) +
                         string.Join(" ", speech));
                     lastDiagnostic = now;
                 }
-                synchronizeFootsteps?.Invoke(result.ManualLeg);
+                // Flight is silent: the footstep tracker never counts vehicle motion and
+                // a manual flight leg must not synchronize a footstep count.
+                synchronizeFootsteps?.Invoke(flight ? null : result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
-                if (world) worldDirection = DirectionBits(result.Direction);
+                if (current != NavigationMode.Field) worldDirection = DirectionBits(result.Direction);
                 return originalPad | DirectionBits(result.Direction);
             }
             catch (Exception exception)

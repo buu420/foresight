@@ -362,6 +362,36 @@ public static class GameVersionCatalog
             Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
         new(HookId.WorldNavigationPadInstruction, "World navigation combined direction input", 0x26536F,
             Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        // World task dispatch 276590 calls the Epoch task 28E1D0 (task 0x42DD) and the Dactyl
+        // task 28A1E0 (task 0x4CC5) once per emulated frame whenever that vehicle actor exists;
+        // D+2E04E holds the vehicle actor offset at each call. Both are je targets, so the
+        // relocated first byte is the only entry into either five-byte CALL.
+        CreateAssemblyCallSite(HookId.WorldNavigationEpochTickCallSite,
+            "World navigation Epoch task tick", 0x2766EA, "E8 E1 7A 01 00"),
+        CreateAssemblyCallSite(HookId.WorldNavigationDactylTickCallSite,
+            "World navigation Dactyl task tick", 0x276718, "E8 C3 3A 01 00"),
+        // The Epoch task reads the pad in hover state 0x0F (gate: pad==0 computes the landing
+        // prompt, Confirm lands) and state 0x10 (directions, menu, time gauge); the Dactyl task
+        // in states 4 and 5. Each is the same six-byte OR into EDI as the walking sites, and
+        // every consumer of the result recomputes flags from EDI afterwards.
+        new(HookId.WorldNavigationEpochPadGateInstruction,
+            "World navigation Epoch combined direction input (hover gate)", 0x28E8C2,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        new(HookId.WorldNavigationEpochPadInstruction,
+            "World navigation Epoch combined direction input (dispatch)", 0x28EAB9,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        new(HookId.WorldNavigationDactylPadGateInstruction,
+            "World navigation Dactyl combined direction input (hover gate)", 0x28A761,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        new(HookId.WorldNavigationDactylPadInstruction,
+            "World navigation Dactyl combined direction input (dispatch)", 0x28A94C,
+            Convert.FromHexString("0BBE1C330000"), NativeHookKind.AssemblyInstructionSite, null, null),
+        Create(HookId.TimeGaugeSceneInit, "AgeSelectScene::init", 0x2989B0,
+            "55 8B EC 6A FF 68 BF 95 77 00 64 A1 00 00 00 00",
+            typeof(TimeGaugeSceneInitDelegate), X86CallingConvention.MicrosoftThiscall),
+        Create(HookId.TimeGaugeSceneUpdate, "AgeSelectScene::update", 0x2996D0,
+            "55 8B EC 83 E4 F8 51 A1 DC C3 81 00 85 C0 53 56",
+            typeof(TimeGaugeSceneUpdateDelegate), X86CallingConvention.MicrosoftThiscall),
         Create(HookId.BattleHudRefresh, "Battle party HUD refresh", 0x1BDD0,
             "55 8B EC 6A FF 68 C0 55 76 00 64 A1 00 00 00 00",
             typeof(BattleMenuMemberDelegate), X86CallingConvention.MicrosoftThiscall),

@@ -2,13 +2,15 @@ using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Startup;
+using ChronoTriggerAccessibility.Native.Capture;
 using ChronoTriggerAccessibility.Native.Hooks;
 using Reloaded.Hooks.Definitions.Enums;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
-    Action<nint, uint> onTick, Func<nint, uint, uint> onPad, Action<nuint> bindImageBase)
+    Action<nint, uint> onTick, Func<nint, uint, uint> onPad, Action<nuint> bindImageBase,
+    Action<nint, uint, VehicleKind>? onVehicleTick = null, Func<nint, uint, VehicleKind, uint>? onVehiclePad = null)
     : IHookActivationObserver
 {
     private bool active;
@@ -17,6 +19,9 @@ public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
     private readonly Action<nint, uint> tickCallback = onTick;
     private readonly Func<nint, uint, uint> padCallback = onPad;
     private readonly Action<nuint> bindBuild = bindImageBase;
+    private readonly Action<nint, uint, VehicleKind>? vehicleTickCallback = onVehicleTick;
+    private readonly Func<nint, uint, VehicleKind, uint>? vehiclePadCallback = onVehiclePad;
+
     /// <summary>
     /// 264C40 rebuilds the combined pad three times. State 0F (265147) gates the whole
     /// remaining chain on the physical pad being non-zero, and states 10 (265247) and 11
@@ -31,11 +36,33 @@ public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
         HookId.WorldNavigationPadInstruction,
     ];
 
-    private static readonly HookId[] Boundaries =
-        [HookId.WorldNavigationTickCallSite, .. PadInstructions];
+    /// <summary>
+    /// The Epoch task 28E1D0 reads the pad twice while hovering (state 0F gate, state 10
+    /// dispatch) and the Dactyl task 28A1E0 in states 4 and 5; the same rule applies. The
+    /// vehicle tick call sites 2766EA and 276718 run once per emulated frame for every
+    /// frame the vehicle actor exists, parked or flying, so their callback decides.
+    /// </summary>
+    private static readonly (HookId Id, bool Tick, VehicleKind Kind)[] VehicleBoundaries =
+    [
+        (HookId.WorldNavigationEpochTickCallSite, true, VehicleKind.Epoch),
+        (HookId.WorldNavigationEpochPadGateInstruction, false, VehicleKind.Epoch),
+        (HookId.WorldNavigationEpochPadInstruction, false, VehicleKind.Epoch),
+        (HookId.WorldNavigationDactylTickCallSite, true, VehicleKind.Dactyl),
+        (HookId.WorldNavigationDactylPadGateInstruction, false, VehicleKind.Dactyl),
+        (HookId.WorldNavigationDactylPadInstruction, false, VehicleKind.Dactyl),
+    ];
+
+    private static readonly (HookId Id, bool Tick, VehicleKind? Kind)[] Boundaries =
+    [
+        (HookId.WorldNavigationTickCallSite, true, null),
+        .. PadInstructions.Select(id => (id, false, (VehicleKind?)null)),
+        .. VehicleBoundaries.Select(b => (b.Id, b.Tick, (VehicleKind?)b.Kind)),
+    ];
+
+    public static IReadOnlyList<HookId> BoundaryIds => Boundaries.Select(b => b.Id).ToArray();
 
     public IReadOnlyList<IHookRegistration> Registrations =>
-        [.. Boundaries.Select(id => new Registration(this, id))];
+        [.. Boundaries.Select(b => new Registration(this, b.Id, b.Tick, b.Kind))];
 
     public void AfterHooksActivated()
     {
@@ -45,7 +72,7 @@ public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
     }
     public void AfterHooksDisabled() => active = false;
 
-    private sealed class Registration(WorldNavigationHookSet owner, HookId id) : IHookRegistration
+    private sealed class Registration(WorldNavigationHookSet owner, HookId id, bool tick, VehicleKind? kind) : IHookRegistration
     {
         private bool prepared;
         public string Name => GameVersionCatalog.Get(id).Symbol;
@@ -56,10 +83,14 @@ public sealed class WorldNavigationHookSet(IRuntimeNativeAsmHookFactory factory,
                 address != checked(build.ImageBaseAddress + contract.Rva))
                 throw new InvalidOperationException("World navigation requires the verified native input boundaries.");
             owner.bindBuild(build.ImageBaseAddress);
-            var tick = id == HookId.WorldNavigationTickCallSite;
             FieldNavigationPadProbeDelegate callback = (context, pad) => boundary.Run(Name, () =>
             {
                 if (!owner.active || boundary.IsFaulted) return pad;
+                if (kind is { } vehicle)
+                {
+                    if (tick) { owner.vehicleTickCallback?.Invoke(context, pad, vehicle); return pad; }
+                    return owner.vehiclePadCallback?.Invoke(context, pad, vehicle) ?? pad;
+                }
                 if (tick) { owner.tickCallback(context, pad); return pad; }
                 return owner.padCallback(context, pad);
             }, pad);

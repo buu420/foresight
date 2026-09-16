@@ -59,6 +59,32 @@ public sealed class FieldMapCaptureTests
         Assert.True(map.TransitionPending);
     }
 
+    [Fact]
+    public void ReadsTheCurrentScenesExpandedDestinationRecords()
+    {
+        var memory = Valid();
+        memory.Word(0x1e5c, 0x16408);
+        memory.Word(0x16400, 1); memory.Word(0x16404, 2);
+        memory.Word(0x1e68, 0x16538);
+        memory.Word(0x16510, 43);
+        memory.Word(0x1652c, 0x8000 | 654);
+        Assert.True(FieldMapCapture.TryCapture(memory, Field, out var map, out var error), error);
+        Assert.Equal(654, Assert.Single(map.ExitDestinations!).Value);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnreadableOrChangingDestinationsDoNotDestroyTheCollisionMap(bool changing)
+    {
+        var memory = Valid();
+        if (changing) memory.ChangeOnSecondRead = 0x16500;
+        else memory.Unreadable = 0x16500;
+        Assert.True(FieldMapCapture.TryCapture(memory, Field, out var map, out var error), error);
+        Assert.Null(map.ExitDestinations);
+        Assert.Equal(new byte[] { 128, 128, 0, 128 }, map.ExitCells);
+    }
+
     private static Memory Valid()
     {
         var m = new Memory();
@@ -84,6 +110,8 @@ public sealed class FieldMapCaptureTests
     {
         public byte[] Bytes { get; } = new byte[0x60000];
         public nuint Unreadable { get; set; }
+        public nuint ChangeOnSecondRead { get; set; }
+        private int destinationReads;
         public int LargestRead { get; private set; }
         public void Word(int address, int value) => BinaryPrimitives.WriteInt32LittleEndian(Bytes.AsSpan(address, 4), value);
         public bool TryRead(nuint address, Span<byte> destination)
@@ -91,6 +119,7 @@ public sealed class FieldMapCaptureTests
             LargestRead = Math.Max(LargestRead, destination.Length);
             if (address == Unreadable || (ulong)address + (uint)destination.Length > (ulong)Bytes.Length) return false;
             Bytes.AsSpan((int)address, destination.Length).CopyTo(destination);
+            if (address == ChangeOnSecondRead && ++destinationReads == 2) destination[^1] ^= 1;
             return true;
         }
     }

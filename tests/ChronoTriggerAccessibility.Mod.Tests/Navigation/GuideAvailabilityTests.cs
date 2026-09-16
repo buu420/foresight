@@ -11,12 +11,13 @@ public sealed class GuideAvailabilityTests
     [Theory]
     [InlineData(NavigationCommand.Guide)]
     [InlineData(NavigationCommand.ToggleWalk)]
-    public void UnseenOpeningExitCanStartNavigationWithoutDiscoveringOtherCategories(NavigationCommand command)
+    public void UnseenOpeningExitAndStoryBothSupportGuideNavigation(NavigationCommand command)
     {
         var source = Source();
         var map = Map(); map.ExitCells[6 * 8 + 6] = 0;
         var frame = source.Build(Field(2), map, new(0, 0, 256, 256), [], new(3, false));
-        var target = Assert.Single(frame.Targets);
+        var target = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents);
+        Assert.True(Assert.Single(frame.Targets, t => t.Category == NavigationCategory.Exits).GuideAvailable);
         Assert.Equal("Go downstairs", target.Label);
         Assert.False(target.Visible);
         Assert.False(target.Discovered);
@@ -53,12 +54,13 @@ public sealed class GuideAvailabilityTests
         var map = Map(); map.ExitCells[6 * 8 + 6] = 0;
         for (var y = 0; y < 8; y++) map.CollisionLayers[y * 8 + 4] = 0;
         var closed = source.Build(Field(2), map, new(0, 0, 256, 256), [], new(3, false));
-        var target = Assert.Single(closed.Targets);
+        var target = Assert.Single(closed.Targets, t => t.Category == NavigationCategory.StoryEvents);
         Assert.False(target.IsStoryNote);
         Assert.Null(NavigationPathfinder.Find(closed.Graph, closed.Player, target.ApproachPoints));
         map.CollisionLayers[3 * 8 + 4] = map.CollisionLayers[4 * 8 + 4] = 1;
         var opened = source.Build(Field(2), map, new(0, 0, 256, 256), [], new(3, false));
-        Assert.NotNull(NavigationPathfinder.Find(opened.Graph, opened.Player, Assert.Single(opened.Targets).ApproachPoints));
+        Assert.NotNull(NavigationPathfinder.Find(opened.Graph, opened.Player,
+            Assert.Single(opened.Targets, t => t.Category == NavigationCategory.StoryEvents).ApproachPoints));
     }
 
     [Fact]
@@ -71,7 +73,7 @@ public sealed class GuideAvailabilityTests
         for (var y = 2; y < 10; y++) map.ExitCells[y * 16 + 10] = 0;
         for (var y = 12; y < 16; y++) map.ExitCells[y * 16 + 4] = 1;
         var frame = Source().Build(Field(468), map, new(0, 0, 256, 256), [], new(15, false));
-        var stairs = Assert.Single(frame.Targets);
+        var stairs = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.StoryEvents);
         Assert.InRange(stairs.ApproachPoints.Count, 1, 64);
         var route = NavigationPathfinder.Find(frame.Graph, frame.Player, stairs.ApproachPoints);
         Assert.NotNull(route);

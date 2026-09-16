@@ -54,11 +54,5 @@ public static class OptionalGuideAreas
     };
 
     public static bool WorldDestination(int world, int destination, int? progress) =>
-        progress is >= 3 and <= 77 && (world, destination) switch
-        {
-            (0, 4 or 5 or 12 or 13 or 15 or 16 or 17 or 18 or 50 or 52 or 53 or 54 or 55 or 56) => true,
-            (1, 114 or 115 or 116 or 118) => true,
-            (2, 210) => true,
-            _ => false,
-        };
+        progress is >= 3 && world is >= 0 and < 16 && GameNavigationCatalog.IsFieldScene(destination);
 }

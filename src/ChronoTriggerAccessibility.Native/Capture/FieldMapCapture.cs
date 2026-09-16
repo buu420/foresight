@@ -5,11 +5,14 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 
 public sealed record FieldMapSnapshot(int Width, int Height, byte[] CollisionShapes,
     byte[] TerrainFlags, byte[] CollisionLayers, int PlayerLayer, bool TransitionPending,
-    int ExitWidth, int ExitHeight, byte[] ExitCells);
+    int ExitWidth, int ExitHeight, byte[] ExitCells)
+{
+    public IReadOnlyDictionary<int, int>? ExitDestinations { get; init; }
+}
 
 /// <summary>Reads MapTable's three live byte planes (DB1F0), the active exit grid
-/// (179F90/178FF0), and the physical player layer used by 178FF0. Never loads or names
-/// a destination scene: the grid identifies only exit cells in the current area.</summary>
+/// (179F90/178FF0), its live destination records, and the physical player layer.
+/// Capturing a destination does not load or activate that scene.</summary>
 public static class FieldMapCapture
 {
     public static bool TryCapture(IReadableMemory memory, FieldNavigationSnapshot field,
@@ -31,14 +34,15 @@ public static class FieldMapCapture
 
             if (!Vector(memory, field.Engine + 0xE58u, 4, 1024, out var offsets, out var sceneCount) ||
                 scene >= sceneCount || !Word(memory, offsets + (uint)scene * 4, out var firstExit) || firstExit < 0 ||
-                !Vector(memory, field.Engine + 0xE64u, 28, 8192, out _, out var recordCount)) return false;
+                !Vector(memory, field.Engine + 0xE64u, 28, 8192, out var records, out var recordCount)) return false;
             var endExit = recordCount;
             if (scene + 1 < sceneCount && !Word(memory, offsets + (uint)(scene + 1) * 4, out endExit)) return false;
             if (endExit < firstExit || endExit > recordCount || endExit - firstExit > 128) return false;
             if (exits.Any(value => value < 128 && value >= endExit - firstExit)) return false;
+            var destinations = Destinations(memory, records + (uint)firstExit * 28, endExit - firstExit);
             if (!Word(memory, field.FieldState + 0x1010u, out scene) || scene != field.SceneId) return false;
             snapshot = new(width, height, shapes, flags, layers, playerLayer[0], (transition & 0x90) != 0,
-                exitWidth, exitHeight, exits);
+                exitWidth, exitHeight, exits) { ExitDestinations = destinations };
             error = string.Empty;
             return true;
         }
@@ -47,6 +51,23 @@ public static class FieldMapCapture
             error = $"Field map capture failed safely: {exception.GetType().Name}.";
             return false;
         }
+    }
+
+    private static IReadOnlyDictionary<int, int>? Destinations(IReadableMemory memory, nuint first, int count)
+    {
+        if (count == 0) return new Dictionary<int, int>();
+        // 178FF0 copies record +0x10 into FieldState+0x105C. Scene ids use
+        // the low ten bits; upper bits retain native transition/facing metadata.
+        if (!Read(memory, first, count * 28, out var before) ||
+            !Read(memory, first, count * 28, out var after) || !before.AsSpan().SequenceEqual(after)) return null;
+        var result = new Dictionary<int, int>();
+        for (var index = 0; index < count; index++)
+        {
+            var packed = BinaryPrimitives.ReadInt32LittleEndian(before.AsSpan(index * 28 + 16, 4));
+            if (packed is < 0 or > ushort.MaxValue) return null;
+            result[index] = packed & 0x3FF;
+        }
+        return result;
     }
 
     private static bool Grid(IReadableMemory memory, nuint descriptor, out byte[] bytes, out int width, out int height)

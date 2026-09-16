@@ -9,6 +9,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
 {
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
+    private readonly FullStoryTargets fullStory = new();
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
@@ -23,7 +24,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         if (!FieldEnvironmentCapture.TryViewport(memory, field, out var viewport)) return Failed("Native camera bounds are unavailable.");
         var story = FieldStoryCapture.Capture(memory, field);
         if (!FieldEnvironmentCapture.TryTreasures(memory, field, map, out var treasures,
-            includeGuidePickups: field.SceneIdCoherent && story is { Point: >= 3 and <= 77 }))
+            includeGuidePickups: field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 }))
             return Failed("Native treasure state is unavailable.");
         lastFailure = null;
         if (story is null && !storyUnavailable) diagnostic("Navigation story context is unavailable; field targets remain usable.");
@@ -45,29 +46,42 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var targets = new List<NavigationTarget>();
         var storyAnchors = new List<NavigationTarget>();
         var storyCandidates = new List<NavigationTarget>();
+        var scriptTerminals = new List<(string Id, int Left, int Top, int Right, int Bottom)>();
         var activeIds = new HashSet<string>();
+        var guideActive = field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 };
         foreach (var actor in field.Actors)
         {
             if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
+            var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
+            var scriptedContact = story is not null && actor.ActivationBinding != 0 &&
+                scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
+            // These pickups have an initialization-time gate in addition to the
+            // contact handler. Preserve the audited gate when the sprite lingers.
+            if ((field.SceneId, actor.Index) is (8, 11) or (439, 15))
+                scriptedContact = field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor);
             // People includes visible characters without a talk action, such as
             // Crono's cat. Objects require activation or an audited script pickup gate.
-            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate &&
+            if (description.Category == NavigationCategory.Objects && !actor.IsActivationCandidate && !scriptedContact &&
                 !(field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor))) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) : null;
-            Add(id, label ?? description.Label, description.Category, position, Approach(position), viewport.Contains(position.X, position.Y),
-                guideAvailable: label is not null && story is { Point: >= 3 and <= 77 });
+            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
+                (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
+            if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
+                ProtectContactPassage(id, actor);
+            Add(id, label ?? description.Label, description.Category, position, touchOnly ? TouchApproach(actor) : Approach(position), viewport.Contains(position.X, position.Y),
+                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedContact));
         }
         foreach (var chest in treasures)
         {
             var position = Position(chest.FineX, chest.FineY);
             Add($"chest:{chest.Index}", chest.IsChest ? "Treasure chest" : "Item pickup", NavigationCategory.Objects, position,
                 Approach(position), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
-                guideAvailable: field.SceneIdCoherent && story is { Point: >= 3 and <= 77 });
+                guideAvailable: guideActive);
         }
         if (field.SceneIdCoherent)
         foreach (var actor in field.Actors)
@@ -78,15 +92,49 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (!InsideMap(actor)) continue;
             var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
+            var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
+                FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
+            if (knownTouch && label is null) continue;
+            var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
+            var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember &&
+                actor.ActivationBinding != 0 && (actor.IsActivationCandidate || metadata.Touch)
+                ? metadata.Actions.Where(a => a.Available(story)).ToArray() : [];
+            if (label is null && scripted.Length != 0)
+                label = scripted.Any(a => a.Kind == "Item") ? "Item pickup" :
+                    scripted.FirstOrDefault(a => a.Kind == "Warp") is { } warp
+                        ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery";
             if (label is null) continue;
             var position = Position(actor.FineX, actor.FineY);
-            var touch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
-                FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
+            var touch = knownTouch || metadata is { Touch: true };
             var approaches = touch
                 ? TouchApproach(actor)
                 : Approach(position);
-            Add($"landmark:{actor.Index}", label, NavigationCategory.Objects, position, approaches,
-                TileVisible(actor.TileX, actor.TileY), storyOnly: touch, guideAvailable: !touch);
+            var scriptedExit = scripted.Any(a => a.Kind == "Warp");
+            if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
+                ProtectContactPassage($"landmark:{actor.Index}", actor);
+            Add($"landmark:{actor.Index}", label, scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
+                TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
+                guideAvailable: guideActive && (!touch || scripted.Length != 0));
+        }
+        if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
+        foreach (var group in sceneInfo.Regions.Where(r => r.Available(story) &&
+                     (r.Kind != "Progress" || r.Value > story!.Point) &&
+                     field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
+                         (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0)).GroupBy(r => r.Id))
+        {
+            var region = group.First();
+            var goals = new List<NavigationPoint>();
+            for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
+            for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
+                goals.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
+            var points = goals.OrderBy(Distance).Distinct().Take(64).ToArray();
+            if (points.Length == 0) continue;
+            if (region.Kind == "Warp") scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
+            Add(region.Id, region.Kind == "Warp" ? GameNavigationCatalog.DestinationLabel(region.Destination) :
+                    region.Kind == "Switch" ? "Floor trigger" : "Story event",
+                region.Kind == "Switch" ? NavigationCategory.Objects : NavigationCategory.Exits,
+                points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
+                storyOnly: region.Kind != "Warp", guideAvailable: true);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -108,7 +156,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var label = FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
             var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
-            var optionalGuide = optionalLabel is not null && story is { Point: >= 3 and <= 77 };
+            var catalogLabel = field.SceneIdCoherent ? map.ExitDestinations?.TryGetValue(id, out var destination) == true
+                ? GameNavigationCatalog.DestinationLabel(destination) : GameNavigationCatalog.ExitLabel(field.SceneId, id) : null;
+            if (label == "Exit" && catalogLabel is not null) label = catalogLabel;
+            var optionalGuide = guideActive && (optionalLabel is not null || catalogLabel is not null);
             // Story objectives use the entire current native exit, including tiles
             // outside the camera. Retain goals to keep an active route stable.
             var retainedGuide = guideGeometry.TryGetValue(key, out var priorGuide)
@@ -191,12 +242,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var available = storyCandidates.ToArray();
             targets.AddRange(OpeningStoryTargets.Build(field.SceneId, story, available));
             targets.AddRange(EarlyStoryTargets.Build(field.SceneId, story, available, player));
-            targets.AddRange(FutureStoryTargets.Build(field.SceneId, story, available, player));
+            if (story is not { Point: >= FullStoryObjectives.FirstPoint })
+                targets.AddRange(FutureStoryTargets.Build(field.SceneId, story, available, player));
+            targets.AddRange(fullStory.Build(field.SceneId, story, available, player, fieldDestinations: map.ExitDestinations));
         }
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
-            player, targets.AsReadOnly(), graph, NavigationUnits.LocalStep) { AreaName = areaName?.Invoke(field.SceneId) };
+            player, targets.AsReadOnly(), scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
+            { AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId) };
 
         void ReportInventory()
         {
@@ -260,6 +314,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? ((actor.FineX + 32) / 64 * 64, (actor.FineY + 128 + 32) / 64 * 64)
                 : (actor.TileX * 256 + 128, actor.TileY * 256 + 128);
             return At(x, y).Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+        }
+        void ProtectContactPassage(string id, FieldActorSnapshot actor)
+        {
+            foreach (var point in TouchApproach(actor))
+            {
+                var (x, y) = (point.X / 256, point.Y / 256);
+                var footprint = (id, x, y, x, y);
+                if (!scriptTerminals.Contains(footprint)) scriptTerminals.Add(footprint);
+            }
         }
         IEnumerable<NavigationPoint> ExitApproach(NavigationPoint p)
         {
