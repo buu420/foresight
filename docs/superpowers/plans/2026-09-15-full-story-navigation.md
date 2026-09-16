@@ -63,5 +63,5 @@ story catalog. Bind to active actors/exits and collision-checked local routes.
 - [x] Commit implementation, build package, verify hash and product version.
 - [x] Check game closed and deployment paths, deploy with backup, run deployment
   contract and installed-file comparisons.
-- [ ] Record actual evidence, commit release notes, fast-forward main while
+- [x] Record actual evidence, commit release notes, fast-forward main while
   preserving unrelated files. Final report distinguishes tests from live play.
