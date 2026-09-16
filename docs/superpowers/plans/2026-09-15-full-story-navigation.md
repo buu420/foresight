@@ -60,8 +60,8 @@ story catalog. Bind to active actors/exits and collision-checked local routes.
 - [x] Review scope coverage and all unresolved runtime limits; resolve material gaps.
 - [x] Run complete Release suite and executable hook-byte verifier.
 - [x] Bump manifest to 0.3.23 and update byte-exact packaging assertions.
-- [ ] Commit implementation, build package, verify hash and product version.
-- [ ] Check game closed and deployment paths, deploy with backup, run deployment
+- [x] Commit implementation, build package, verify hash and product version.
+- [x] Check game closed and deployment paths, deploy with backup, run deployment
   contract and installed-file comparisons.
 - [ ] Record actual evidence, commit release notes, fast-forward main while
   preserving unrelated files. Final report distinguishes tests from live play.
