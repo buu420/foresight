@@ -57,32 +57,32 @@ and sparkle. Exact script guards, actor identity, draw/retirement state and
 native script-call gates still apply. The separately audited pendant gates are
 retained. People and objects remain in their existing navigation categories.
 
-The existing capture covers all343 installed treasure records, including active
-non-chest pickups, and143 item-giving actor identities. These are source records,
+The existing capture covers all 343 installed treasure records, including active
+non-chest pickups, and 143 item-giving actor identities. These are source records,
 not a count of distinct reachable rewards. Opened treasures and retired pickups
 are removed. Item contents and dialogue are not bundled into the catalog.
 
-The regenerated catalog retains669 scenes,1,020 exits,4,732 actor identities and
+The regenerated catalog retains 669 scenes, 1,020 exits, 4,732 actor identities and
 2,387 spatial records, and now preserves the collision-copy operands. Its SHA-256
 is `786F19697E7C41CFF34352F988A2FD4230748F78C7C3947BB0F4582197B8EA8D`.
-The existing11 incomplete script expansions and8 unused missing scripts remain
+The existing 11 incomplete script expansions and 8 unused missing scripts remain
 reported rather than silently counted as fully decoded.
 
 ## Verification and limits
 
-- Release suite: **1,729 passed**, zero failures/skips (Core139, Prism8,
-  Native774, Mod808). The real-time footstep tests run separately from CPU-heavy
+- Release suite: **1,729 passed**, zero failures/skips (Core 139, Prism 8,
+  Native 774, Mod 808). The real-time footstep tests run separately from CPU-heavy
   fixtures; their existing audio deadlines are unchanged.
 - Catalog compiler: **20 passed**. All **149 native hook signatures** match.
-- The catalog delta adds571 tile-copy operand records. Every earlier fact is
-  preserved; the one differently simplified predicate passes all65,536
+- The catalog delta adds 571 tile-copy operand records. Every earlier fact is
+  preserved; the one differently simplified predicate passes all 65,536
   combinations of its two native flag bytes.
 - Eight castle controller replays passed: both logged positions, movement
-  speeds16/32, and both tower exits. All selected the native opening contact and
+  speeds 16/32, and both tower exits. All selected the native opening contact and
   reached their destination with zero blocked movement ticks.
-- All27 tower checks passed on extracted maps468/480, covering each landing,
+- All 27 tower checks passed on extracted maps 468/480, covering each landing,
   applicable upward/downward Story Events and three camera configurations.
-- All36 later-visit router checks passed on the same maps, including both
+- All 36 later-visit router checks passed on the same maps, including both
   directions from every landing. A changed native connection cannot enable an
   outdated intermediate flight.
 - The extracted queen's-room map provides a route to the guard and, after his
@@ -101,3 +101,27 @@ use. No game input or save editing was used for this repair.
 
 Local evidence is under `artifacts/research/castle-0324/`, including Ghidra
 decompilations, native replay, map checks, test results and Claude's review.
+
+## Installed build
+
+Installed September 16, 2026, with the game closed. Package build completed with
+zero warnings/errors. All 25 deployment checks passed. Exact file sets and hashes
+match the 28 mod files, 45 loader/shared-hook files and two native launcher files.
+The supported game executable is unchanged, and the existing launch redirect and
+x86 runtime passed verification.
+
+Implementation commit: `f08351bec238ef9425e6a41617d98931690b9872`.
+DLL product version: `1.0.0+f08351bec238ef9425e6a41617d98931690b9872`.
+
+DLL SHA-256:
+`208165E6281B16FD34BAE14E8ED21183429CCD4B069AC7EFB069687775A8B19B`.
+
+Manifest SHA-256:
+`F423CEE192052F2716B0019126871DC55C5E570E570274143FC60101B749B4D2`.
+
+Previous installation:
+`X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260916-022932`.
+
+Start the screen reader and launch the game normally. Navigation controls are
+unchanged. Use Story Events to continue through the castle; the guard conversation
+still requires the player's Confirm input.
