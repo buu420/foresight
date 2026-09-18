@@ -72,4 +72,11 @@ This release has not received a complete live playthrough or a live shop purchas
 Release tests: 1,799 passed (Core 145, Native 790, Mod 856, Prism 8),
 with the three real-time footstep tests run separately. The native script decoder
 and navigation compiler passed 20 tests. All 151 native hook signatures match the
-supported executable. Installation proof is recorded after deployment.
+supported executable. The package was installed on September 18, 2026; all 25 deployment checks passed.
+All 28 mod files, 45 loader/shared-hook files, and two native launcher files match
+their reviewed source payloads. The game executable is unchanged.
+
+Implementation commit: `0b8359a9a33c89f2186c3941ce247a2e9a26b12f`. Installed Mod DLL SHA-256:
+`BB4B092C4DEFC53F9EBD98BA3532C64D05400FECA317D06C22C525535FAA0E3A`. The previous installation is retained in
+`Accessibility/Backups/20260918-115742` under the game directory. Detailed hashes
+and test-result paths are in `artifacts/research/shop-enemies-0325/deployment-proof.json`.
