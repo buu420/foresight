@@ -440,7 +440,7 @@ public sealed partial class FieldSubmenuCaptureTests
     }
 
     [Fact]
-    public void EquipmentReadsTheStatPanelFromItsCharaEquipManagerNotFromThePageNode()
+    public void EquipmentDoesNotConcatenateUncorrelatedPanelFragments()
     {
         var world = World();
         var child = Equipment(world);
@@ -457,7 +457,7 @@ public sealed partial class FieldSubmenuCaptureTests
 
         Assert.NotNull(snapshot);
         Assert.Equal("Equipment", snapshot!.Kind);
-        Assert.Equal("Weapon, Silver Sword. Power 15 to 22, Hit 90 to 94", snapshot.Text);
+        Assert.Equal("Weapon, Silver Sword", snapshot.Text);
         Assert.DoesNotContain("Wrong owner", snapshot.Text, StringComparison.Ordinal);
     }
 

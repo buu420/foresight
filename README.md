@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.25 adds native shop speech and an Enemies navigation category for active field encounters. See [shop reader](docs/shop-native-0325.md) and [navigation update](docs/shop-enemies-navigation-0325.md). The existing full story, optional quests, bonus areas, vehicle navigation and castle repairs remain included; see [whole-game navigation](docs/whole-game-native-navigation.md) and [story objectives](docs/full-story-objectives.md).
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.26 repairs Equipment replacement-list speech and pairs equipment preview stats with their labels. See [equipment repair](docs/equipment-native-0326.md). The native [shop reader](docs/shop-native-0325.md) and [Enemies navigation category](docs/shop-enemies-navigation-0325.md) remain included. The existing full story, optional quests, bonus areas, vehicle navigation and castle repairs remain included; see [whole-game navigation](docs/whole-game-native-navigation.md) and [story objectives](docs/full-story-objectives.md).
 
 Earlier menu, battle, pendant, Telepod, Resume confirmation and race-choice repairs remain included. Current Story Events remain routable before discovery, with optional guide targets in People, Interactable Objects, and Exits. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. World/local transition recovery and the Settings speech repair remain included. Intro audio descriptions remain pending.
 
@@ -10,7 +10,7 @@ Shop speech follows Buy/Sell/Equip, selected items and prices, stock, item help,
 
 ## In-game menus
 
-Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the focused control and its visible detail panel. Techs reads the selected row and its rendered description, component names, and MP/requirements panel. Party reads the focused control's visible text. These readers follow native focus and do not select or change anything for you.
+Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the selected character or equipped slot, replacement item names and quantities, and the displayed stat preview with increases or decreases. Techs reads the selected row and its rendered description, component names, and MP/requirements panel. Party reads the focused control's visible text. These readers follow native focus and do not select or change anything for you.
 
 Save/Load reads the selected file number, its displayed card text, and the visible party and save details. Empty files do not read an old preview. Save, overwrite, Bookmark, and Resume confirmations use the existing prompt and Yes/No reader. While a confirmation is open, file-list updates cannot interrupt it. Brief redraws are retried; a persistent unreadable selection is announced and logged, with recovery on the next valid capture.
 

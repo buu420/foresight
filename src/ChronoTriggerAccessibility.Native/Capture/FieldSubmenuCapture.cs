@@ -139,7 +139,7 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
     /// <summary>A selected character card has 18 Label fragments, including colon separators.
     /// This bounds fragments within the independently selected control, not menu rows.</summary>
     private const int MaximumRenderedLines = 64;
-    /// <summary>The equipment detail panel is a panel by design, so it gets its own bound.</summary>
+    /// <summary>Bound for the selected item-use target's detail panel.</summary>
     private const int MaximumPanelLines = 32;
 
     private readonly LoadedGameTextCapture text = new(memory);
@@ -184,6 +184,9 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             if (state.Kind == InventoryKind && Pointer(node + 0x314, out var itemUseManager) &&
                 itemUseManager == state.Manager)
                 snapshot = CaptureItemUseTarget(imageBase, node, caption, state);
+            else if (state.Kind == EquipmentKind &&
+                TryReadEquipmentCandidates(imageBase, node, out _, out _, out var candidates) && candidates == state.Manager)
+                snapshot = CaptureEquipmentCandidate(imageBase, node, caption, state);
             else
                 snapshot = state.Kind == InventoryKind && IsUnderItemList(node, state.Control)
                     ? CaptureInventoryRow(imageBase, node, caption, state, out rowKey)
@@ -230,6 +233,8 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
         if (state.Kind == EquipmentKind && TryReadEquipmentDetail(imageBase, node, out var detail))
         {
             body = $"{body}. {detail}";
+            if (TryReadEquipmentDescription(imageBase, node, out var description) && description.Length > 0)
+                body += $" Item details: {description}.";
         }
 
         return string.IsNullOrWhiteSpace(body)
@@ -249,33 +254,6 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
         Pointer(node + EquipmentManagerOffset, out child) &&
         Pointer(child, out var childVtable) && childVtable == imageBase + CharaEquipManagerVtableRva &&
         HasAncestor(child, node);
-
-    /// <summary>
-    /// The Equipment page's own detail panel. It is a panel rather than a selection, so it is read
-    /// separately from the focused slot and under its own bound; the player sees both at once.
-    /// </summary>
-    private bool TryReadEquipmentDetail(nuint imageBase, nuint node, out string detail)
-    {
-        detail = string.Empty;
-        if (!TryReadEquipmentChild(imageBase, node, out var child) ||
-            !Pointer(child + EquipmentDetailPanelOffset, out var panel) ||
-            !HasAncestor(panel, child))
-        {
-            return false;
-        }
-
-        var lines = rendered.Read(panel);
-        if (lines is null || lines.Count == 0 || lines.Count > MaximumPanelLines ||
-            !TryReadEquipmentChild(imageBase, node, out var childAgain) || childAgain != child ||
-            !Pointer(child + EquipmentDetailPanelOffset, out var panelAgain) || panelAgain != panel ||
-            !HasAncestor(panel, child))
-        {
-            return false;
-        }
-
-        detail = JoinRenderedLines(lines);
-        return !string.IsNullOrWhiteSpace(detail);
-    }
 
     private static string JoinRenderedLines(IReadOnlyList<string> lines)
     {
@@ -385,6 +363,13 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
         manager = 0;
         focusKey = NoManagerFocusKey;
         control = 0;
+        if (kind == EquipmentKind && TryReadEquipmentCandidates(imageBase, node, out _, out var list, out var itemManager) &&
+            Byte(itemManager + 0x290, out var itemsDisabled) && itemsDisabled == 0)
+        {
+            manager = itemManager;
+            return UInt32(manager + ManagerFocusKeyOffset, out focusKey) && focusKey != NoManagerFocusKey &&
+                TryFindFocusableControl(imageBase, manager, focusKey, out control) && HasAncestor(control, list);
+        }
         // The child may retain a cursor while disabled. Its active flag, not the existence of
         // that old cursor, decides whether slot/item selection owns this page.
         if (kind == EquipmentKind && TryReadEquipmentChild(imageBase, node, out var child) &&
@@ -481,8 +466,10 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
                 return true;
             }
 
-            return kind == EquipmentKind && TryReadEquipmentChild(imageBase, node, out var child) &&
-                TryReadTopManager(imageBase, child, out var childTop) && childTop == manager;
+            return kind == EquipmentKind &&
+                ((TryReadEquipmentChild(imageBase, node, out var child) &&
+                  TryReadTopManager(imageBase, child, out var childTop) && childTop == manager) ||
+                 (TryReadEquipmentCandidates(imageBase, node, out _, out _, out var itemManager) && itemManager == manager));
         }
         catch (Exception)
         {
