@@ -69,3 +69,19 @@ Release validation: **1,814 tests passed**, zero failures or skips: Core 145, Na
 Mod 856 (including three separately run footstep timing tests), Prism 8. All **151 native
 hook signatures** match the supported executable. The fifteen new equipment cases use the
 actual read-only capture or explicitly modified copies of its native layout.
+
+## Installed build
+
+Installed September 18, 2026 after the game had closed. All **25 deployment checks passed**.
+The installed file sets and hashes match the reviewed package: **28 mod files, 45 loader/shared
+hook files, and two native launcher/installer files**. The supported game executable is unchanged.
+
+Package code commit: `c2ae6f179fbdecea7b3849fd4b1925dc7742f7c7`. The final Release build had zero warnings or errors.
+
+DLL SHA-256: `23F872466CDFC1994AFDB65781382BA229C16C8EDF509D41188B379FF61D7096`.
+
+Manifest SHA-256: `B5D79623055547324577599841C3DED7801E949C6C4A185A40EB7BB4A7DAA80C`.
+
+Previous installation: `X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260918-123202`.
+
+Launch normally and reopen the equipment replacement list to check speech with the installed DLL.
