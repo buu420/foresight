@@ -168,6 +168,12 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
                 vtable == imageBase + ClassicFormationNodeVtableRva)
                 return CaptureFormation(imageBase, node);
 
+            // The gear information popup has one generic State, not a focusable
+            // character or item control. Read the panel owned by that active mode.
+            if (imageBase != 0 && node != 0 && Pointer(node, out vtable) &&
+                vtable == imageBase + ClassicItemNodeVtableRva && Pointer(node + 0x300, out _))
+                return CaptureInventoryInformation(imageBase, node);
+
             if (imageBase == 0 || !TryReadPageState(imageBase, node, out var state))
             {
                 return null;
@@ -187,6 +193,9 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             else if (state.Kind == EquipmentKind &&
                 TryReadEquipmentCandidates(imageBase, node, out _, out _, out var candidates) && candidates == state.Manager)
                 snapshot = CaptureEquipmentCandidate(imageBase, node, caption, state);
+            else if (state.Kind == EquipmentKind &&
+                TryReadEquipmentList(imageBase, node, 0x308, out _, out _, out var slots) && slots == state.Manager)
+                snapshot = CaptureEquippedSlot(imageBase, node, caption, state);
             else
                 snapshot = state.Kind == InventoryKind && IsUnderItemList(node, state.Control)
                     ? CaptureInventoryRow(imageBase, node, caption, state, out rowKey)
@@ -230,7 +239,7 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             return state.Kind == InventoryKind ? CaptureInventoryCategory(imageBase, node, caption, state) : null;
 
         var body = JoinRenderedLines(lines);
-        if (state.Kind == EquipmentKind && TryReadEquipmentDetail(imageBase, node, out var detail))
+        if (state.Kind == EquipmentKind && TryReadEquipmentDetail(imageBase, node, false, out var detail))
         {
             body = $"{body}. {detail}";
             if (TryReadEquipmentDescription(imageBase, node, out var description) && description.Length > 0)
@@ -363,12 +372,18 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
         manager = 0;
         focusKey = NoManagerFocusKey;
         control = 0;
-        if (kind == EquipmentKind && TryReadEquipmentCandidates(imageBase, node, out _, out var list, out var itemManager) &&
-            Byte(itemManager + 0x290, out var itemsDisabled) && itemsDisabled == 0)
+        if (kind == EquipmentKind && TryReadEquipmentChild(imageBase, node, out var equipmentChild))
         {
-            manager = itemManager;
-            return UInt32(manager + ManagerFocusKeyOffset, out focusKey) && focusKey != NoManagerFocusKey &&
-                TryFindFocusableControl(imageBase, manager, focusKey, out control) && HasAncestor(control, list);
+            if (!Byte(equipmentChild + 0x2C8, out var phase) || phase > 1) return false;
+            // Slot hover constructs an enabled candidate manager too. Only 2085E0's
+            // phase transition activates it; its mere existence/enabled bit is insufficient.
+            if (phase == 1)
+            {
+                return TryReadEquipmentCandidates(imageBase, node, out _, out var list, out manager) &&
+                    Byte(manager + 0x290, out var disabled) && disabled == 0 &&
+                    UInt32(manager + ManagerFocusKeyOffset, out focusKey) && focusKey != NoManagerFocusKey &&
+                    TryFindFocusableControl(imageBase, manager, focusKey, out control) && HasAncestor(control, list);
+            }
         }
         // The child may retain a cursor while disabled. Its active flag, not the existence of
         // that old cursor, decides whether slot/item selection owns this page.
@@ -597,12 +612,13 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             rowKey = key;
             return new(InventoryKind, caption, $"inventory:empty:{category}", $"{categoryName}. Empty.");
         }
-        if (!TryReadRow(imageBase, begin, cursor, out var name, out var quantity, out var encoded)) return null;
+        if (!TryReadInventoryEntry(imageBase, begin, cursor, out var name, out var quantity, out var encoded)) return null;
 
-        var body = $"{name}, {quantity.ToString(CultureInfo.InvariantCulture)}";
-        if (held >= 0 && held != cursor &&
-            TryReadRow(imageBase, begin, held, out var heldName, out _, out _))
+        var body = quantity == 0 ? $"Empty slot, {cursor + 1} of {count}" :
+            $"{name}, {quantity.ToString(CultureInfo.InvariantCulture)}";
+        if (held >= 0 && held != cursor)
         {
+            if (!TryReadInventoryEntry(imageBase, begin, held, out var heldName, out _, out _)) return null;
             // The picked-up row stays lit on screen while the cursor moves to its swap partner.
             body = $"{body}, moving {heldName}";
         }
@@ -611,7 +627,7 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             body = $"{body}, picked up";
         }
 
-        if (helpVisible != 0)
+        if (quantity > 0 && helpVisible != 0)
         {
             var help = text.Get(imageBase, ItemHelpBank, DecodeItemMessageId(imageBase, encoded));
             if (!string.IsNullOrWhiteSpace(help))
@@ -626,6 +642,18 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
             caption,
             $"inventory:{state.FocusKey.ToString("X", CultureInfo.InvariantCulture)}:{cursor}:{encoded}:{held}",
             body);
+    }
+
+    private bool TryReadInventoryEntry(nuint image, nuint begin, int row,
+        out string name, out int quantity, out int encoded)
+    {
+        var record = begin + (nuint)(row * ItemRowStride);
+        name = string.Empty; quantity = encoded = 0;
+        // 1C3080 preserves holes; they remain addressable destinations for 1C63D0.
+        // A zero quantity with a nonzero ID is not the native blank record.
+        if (!Int32(record, out encoded) || !Int32(record + 4, out quantity)) return false;
+        if (encoded == 0 && quantity == 0) { name = "Empty slot"; return true; }
+        return TryReadRow(image, begin, row, out name, out quantity, out encoded);
     }
 
     /// <summary>

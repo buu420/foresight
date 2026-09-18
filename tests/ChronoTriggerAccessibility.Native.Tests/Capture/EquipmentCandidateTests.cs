@@ -40,6 +40,43 @@ public sealed class EquipmentCandidateTests
         Assert.True(new FieldSubmenuCapture(memory).OwnsManager(image, node, CandidateManager(memory, node)));
     }
 
+    [Fact] public void APassiveReplacementListCannotOverrideTheActiveEquippedSlot()
+    {
+        var (memory, image, node) = Frame();
+        var child = Word(memory, node + 0x2F0);
+        // Native slot-hover builds a candidate list whose manager defaults to enabled,
+        // while the equipped-slot manager retains input. This is not candidate selection.
+        memory.Byte(child + 0x2C8, 0);
+        memory.Byte(Word(memory, Word(memory, child + 0x308) + 0x280) + 0x290, 0);
+        var result = new FieldSubmenuCapture(memory).Capture(image, node);
+        Assert.StartsWith("Equipped Weapon: Wooden Sword.", result!.Text);
+        Assert.DoesNotContain("Bronze Blade", result.Text);
+        Assert.DoesNotContain("increased from", result.Text);
+    }
+
+    [Fact] public void AReplacementIsExplicitlyAPreviewBesideTheActualEquippedItem()
+    {
+        var (memory, image, node) = Frame();
+        var result = new FieldSubmenuCapture(memory).Capture(image, node);
+        Assert.StartsWith("Preview: Bronze Blade.", result!.Text);
+        Assert.Contains("Currently equipped Weapon: Wooden Sword.", result.Text);
+        Assert.Contains("If equipped: Attack 10, increased from 8", result.Text);
+    }
+
+    [Fact] public void AnimatedDescriptionLabelsCannotRepeatPartialAnnouncements()
+    {
+        var (memory, image, node) = Frame();
+        var capture = new FieldSubmenuCapture(memory);
+        var expected = capture.Capture(image, node);
+        Assert.Contains("Item details: Attack:7", expected!.Text);
+        // Change the authoritative complete source without touching the old rendered
+        // prefix. The reader must use the whole new line immediately.
+        memory.Add(0x62000100, System.Text.Encoding.Unicode.GetBytes("Attack:9"));
+        var updated = capture.Capture(image, node);
+        Assert.Contains("Item details: Attack:9", updated!.Text);
+        Assert.DoesNotContain("Attack:7", updated.Text);
+    }
+
     [Fact] public void PairsThePreviewStatsAndAnnouncesTheVisibleIncrease()
     {
         var (memory, image, node) = Frame();
@@ -88,7 +125,7 @@ public sealed class EquipmentCandidateTests
             .Word(scene + 0x160, children).Word(scene + 0x164, children + 4).Word(children, node)
             .Word(node + 0x16C, scene);
         var result = new ShopCapture(memory).Capture(image, scene);
-        Assert.Contains("Equipment. Bronze Blade", result!.Text);
+        Assert.Contains("Equipment. Preview: Bronze Blade", result!.Text);
         Assert.Contains("Attack 10, increased from 8", result.Text);
     }
 
@@ -126,10 +163,11 @@ public sealed class EquipmentCandidateTests
     {
         var (memory, image, node) = Frame();
         var child = Word(memory, node + 0x2F0);
+        memory.Byte(child + 0x2C8, 0);
         memory.Byte(CandidateManager(memory, node) + 0x290, 1);
         memory.Byte(Word(memory, Word(memory, child + 0x308) + 0x280) + 0x290, 0);
         var result = new FieldSubmenuCapture(memory).Capture(image, node);
-        Assert.StartsWith("Wooden Sword", result!.Text);
+        Assert.StartsWith("Equipped Weapon: Wooden Sword", result!.Text);
         Assert.DoesNotContain("Bronze Blade", result.Text);
     }
 
@@ -149,7 +187,17 @@ public sealed class EquipmentCandidateTests
         var memory = new NavigationMemory();
         foreach (var segment in frame.GetProperty("segments").EnumerateObject())
             memory.Add(uint.Parse(segment.Name.Split(':')[0], NumberStyles.HexNumber), Convert.FromHexString(segment.Value.GetString()!));
-        return (memory, frame.GetProperty("imageBase").GetUInt32(), frame.GetProperty("node").GetUInt32());
+        var node = frame.GetProperty("node").GetUInt32();
+        // The older recorder saved the full rendered Attack:7, but not its UTF-16
+        // source. Model that audited source layout here; 0.3.27 has a separate live fixture.
+        var bar = Word(memory, Word(memory, node + 0x2F0) + 0x2F0);
+        const uint source = 0x62000000;
+        memory.Word(bar + 0x2D4, source).Word(bar + 0x2D8, source + 24);
+        memory.Add(source, new byte[24]);
+        // Eight code units require heap storage (inline capacity is seven).
+        memory.Word(source, source + 0x100).Word(source + 16, 8).Word(source + 20, 15);
+        memory.Add(source + 0x100, System.Text.Encoding.Unicode.GetBytes("Attack:7"));
+        return (memory, frame.GetProperty("imageBase").GetUInt32(), node);
     }
     private static uint CandidateManager(NavigationMemory m, uint node) => Word(m, Word(m, Word(m, node + 0x2F0) + 0x30C) + 0x280);
     private static uint Stat(NavigationMemory m, uint node, uint index) => Word(m, Word(m, Word(m, node + 0x2F0) + 0x310) + index * 4);

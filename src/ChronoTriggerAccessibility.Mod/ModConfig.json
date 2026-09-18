@@ -2,7 +2,7 @@
   "ModId": "chrono.trigger.accessibility",
   "ModName": "Chrono Trigger Accessibility",
   "ModAuthor": "Chrono Trigger Accessibility Project",
-  "ModVersion": "0.3.26",
+  "ModVersion": "0.3.27",
   "ModDescription": "Screen-reader access for Chrono Trigger startup, menus, Settings, Extras, field dialogue, battles, and local/world navigation.",
   "ModDll": "ChronoTriggerAccessibility.Mod.dll",
   "ModIcon": "",

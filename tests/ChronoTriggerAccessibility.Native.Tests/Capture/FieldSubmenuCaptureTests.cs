@@ -131,7 +131,7 @@ public sealed partial class FieldSubmenuCaptureTests
         world.Pointer(Node + 0x2D4, Rows + 24);
         world.Int32(Manager + 0x2C4, 8);
         FocusEntry(world, FocusMapSentinel, 8, FocusMapSentinel + 0x100, 0x20A00000);
-        Assert.Null(new FieldSubmenuCapture(world).Capture(ImageBase, Node));
+        Assert.Equal("Empty slot, 1 of 2", new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
     }
 
     [Fact]
@@ -205,6 +205,17 @@ public sealed partial class FieldSubmenuCaptureTests
         world.Int32(Node + 0x32C, 0);
 
         Assert.Equal("Mid Ether, 7, moving Tonic",
+            new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
+    }
+
+    [Fact]
+    public void EmptySlotsRemainReadableWhileMovingAnItem()
+    {
+        var world = World();
+        world.Int32(Rows + 12, 0);
+        world.Int32(Rows + 16, 0);
+        world.Int32(Node + 0x32C, 0);
+        Assert.Equal("Empty slot, 2 of 3, moving Tonic",
             new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
     }
 
@@ -713,6 +724,7 @@ public sealed partial class FieldSubmenuCaptureTests
         world.Pointer(Node + 0x2F0, EquipChild);
         world.Pointer(EquipChild, ImageBase + FieldSubmenuCapture.CharaEquipManagerVtableRva);
         world.Byte(EquipChild + 0x1AD, 1);
+        world.Byte(EquipChild + 0x2C8, 0);
         world.Pointer(EquipChild + 0x16C, Node);
         world.Pointer(EquipChild + 0x2C0, ChildStack);
         world.Pointer(ChildStack, ImageBase + FieldSubmenuCapture.ManagerStackVtableRva);
