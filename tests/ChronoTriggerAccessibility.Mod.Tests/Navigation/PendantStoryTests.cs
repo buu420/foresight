@@ -19,6 +19,8 @@ public sealed class PendantStoryTests
         var view = new FieldViewport(4336, 2528, 8560, 5728);
         var before = source.Build(field, map, view, [], State(0x50, 0));
         var controller = new NavigationController();
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, before, 0);
         var first = controller.Handle(NavigationCommand.PreviousCategory, before, 0);
         Assert.Contains(first.Speech, text => text.Contains("Talk with the young woman"));
 

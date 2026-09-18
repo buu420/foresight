@@ -14,6 +14,7 @@ public sealed class StoryNoteTests
     {
         var frame = new NavigationFrame("room", true, new(2000, 2000, 1), [Note()], new NoSearch());
         var controller = new NavigationController();
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         var selection = controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         Assert.Contains(selection.Speech, s => s.Contains("Leave for the fair") && s.Contains("still in progress"));
         Assert.DoesNotContain(selection.Speech, s => s.Contains("steps away") || s.Contains("another level"));

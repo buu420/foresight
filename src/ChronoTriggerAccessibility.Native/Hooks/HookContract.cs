@@ -154,6 +154,8 @@ public enum HookId
     WorldNavigationDactylPadInstruction,
     TimeGaugeSceneInit,
     TimeGaugeSceneUpdate,
+    ShopSceneUpdate,
+    ShopSceneDestructor,
 }
 
 public enum X86CallingConvention
@@ -164,6 +166,12 @@ public enum X86CallingConvention
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void SubmenuNodeWordDelegate(nint node, nint value);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ShopSceneUpdateDelegate(nint scene, float deltaSeconds);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint ShopSceneDestructorDelegate(nint scene, uint deletingFlags);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate byte SaveSlotOpenDelegate(nint node, int mode, int showBack);

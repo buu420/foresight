@@ -30,7 +30,7 @@ public sealed class CompleteCompositionTests
 
         composition.Installer.PrepareAll(build, new UnmanagedBoundaryGuard(errors, errors));
 
-        Assert.Equal(149, factory.Created.Count);
+        Assert.Equal(151, factory.Created.Count);
         Assert.Equal(build.HookAddresses.OrderBy(entry => entry.Key), factory.Created.OrderBy(entry => entry.Key));
         Assert.All(composition.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
 

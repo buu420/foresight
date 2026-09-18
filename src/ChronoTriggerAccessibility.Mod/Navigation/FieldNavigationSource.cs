@@ -72,11 +72,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) : null;
+            // A stand-in with no name of its own is the same destination twice over: the
+            // actor whose script it runs is already offered, and this would arrive at the
+            // same spot under a name that tells the player nothing.
+            if (label is null && field.SceneIdCoherent && FieldActorProxies.IsProxy(field.SceneId, actor.Index) &&
+                field.Actors.Any(owner => InteractionProxy(owner)?.Index == actor.Index)) continue;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
                 ProtectContactPassage(id, actor);
-            Add(id, label ?? description.Label, description.Category, position, touchOnly ? TouchApproach(actor) : Approach(position), viewport.Contains(position.X, position.Y),
+            Add(id, label ?? description.Label, description.Category, position, touchOnly ? TouchApproach(actor) : ActorApproach(actor, position), viewport.Contains(position.X, position.Y),
                 guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction));
         }
         foreach (var chest in treasures)
@@ -110,7 +115,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var touch = knownTouch || metadata is { Touch: true };
             var approaches = touch
                 ? TouchApproach(actor)
-                : Approach(position);
+                : ActorApproach(actor, position);
             if (scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
@@ -135,11 +140,20 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var points = goals.OrderBy(Distance).Distinct().Take(64).ToArray();
             if (points.Length == 0) continue;
             if (region.Kind == "Warp") scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
-            Add(region.Id, region.Kind == "Warp" ? GameNavigationCatalog.DestinationLabel(region.Destination) :
-                    region.Kind == "Switch" ? "Floor trigger" : "Story event",
-                region.Kind == "Switch" ? NavigationCategory.Objects : NavigationCategory.Exits,
+            // Encounters are the script's own battle triggers (native D8 under a
+            // leader-coordinate guard), so they carry the trigger's location but no
+            // party, name or reward. Offer the trigger and leave the fight to the
+            // player; the guard that the script sets when it is over removes it.
+            var (regionLabel, regionCategory) = region.Kind switch
+            {
+                "Warp" => (GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
+                "Switch" => ("Floor trigger", NavigationCategory.Objects),
+                "Encounter" => ("Encounter", NavigationCategory.Enemies),
+                _ => ("Story event", NavigationCategory.Exits),
+            };
+            Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
-                storyOnly: region.Kind != "Warp", guideAvailable: true);
+                storyOnly: region.Kind is not ("Warp" or "Encounter"), guideAvailable: true);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -255,7 +269,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), guideActive
-                ? FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals)
+                ? FieldLandingGraph.Create(
+                    FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals),
+                    map, GameNavigationCatalog.ForScene(field.SceneId))
                 : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
             { AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId) };
 
@@ -265,6 +281,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"exits={targets.Count(t => t.Category == NavigationCategory.Exits)}; " +
                 $"objects={targets.Count(t => t.Category == NavigationCategory.Objects)}; " +
                 $"storyEvents={targets.Count(t => t.Category == NavigationCategory.StoryEvents)}; " +
+                $"enemies={targets.Count(t => t.Category == NavigationCategory.Enemies)}; " +
                 $"actors={field.Actors.Count}; usable={field.Actors.Count(a => a.IsUsable)}; " +
                 $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
                 $"exitCells={exitCellCount}; visibleExitCells={visibleExitCellCount}; " +
@@ -304,12 +321,59 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             for (var layer = 1; layer <= 3; layer++)
                 if (graph.TryPosition(x, y, layer, out var point)) yield return point;
         }
+        /// <summary>Resolve an audited forwarding actor only while both native actors
+        /// match their identities and permit their scripts to run.</summary>
+        FieldActorSnapshot? InteractionProxy(FieldActorSnapshot actor)
+        {
+            if (!field.SceneIdCoherent || FieldActorProxies.ProxyFor(field.SceneId, actor.Index) is not { } id ||
+                !actor.IsUsable || !actor.IsDrawn || !InsideMap(actor) || actor.IsPartyMember || !actor.ScriptCallsEnabled ||
+                GameNavigationCatalog.ActorInfo(field.SceneId, actor) is null) return null;
+            return field.Actors.FirstOrDefault(a => a.Index == id && a.IsUsable && a.IsDrawn && InsideMap(a) &&
+                !a.IsPartyMember && a.ScriptCallsEnabled && (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
+                GameNavigationCatalog.ActorInfo(field.SceneId, a)?.Id == id);
+        }
+        /// <summary>One step away may be on the inaccessible side of a counter.
+        /// Add in-range standing positions for actors; chests keep their separate rule.</summary>
+        IReadOnlyList<NavigationPoint> ActorApproach(FieldActorSnapshot actor, NavigationPoint p)
+        {
+            var direct = Approach(p);
+            // The sprite the player recognises is not always the one the game lets them
+            // act on. Where another actor exists only to run this one's script, its own
+            // standing room counts too, so long as it is really there and really itself.
+            var proxy = InteractionProxy(actor);
+            // Fenced on some side, so one step out may all be the wrong side of a
+            // counter or hedge. Widen to everywhere the confirm handler would still
+            // accept, and let the search pick whichever of them it can actually walk
+            // to. An actor with all four steps open and no stand-in pays nothing.
+            if (direct.Count == 4 && proxy is null) return direct;
+            var widened = direct.Concat(ConfirmApproach(actor.FineX, actor.FineY));
+            if (proxy is not null) widened = widened.Concat(ConfirmApproach(proxy.FineX, proxy.FineY));
+            return widened.Distinct()
+                .OrderBy(point => Math.Abs(point.X - p.X) + Math.Abs(point.Y - p.Y)).Take(64).ToArray();
+        }
         IReadOnlyList<NavigationPoint> Approach(NavigationPoint p)
         {
             var x = (p.X + 32) / 64 * 64; var y = (p.Y + 32) / 64 * 64;
             return new[] { (x - 256, y), (x + 256, y), (x, y - 256), (x, y + 256) }
                 .SelectMany(pair => At(pair.Item1, pair.Item2)).Where(point => !graph.IsTerminal(point))
                 .Distinct().ToArray();
+        }
+        /// <summary>Lattice points from which the game would accept a confirm on an actor
+        /// at these exact coordinates, allowing for the controller calling the walk over as
+        /// soon as the player is inside its arrival box. Judging a rounded position instead
+        /// would hand out goals up to a rounding and two tolerances too far.</summary>
+        IReadOnlyList<NavigationPoint> ConfirmApproach(int actorX, int actorY)
+        {
+            var found = new List<NavigationPoint>();
+            var reach = FieldInteractionRange.Along + NavigationUnits.LocalStep / 8;
+            for (var py = (actorY - reach) / 64 * 64; py <= actorY + reach; py += 64)
+            for (var px = (actorX - reach) / 64 * 64; px <= actorX + reach; px += 64)
+            {
+                if (px < 0 || py < 0) continue;
+                if (!FieldInteractionRange.ReachesWithin(px, py, actorX, actorY, NavigationUnits.LocalStep / 8)) continue;
+                found.AddRange(At(px, py).Where(point => !graph.IsTerminal(point)));
+            }
+            return found;
         }
         IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
         {

@@ -57,6 +57,8 @@ public sealed class WorldNavigationSourceTests
         Assert.True(unseen.GuideAvailable);
         var controller = new NavigationController();
         var frame = source.Build(hidden, Label);
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         Assert.True(controller.Handle(NavigationCommand.ToggleWalk, frame, 16).AutoWalking);
         Assert.Empty(source.Build(hidden with { Entrances = [fair with { Available = false }] }, Label).Targets);

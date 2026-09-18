@@ -1,10 +1,12 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.24 repairs Guardia Castle's automatically opening stairs and adds the guard conversation before approaching the queen. Available scripted pickups and NPCs remain selectable while offscreen or idle. See [castle and pickup repair](docs/castle-navigation-0324.md). The full story, optional quests, bonus areas and vehicle navigation from 0.3.23 remain included; see [whole-game navigation](docs/whole-game-native-navigation.md) and [story objectives](docs/full-story-objectives.md).
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.25 adds native shop speech and an Enemies navigation category for active field encounters. See [shop reader](docs/shop-native-0325.md) and [navigation update](docs/shop-enemies-navigation-0325.md). The existing full story, optional quests, bonus areas, vehicle navigation and castle repairs remain included; see [whole-game navigation](docs/whole-game-native-navigation.md) and [story objectives](docs/full-story-objectives.md).
 
 Earlier menu, battle, pendant, Telepod, Resume confirmation and race-choice repairs remain included. Current Story Events remain routable before discovery, with optional guide targets in People, Interactable Objects, and Exits. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. World/local transition recovery and the Settings speech repair remain included. Intro audio descriptions remain pending.
 
-Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish a complete live playthrough. Shop menus and the touch-interface Inventory, Equipment, Tech, and Party subpages remain outside the implemented coverage.
+Settings reads native category labels, rows, current values, and nested controls, including Screen Size. This is a test release: automated checks and exact native hook-byte verification do not establish a complete live playthrough. The touch-interface Inventory, Equipment, Tech, Party and shop pages remain outside the implemented coverage.
+
+Shop speech follows Buy/Sell/Equip, selected items and prices, stock, item help, equipment comparisons, quantities, totals and funds. Enemies lists active encounter regions from the game scripts; I/P leads into the selected region using the existing guidance controls. Combat begins normally when its native trigger fires.
 
 ## In-game menus
 
@@ -35,7 +37,7 @@ Use these keys while controlling the party in a local field area, walking on the
 
 | Keys | Action |
 |---|---|
-| U / O | Previous / next category: People, Exits, Interactable Objects, Story Events |
+| U / O | Previous / next category: People, Exits, Interactable Objects, Story Events, Enemies |
 | J / L | Previous / next destination |
 | K | Repeat the destination and current manual leg, or its direction and distance when idle |
 | I | Start counted spoken directions while you move |

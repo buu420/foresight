@@ -4,12 +4,15 @@ public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Rout
 
 public static class NavigationPathfinder
 {
+    /// <summary>Ceiling on nodes examined for one search.</summary>
+    public const int DefaultMaximumVisited = 65536;
+
     private readonly record struct SearchNode(NavigationPoint Point, int XDirection, int YDirection);
     public static IReadOnlyList<NavigationPoint>? Find(INavigationGraph graph, NavigationPoint start,
-        IReadOnlyList<NavigationPoint> goals, int maximumVisited = 65536) => Search(graph, start, goals, maximumVisited).Route;
+        IReadOnlyList<NavigationPoint> goals, int maximumVisited = DefaultMaximumVisited) => Search(graph, start, goals, maximumVisited).Route;
 
     public static NavigationSearchResult Search(INavigationGraph graph, NavigationPoint start,
-        IReadOnlyList<NavigationPoint> goals, int maximumVisited = 65536)
+        IReadOnlyList<NavigationPoint> goals, int maximumVisited = DefaultMaximumVisited)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(goals);

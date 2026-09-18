@@ -31,6 +31,8 @@ public sealed class TelepodPendantStoryTests
         Assert.NotEmpty(objective.ApproachPoints);
 
         var controller = new NavigationController();
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         var repeat = controller.Handle(NavigationCommand.Repeat, frame, 100);
         var route = controller.Handle(command, frame, 200);

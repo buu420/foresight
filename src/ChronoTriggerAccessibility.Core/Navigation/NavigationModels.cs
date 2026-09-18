@@ -1,6 +1,8 @@
 namespace ChronoTriggerAccessibility.Core.Navigation;
 
-public enum NavigationCategory { People, Exits, Objects, StoryEvents }
+// Enemies is appended so the existing indexes, and any saved selection that uses
+// them, keep meaning what they did before.
+public enum NavigationCategory { People, Exits, Objects, StoryEvents, Enemies }
 public enum NavigationCommand { PreviousCategory, NextCategory, PreviousTarget, NextTarget, Repeat, Guide, ToggleWalk }
 public enum NavigationDirection { None, North, South, West, East, NorthWest, NorthEast, SouthWest, SouthEast }
 

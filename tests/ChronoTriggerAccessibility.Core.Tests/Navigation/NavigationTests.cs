@@ -24,7 +24,7 @@ public sealed class NavigationTests
         Assert.Contains("Villager", Say(controller.Handle(NavigationCommand.NextTarget, frame, 1)));
         Assert.Contains("Mother", Say(controller.Handle(NavigationCommand.NextTarget, frame, 2)));
         Assert.Contains("Villager", Say(controller.Handle(NavigationCommand.PreviousTarget, frame, 3)));
-        Assert.Contains("Story Events", Say(controller.Handle(NavigationCommand.PreviousCategory, frame, 4)));
+        Assert.Contains("Enemies", Say(controller.Handle(NavigationCommand.PreviousCategory, frame, 4)));
         Assert.Contains("People", Say(controller.Handle(NavigationCommand.NextCategory, frame, 5)));
         Assert.Contains("Stairs", Say(controller.Handle(NavigationCommand.NextCategory, frame, 6)));
     }

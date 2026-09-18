@@ -434,6 +434,21 @@ public sealed partial class FieldSubmenuCapture(IReadableMemory memory)
         return true;
     }
 
+    /// <summary>Shared MenuNodeBase focus contract, including the visible parent chain.
+    /// The caller must independently identify the owning page class.</summary>
+    public bool TryReadOwnedFocus(nuint imageBase, nuint node, out nuint manager, out uint key, out nuint control)
+        => TryReadStackFocus(imageBase, node, out manager, out key, out control) && HasAncestor(control, node);
+
+    /// <summary>Empty native lists use an nsStateMachine::State rather than a control.
+    /// The caller verifies that class and the independently empty row vector.</summary>
+    public bool TryReadActiveState(nuint imageBase, nuint node, out nuint manager, out uint key, out nuint state)
+    {
+        key = NoManagerFocusKey; state = 0;
+        return TryReadTopManager(imageBase, node, out manager) && HasAncestor(manager, node) &&
+            Byte(manager + 0x290, out var disabled) && disabled == 0 &&
+            UInt32(manager + ManagerFocusKeyOffset, out key) && TryFindManagerState(manager, key, out state);
+    }
+
     private bool TryReadTopManager(nuint imageBase, nuint owner, out nuint manager)
     {
         manager = 0;

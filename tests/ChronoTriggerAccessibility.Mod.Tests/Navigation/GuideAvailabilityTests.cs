@@ -24,6 +24,8 @@ public sealed class GuideAvailabilityTests
         Assert.False(target.IsStoryNote);
         Assert.NotEmpty(target.ApproachPoints);
         var controller = new NavigationController();
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         var result = controller.Handle(command, frame, 16);
         Assert.True(result.Guiding);
@@ -77,7 +79,9 @@ public sealed class GuideAvailabilityTests
         Assert.InRange(stairs.ApproachPoints.Count, 1, 64);
         var route = NavigationPathfinder.Find(frame.Graph, frame.Player, stairs.ApproachPoints);
         Assert.NotNull(route);
-        Assert.Equal(1, ((FieldNavigationGraph)frame.Graph).ExitAt(route[^1].X, route[^1].Y));
+        // Scene 468's own exits warp back into it, so the frame's graph is wrapped to
+        // allow a flight as an intermediate leg. Ask the map itself which exit this is.
+        Assert.Equal(1, new FieldNavigationGraph(map).ExitAt(route[^1].X, route[^1].Y));
     }
 
     [Fact]

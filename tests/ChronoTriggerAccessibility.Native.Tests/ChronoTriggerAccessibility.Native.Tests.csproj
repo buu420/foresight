@@ -14,5 +14,6 @@
     <EmbeddedResource Include="Capture\field-submenu-native-0320.json" />
     <EmbeddedResource Include="Capture\field-submenu-native-0321.json" />
     <EmbeddedResource Include="Capture\battle-native-0322.json" />
+    <EmbeddedResource Include="Capture\shop-native-0325.json" />
   </ItemGroup>
 </Project>

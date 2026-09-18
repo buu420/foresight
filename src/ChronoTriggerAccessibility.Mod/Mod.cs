@@ -213,7 +213,8 @@ public sealed class Mod : ModBase
         var submenuSession = new FieldSubmenuSession(submenuSource.Capture, submenuSource.Title,
             submenuSource.ConfirmationActive, NavigationKeyboard.IsGameForeground, dispatcher.Publish, dispatcher.RecordDiagnostic);
         var submenuHooks = new FieldSubmenuHookSet(hookFactory, submenuSource, submenuSession);
-        topMenu.SubmenuOwnsSpeech = () => submenuSession.HasContext;
+        var shopHooks = new ShopHookSet(hookFactory, memory, dispatcher, NavigationKeyboard.IsGameForeground);
+        topMenu.SubmenuOwnsSpeech = () => submenuSession.HasContext || shopHooks.HasContext;
         var saveLoad = new SaveLoadConfirmationHookSet(sharedFanout, memory, dispatcher,
             node => submenuSession.Close(node), submenuSession.Pause);
 
@@ -250,6 +251,7 @@ public sealed class Mod : ModBase
             .Concat(timeGauge.Registrations)
             .Concat(battleHooks.Registrations)
             .Concat(submenuHooks.Registrations)
+            .Concat(shopHooks.Registrations)
             .ToArray();
         var participants = new IHookActivationObserver[]
         {
@@ -267,6 +269,7 @@ public sealed class Mod : ModBase
             timeGauge,
             battleHooks,
             submenuHooks,
+            shopHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(
@@ -284,6 +287,7 @@ public sealed class Mod : ModBase
             timeGauge,
             battleHooks,
             submenuHooks,
+            shopHooks,
             installer);
     }
 
@@ -314,4 +318,5 @@ public sealed record CompleteAccessibilityComposition(
     TimeGaugeHookSet TimeGaugeHookSet,
     BattleHookSet BattleHookSet,
     FieldSubmenuHookSet FieldSubmenuHookSet,
+    ShopHookSet ShopHookSet,
     ReloadedHookInstaller Installer);

@@ -23,11 +23,15 @@ public sealed class NavigationController
     private IReadOnlyList<NavigationPoint> plannedGoals = [];
     private long? passageWaitStarted;
     private long nextPassageCheck;
+    // Survives Stop(), which a failed plan performs before anyone can read the
+    // destination back. Without it the one case this field explains reports zero.
+    private int plannedApproaches;
 
     public bool IsActive => guiding;
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
-        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={destination?.ApproachPoints.Count ?? 0}; stage={intermediateId ?? "none"}";
+        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={plannedApproaches}; stage={intermediateId ?? "none"}";
+    private bool TakesAnExit => intermediateId?.StartsWith("exit:", StringComparison.Ordinal) == true;
     private static string PointText(NavigationPoint? point) => point is { } p ? $"({p.X},{p.Y},{p.Layer})" : "none";
 
     public NavigationResult Cancel(string reason)
@@ -196,6 +200,7 @@ public sealed class NavigationController
         }
         var search = NavigationPathfinder.Search(frame.Graph, frame.Player, destination!.ApproachPoints);
         planRevision++;
+        plannedApproaches = destination.ApproachPoints.Count;
         route = search.Route;
         if (intermediateId != search.IntermediateId) passageWaitStarted = null;
         intermediateId = search.IntermediateId;
@@ -246,7 +251,11 @@ public sealed class NavigationController
                 passageWaitStarted = now;
                 nextPassageCheck = now;
                 var contactLabel = frame.Targets.FirstOrDefault(t => t.Id == intermediateId)?.Label;
-                speech.Add(contactLabel is null ? "Waiting for the passage to open." : $"Waiting for {contactLabel} to open.");
+                // A passage opens where the player is standing; a way out has to be
+                // walked through. Telling someone to wait at a door strands them.
+                speech.Add(TakesAnExit
+                    ? contactLabel is null ? "Take the exit here to continue." : $"Take {contactLabel} to continue."
+                    : contactLabel is null ? "Waiting for the passage to open." : $"Waiting for {contactLabel} to open.");
             }
             if (now < nextPassageCheck) return;
             var waitingSince = passageWaitStarted.Value;
@@ -256,7 +265,8 @@ public sealed class NavigationController
                 nextPoint = route.Count;
                 if (now < waitingSince || now - waitingSince >= 3000)
                 {
-                    speech.Add("Navigation stopped: the passage did not open.");
+                    speech.Add(TakesAnExit ? "Navigation stopped: the exit was not taken."
+                        : "Navigation stopped: the passage did not open.");
                     Stop();
                 }
                 else nextPassageCheck = now + 250;

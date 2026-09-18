@@ -16,6 +16,12 @@ public static class GameVersionCatalog
 
     public static IReadOnlyList<HookContract> Hooks { get; } = new ReadOnlyCollection<HookContract>(
     [
+        Create(HookId.ShopSceneUpdate, "ShopSteamScene::update", 0x2B4DD0,
+            "55 8B EC 83 E4 F8 A1 DC C3 81 00 85 C0 56 57 8B F1",
+            typeof(ShopSceneUpdateDelegate), X86CallingConvention.MicrosoftThiscall),
+        Create(HookId.ShopSceneDestructor, "ShopSteamScene::deletingDestructor", 0x2B4AD0,
+            "55 8B EC 6A FF 68 C7 5B 76 00 64 A1 00 00 00 00",
+            typeof(ShopSceneDestructorDelegate), X86CallingConvention.MicrosoftThiscall),
         Create(HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B9110,
             "55 8B EC 6A FF 68 A1 AD 76 00 64 A1 00 00 00 00",
             typeof(TextManagerGetMsgDelegate), X86CallingConvention.MicrosoftThiscall),

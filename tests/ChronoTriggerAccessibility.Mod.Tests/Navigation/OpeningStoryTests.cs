@@ -45,9 +45,11 @@ public sealed class OpeningStoryTests
         var frame = new NavigationFrame("room", true, new(0, 0, 1), [person, story], new Line());
         Assert.True(controller.Handle(NavigationCommand.ToggleWalk, frame, 0).AutoWalking);
         var previous = controller.Handle(NavigationCommand.PreviousCategory, frame, 16);
-        Assert.Contains("Story Events.", previous.Speech);
+        Assert.Contains("Enemies.", previous.Speech);
         Assert.False(previous.AutoWalking);
-        Assert.Contains("People.", controller.Handle(NavigationCommand.NextCategory, frame, 32).Speech);
+        Assert.Contains("Story Events.", controller.Handle(NavigationCommand.PreviousCategory, frame, 24).Speech);
+        controller.Handle(NavigationCommand.NextCategory, frame, 32);
+        Assert.Contains("People.", controller.Handle(NavigationCommand.NextCategory, frame, 40).Speech);
         controller.Handle(NavigationCommand.NextCategory, frame, 48);
         controller.Handle(NavigationCommand.NextCategory, frame, 64);
         Assert.Contains("Story Events.", controller.Handle(NavigationCommand.NextCategory, frame, 80).Speech);

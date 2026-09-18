@@ -27,6 +27,8 @@ public sealed class TelepodDemoTests
         Assert.NotNull(path);
 
         var controller = new NavigationController();
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         controller.Handle(NavigationCommand.PreviousCategory, frame, 0);
         var result = controller.Handle(command, frame, 100);
         Assert.True(controller.IsActive);
@@ -44,6 +46,8 @@ public sealed class TelepodDemoTests
         field = field with { Actors = [.. field.Actors, marle], ActorCount = 3 };
         var controller = new NavigationController();
         var before = source.Build(field, Map(), new(0, 0, 4224, 3200), [], State(1));
+        // Back twice from People: Enemies, then Story Events.
+        controller.Handle(NavigationCommand.PreviousCategory, before, 0);
         controller.Handle(NavigationCommand.PreviousCategory, before, 0);
         Assert.True(controller.Handle(NavigationCommand.ToggleWalk, before, 100).AutoWalking);
 
