@@ -106,3 +106,20 @@ regressions. Candidate slot `+304` remains correct: `2088A0` writes it from its 
 before building the candidates, and the commit callback consumes it. A proposed fallback to the
 disabled Inventory list was rejected because it would describe an inactive control when the
 information panel was still open. Its stable native mode is now readable directly.
+
+## Installed build
+
+Installed September 18, 2026 after the user closed the game. All **25 deployment checks
+passed**. Installed file sets and hashes match the package: **28 mod files, 45 loader/shared
+hook files, and two native launcher/installer files**. The game executable is unchanged.
+
+Package implementation commit: `eff1baaf03401025e4108c81c5983a116ad37d8f`.
+The final Release build completed with zero warnings and zero errors.
+
+DLL SHA-256: `D04704EECA2F7B9CFCEAB3C79354B4C2AD8C337FD0AAD367EA1B66F5136B613A`.
+
+Manifest SHA-256: `E2023DD2E1CDC451A05A279B968BB3E15640C35A64E1AD2C1424924DCBD9817C`.
+
+Previous installation: `X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260918-134834`.
+
+Launch normally to verify live speech in Equipment and Inventory's item-information panel.
