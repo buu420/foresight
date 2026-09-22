@@ -79,3 +79,18 @@ All 1,856 Release tests pass: Core 149, Native 831, Mod 865, footsteps 3,
 and Prism 8. The executable-byte verification passes for all 151 native hooks.
 These results are retained in `release-tests/` and `hook-byte-proof.json` in
 the research directory above. They do not replace the final live checks.
+
+## Installed release
+
+Version 0.3.28 was deployed on September 22, 2026 from implementation commit
+`17159be`. All 25 deployment checks passed, including the existing launch
+redirect. Hash comparison verified all 28 mod files, 45 loader/shared-hook
+files and both native launcher files. The game executable is unchanged.
+
+Installed mod DLL SHA256:
+`A05CE7C24C0AFF62636EC795E851CC6BCD2D53F88EB435BC592FC52A17DCC848`.
+Installed manifest SHA256:
+`0A074AD00EB05DDBE6BEA9157F5E95267F8237C1F2A3A3F35B20D0FC9C75BD17`.
+The previous installation is retained under the game's
+`Accessibility/Backups/20260922-001423/` directory. Full file hashes and release
+checks are recorded in `deployment-proof.json` in the research directory above.
