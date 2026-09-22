@@ -7,6 +7,7 @@ import struct
 
 import assets
 from audit import EXE_SHA256
+from decode_verified import packet, walk
 
 
 def report(game, catalog_path):
@@ -33,14 +34,34 @@ def report(game, catalog_path):
                          scriptedItemActors=[a['Id'] for a in scene['Actors'] if a['GivesItem']],
                          spatialRegions=len(scene['Regions'])))
     assert claimed == set(range(total))
+    # Independently inspect each catalogued actor's native talk/contact entry
+    # points. This catches omitted pickup/money interactions without embedding
+    # the reward IDs or assuming the catalog's GivesItem flag proves itself.
+    direct_interactions = 0
+    missing_interactions = []
+    for scene in catalog['Scenes']:
+        if scene['Id'] in catalog['MissingScripts']:
+            continue
+        code, entries, base = packet(scene['Id'])
+        for actor in scene['Actors']:
+            functions = entries[actor['Id']]
+            item_ops = [base + pc for pc, (opcode, _) in walk(code, [functions[1], functions[2]]).items()
+                        if opcode in (0xC7, 0xCA, 0xCD)]
+            if not item_ops:
+                continue
+            direct_interactions += 1
+            if not actor['GivesItem']:
+                missing_interactions.append(dict(scene=scene['Id'], actor=actor['Id'], offsets=item_ops))
     return dict(executableSha256=EXE_SHA256, catalogSha256=hashlib.sha256(catalog_path.read_bytes()).hexdigest().upper(),
                 sceneCount=len(rows), staticExits=sum(r['exits'] for r in rows),
                 worldEntrances=len(catalog['Worlds']), treasureRecords=total,
                 scriptedItemActors=sum(len(r['scriptedItemActors']) for r in rows),
                 actorIdentities=sum(r['actors'] for r in rows), spatialRegions=sum(r['spatialRegions'] for r in rows),
+                directItemOrMoneyInteractionActors=direct_interactions,
+                uncataloguedDirectItemInteractions=missing_interactions,
                 missingScripts=catalog['MissingScripts'], extractionWarnings=catalog['ExtractionWarnings'],
                 scenes=rows,
-                scope='Resource coverage only. Runtime uses active treasure aliases, open flags, live positions and collision. No live playthrough is claimed.')
+                scope='Resource coverage and direct interaction opcode audit only. The direct audit checks catalogued actors, not automatic rewards or every delegated script branch. Runtime uses active treasure aliases, open flags, live positions and collision. No live playthrough is claimed.')
 
 
 if __name__ == '__main__':

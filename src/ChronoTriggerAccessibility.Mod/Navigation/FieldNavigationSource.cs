@@ -397,10 +397,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IEnumerable<NavigationPoint> ExitApproach(NavigationPoint p)
         {
-            // Stay farther inside than the two-pixel arrival radius, so reaching
-            // the approach cannot stop walking before the actual exit cell.
-            for (var x = p.X / 256 * 256 + 64; x < p.X / 256 * 256 + 256; x += 64)
-            for (var y = p.Y / 256 * 256 + 64; y < p.Y / 256 * 256 + 256; y += 64)
+            // Every lattice node of the cell, its own boundary included. A one-tile
+            // doorway leaves that boundary node as the only one the leading-corner
+            // probes allow, so skipping it made the goals unreachable by construction
+            // and five of Manoria's six doors reported no route. Stopping short of the
+            // cell is prevented by the arrival rule instead, which asks the graph
+            // whether the player is actually in it.
+            for (var x = p.X / 256 * 256; x < p.X / 256 * 256 + 256; x += 64)
+            for (var y = p.Y / 256 * 256; y < p.Y / 256 * 256 + 256; y += 64)
                 foreach (var point in At(x, y)) yield return point;
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,

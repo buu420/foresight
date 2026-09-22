@@ -226,7 +226,7 @@ public sealed class NavigationController
         }
         // The chosen approach remains valid when a wide exit exposes additional
         // cells or their order changes. Do not restart speech for alternative goals.
-        var leftContact = passageWaitStarted is not null && route is not null && !Arrived(frame.Player, route[^1]);
+        var leftContact = passageWaitStarted is not null && route is not null && !Arrived(frame.Graph, frame.Player, route[^1]);
         var mustReplan = leftContact || route is null || (intermediateId is null
             ? !currentTarget.ApproachPoints.Contains(route[^1])
             : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
@@ -243,7 +243,7 @@ public sealed class NavigationController
             if (!Plan(frame, speech)) return;
         }
         if (route is null) return;
-        if (intermediateId is not null && Arrived(frame.Player, route[^1]))
+        if (intermediateId is not null && Arrived(frame.Graph, frame.Player, route[^1]))
         {
             nextPoint = route.Count;
             if (passageWaitStarted is null)
@@ -260,7 +260,7 @@ public sealed class NavigationController
             if (now < nextPassageCheck) return;
             var waitingSince = passageWaitStarted.Value;
             if (!Plan(frame, speech)) return;
-            if (intermediateId is not null && Arrived(frame.Player, route![^1]))
+            if (intermediateId is not null && Arrived(frame.Graph, frame.Player, route![^1]))
             {
                 nextPoint = route.Count;
                 if (now < waitingSince || now - waitingSince >= 3000)
@@ -277,14 +277,21 @@ public sealed class NavigationController
             lastProgress = now;
             lastPosition = frame.Player;
         }
-        if (Arrived(frame.Player, route[^1]))
+        if (Arrived(frame.Graph, frame.Player, route[^1]))
         {
             speech.Add(Arrival(destination));
             Stop();
             return;
         }
         var onRoute = AdvanceAlongRoute(frame.Player);
-        if (nextPoint >= route.Count) return;
+        if (nextPoint >= route.Count)
+        {
+            // A cell goal is reached by entering the cell, not by closing the distance,
+            // so the cursor can pass the last waypoint while the player is still outside
+            // it. Keep steering at that node rather than stalling on an exhausted route.
+            if (route.Count < 2 || !frame.Graph.IsTerminal(route[^1])) return;
+            nextPoint = route.Count - 1;
+        }
         // Progress along a leg can pass multiple small graph waypoints. Only a
         // departure from the actual route or changed terrain requires a new plan.
         var previous = route[Math.Max(0, nextPoint - 1)];
@@ -443,9 +450,14 @@ public sealed class NavigationController
     private bool Near(NavigationPoint a, NavigationPoint b) =>
         a.Layer == b.Layer && Math.Abs((long)a.X - b.X) <= Math.Max(1, unitsPerTile / 16) &&
         Math.Abs((long)a.Y - b.Y) <= Math.Max(1, unitsPerTile / 16);
-    private bool Arrived(NavigationPoint a, NavigationPoint b) =>
+    /// <summary>The game warps on the exit cell, not on proximity, so a goal that sits in
+    /// one is only reached when the graph agrees the player is in that same cell. The
+    /// one-eighth-tile arrival box alone can land on the far side of a boundary node.
+    /// Anything that is not a terminal keeps the plain distance rule.</summary>
+    private bool Arrived(INavigationGraph graph, NavigationPoint a, NavigationPoint b) =>
         a.Layer == b.Layer && Math.Abs((long)a.X - b.X) <= Math.Max(1, unitsPerTile / 8) &&
-        Math.Abs((long)a.Y - b.Y) <= Math.Max(1, unitsPerTile / 8);
+        Math.Abs((long)a.Y - b.Y) <= Math.Max(1, unitsPerTile / 8) &&
+        (!graph.IsTerminal(b) || graph.IsSameTerminal(a, b));
     private static double SquaredDistance(NavigationPoint a, NavigationPoint b) =>
         Math.Pow((double)a.X - b.X, 2) + Math.Pow((double)a.Y - b.Y, 2);
     private NavigationDirection Bearing(NavigationPoint from, NavigationPoint to) =>

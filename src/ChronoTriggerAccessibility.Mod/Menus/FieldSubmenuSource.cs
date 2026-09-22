@@ -16,13 +16,7 @@ public sealed class FieldSubmenuSource(IReadableMemory memory)
     {
         if (image == 0 || !Word(node, out var vt)) return null;
         if (vt == image + SaveSlotCapture.NodeVtableRva) return saves.Capture(image, node);
-        if (vt == image + FieldSubmenuCapture.ClassicTechNodeVtableRva &&
-            Word(node + 0x308, out var rowManager) && rowManager != 0)
-        {
-            if (!Byte(rowManager + 0x290, out var disabled)) return null;
-            // A failed active row capture must not fall back to a stale character selector.
-            if (disabled == 0) return tech.Capture(image, node);
-        }
+        if (vt == image + FieldSubmenuCapture.ClassicTechNodeVtableRva) return tech.Capture(image, node);
         return fields.Capture(image, node);
     }
     public string? Title(nuint node)
@@ -57,8 +51,9 @@ public sealed class FieldSubmenuSource(IReadableMemory memory)
             !Word(node, out var vt)) return false;
         if (vt == image + SaveSlotCapture.NodeVtableRva)
             return Word(node + 0x304, out var own) && own == manager;
-        if (vt == image + FieldSubmenuCapture.ClassicTechNodeVtableRva &&
-            Word(node + 0x308, out var techManager) && techManager == manager) return true;
+        if (vt == image + FieldSubmenuCapture.ClassicTechNodeVtableRva)
+            return (Word(node + 0x308, out var techManager) && techManager == manager) ||
+                (Word(node + 0x2E8, out var characterManager) && characterManager == manager);
         return fields.OwnsManager(image, node, manager);
     }
     private bool Word(nuint p, out uint value)

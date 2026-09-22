@@ -48,11 +48,12 @@ public sealed class FieldNavigationSourceTests
         var second = source.Build(field with { LeadPlayer = Actor(1, 192, 128, party: true) }, map, new(0, 0, 1024, 1024), []);
         Assert.Equal(256, first.UnitsPerTile);
         Assert.Equal(Assert.Single(first.Targets).ApproachPoints, Assert.Single(second.Targets).ApproachPoints);
-        Assert.All(Assert.Single(first.Targets).ApproachPoints, goal =>
-        {
-            Assert.InRange(goal.X % 256, 64, 192);
-            Assert.InRange(goal.Y % 256, 64, 192);
-        });
+        // Every goal has to be inside the exit's own native cell. The cell's boundary
+        // node counts: in a one-tile doorway it is the only node the player can occupy,
+        // and arrival asks the graph for the cell rather than trusting the distance.
+        var cells = new FieldNavigationGraph(map);
+        Assert.All(Assert.Single(first.Targets).ApproachPoints,
+            goal => Assert.Equal(0, cells.ExitAt(goal.X, goal.Y)));
     }
 
     [Fact]

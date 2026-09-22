@@ -5,7 +5,7 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 
 /// <summary>Classic Tech's separately managed row list and visible description/requirements.
 /// 1CDE0C owns the row manager at +308; 1CE110/1CE350 render the selected row's sibling panels.</summary>
-public sealed class FieldTechDetailsCapture(IReadableMemory memory)
+public sealed partial class FieldTechDetailsCapture(IReadableMemory memory)
 {
     private readonly RenderedNodeTextCapture rendered = new(memory);
     private readonly LoadedGameTextCapture messages = new(memory);
@@ -15,6 +15,11 @@ public sealed class FieldTechDetailsCapture(IReadableMemory memory)
     public FieldSubmenuSnapshot? Capture(nuint image, nuint node)
     {
         if (image == 0 || node == 0) return null;
+        // 1CCE50 owns character selection separately from MenuNodeBase's stack.
+        // 1CDD70 replaces it with the row manager. A failed row read cannot use
+        // the previous character selection as a fallback.
+        if (Word(node + 0x308, out var rowManager) && rowManager == 0)
+            return CaptureCharacter(image, node);
         var state = ReadState(image, node);
         if (state is null) return null;
         var selected = rendered.Read(state.Control);

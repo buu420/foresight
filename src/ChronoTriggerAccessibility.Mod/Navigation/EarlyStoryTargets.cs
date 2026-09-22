@@ -123,10 +123,17 @@ public static class EarlyStoryTargets
                 break;
             case 131 when p is >= 21 and < 27:
                 if (state.Flag(0xFF, 4) == true) Exit("cathedral-passage", "Continue through the passage", [1]);
-                else Note("inner-hall", "Explore the inner cathedral", "Examine the visible rooms and mechanisms.");
-                if (state.Flag(0xFF, 2) == false) Known("right-switch", "Use the right wall switch", "landmark:24");
-                if (state.Flag(0xFF, 8) == false) Known("left-switch", "Use the left wall switch", "landmark:46");
-                if (state.Flag(0xFF, 4) == false) Known("inner-organ", "Play the organ", "actor:36:4:100");
+                // Actor24 removes the central spikes (Terrain copy at 0CB3)
+                // and sets FF:02; actor36 opens the northern passage (FF:04).
+                // Actor46's optional left switch is still in Objects. It is
+                // not a prerequisite and must not send the story off course.
+                else if (state.Flag(0xFF, 2) == false)
+                    Bind("right-switch", "Use the right wall switch", ["landmark:24"],
+                        "This opens the way to the organ. Use confirm at the switch.");
+                else if (state.Flag(0xFF, 2) == true && state.Flag(0xFF, 4) == false)
+                    Bind("inner-organ", "Play the organ", ["actor:36:4:100"],
+                        "Return to the central room and use confirm at the organ.");
+                else Note("inner-hall", "Explore the inner cathedral", "The state of the cathedral's mechanisms is unavailable.");
                 break;
             case 132 when p is >= 21 and < 27:
                 Exit("rescue-leene", "Continue toward Queen Leene", [1]);

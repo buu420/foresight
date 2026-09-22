@@ -78,11 +78,15 @@ public sealed class EarlyStoryTests
     {
         var objects = new[] { Target("landmark:24"), Target("landmark:46"), Target("actor:36:4:100"), Target("exit:1") };
         var before = EarlyStoryTargets.Build(131, State(21, 0xFF, 0), objects, default);
-        Assert.Contains(before, t => t.Label == "Use the right wall switch");
-        Assert.Contains(before, t => t.Label == "Play the organ");
-        var after = EarlyStoryTargets.Build(131, State(21, 0xFF, 14), objects, default);
+        Assert.Equal("Use the right wall switch", Assert.Single(before).Label);
+        Assert.Equal(objects[0].ApproachPoints, before[0].ApproachPoints);
+        var opened = Assert.Single(EarlyStoryTargets.Build(131, State(21, 0xFF, 2), objects, default));
+        Assert.Equal("Play the organ", opened.Label);
+        Assert.Equal(objects[2].ApproachPoints, opened.ApproachPoints);
+        // The left switch is optional and must not gate the story passage.
+        var after = EarlyStoryTargets.Build(131, State(21, 0xFF, 6), objects, default);
         Assert.Equal("Continue through the passage", Assert.Single(after).Label);
-        Assert.DoesNotContain(EarlyStoryTargets.Build(131, State(21, 0xFF, 0), [], default), t => t.Label.Contains("switch"));
+        Assert.True(Assert.Single(EarlyStoryTargets.Build(131, State(21, 0xFF, 0), [], default)).IsStoryNote);
     }
 
     [Fact]
