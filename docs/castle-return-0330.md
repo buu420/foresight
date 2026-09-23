@@ -99,3 +99,20 @@ and its zero horizontal offset from the earlier capture. Castle geometry is the
 extracted map with its audited doorway copy. No input or save editing was used.
 Live confirmation of this build and the rest of the game's routes remains separate
 from these regression results.
+
+## Installed release
+
+Version 0.3.30 was installed while the game was closed on September 23, 2026.
+Implementation commit: `d7891af0b79ff0b69db9675391ba260076587e5a`. Product version: `1.0.0+d7891af0b79ff0b69db9675391ba260076587e5a`.
+
+- Mod DLL SHA256: `479DE0A42C300DFE8840E5F0F7F74D9B5C6D3155838C247F0B9FE341E0D4956D`.
+- Manifest SHA256: `2893740FD96A1C9A900B755C3C0EF0DA05B6062126D4984B3C81C1F65864048D`.
+- All 28 packaged mod files, 45 loader/shared-hook files, and both native launchers
+  match their sources byte for byte. The game executable remains unchanged.
+- Deployment verification: 25 passed, zero failed. Existing Steam launch registration
+  and the installed x86 runtime passed their checks.
+- Previous installation: `X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260923-095535`.
+
+Machine-readable evidence is saved in `deployment-proof.json`, with the full
+release logs, native replays, and hook-byte proof beside it. No live play session
+was started after installation.
