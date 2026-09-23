@@ -7,6 +7,8 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 public sealed class ScriptPassageGraph(INavigationGraph inner,
     IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> passages) : INavigationGraph
 {
+    public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
+        new ScriptPassageGraph(inner.ForGoals(goals), passages);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point) || At(point).Any();
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) =>

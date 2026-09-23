@@ -231,6 +231,7 @@ public sealed class NavigationController
             ? !currentTarget.ApproachPoints.Contains(route[^1])
             : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
         destination = currentTarget;
+        frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
         if (mustReplan)
         {
             if (leftContact)

@@ -439,11 +439,43 @@ public sealed class FieldNavigationCaptureTests
         Assert.False(snapshot.Actors[0].IsActivationCandidate);
     }
 
+    [Theory]
+    [InlineData(-3, 128)]
+    [InlineData(4, 4)]
+    public void CapturesTheSignedCollisionOffsetAndRawFinalPartySlot(int offset, int slot)
+    {
+        var memory = CreateValidMemory().AddInt32(Actors + 0x14Cu, offset)
+            .AddInt32(FieldState + FieldNavigationCapture.FieldStatePartySlotTableOffset + 8, slot);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(offset, snapshot.Actors[0].CollisionOffsetX);
+        Assert.Equal(slot, snapshot.LastPartySlotRaw);
+    }
+
+    [Fact]
+    public void UnreadableCollisionOffsetRejectsTheCapture()
+    {
+        Assert.False(FieldNavigationCapture.TryCapture(CreateValidMemory().Remove(Actors + 0x14Cu), Engine, out _));
+    }
+
+    [Theory]
+    [InlineData(0, 160)]
+    [InlineData(1, 224)]
+    [InlineData(63, 224)]
+    [InlineData(64, 160)]
+    public void FairUsesItsNativeSpecialRadiusFlag(int flag, int expected)
+    {
+        var memory = CreateValidMemory().AddInt32(FieldState + FieldNavigationCapture.FieldStateSceneIdOffset, 5)
+            .AddInt32(Renderer + FieldNavigationCapture.RendererSceneIdOffset, 5).AddByte(ActorBase + 0x68A0u, (byte)flag);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(expected, snapshot.ActorCollisionRadius);
+    }
+
     private static void AddActor(TestMemory memory, int index, int fineX, int fineY, int facing, int drawMode)
     {
         var actor = Actors + (nuint)(index * (int)FieldNavigationCapture.ActorStride);
         memory
             .AddByte(actor + 0xE8u, 0).AddByte(actor + 0x30u, 0)
+            .AddInt32(actor + 0x14Cu, 0)
             .AddInt32(actor + FieldNavigationCapture.ActorFractionXOffset, fineX & 0xFF)
             .AddInt32(actor + FieldNavigationCapture.ActorTileXOffset, fineX >> 8)
             .AddInt32(actor + FieldNavigationCapture.ActorFineXOffset, fineX)

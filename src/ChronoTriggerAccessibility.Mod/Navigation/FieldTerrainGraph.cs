@@ -8,16 +8,23 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// it never becomes movement authority and never writes to the game.</summary>
 public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldActorSnapshot> actors,
     FieldStoryState story, GameNavigationCatalog.Scene scene,
-    IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> terminals) : IStagedNavigationGraph
+    IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> terminals,
+    FieldActorCollisionRules? collisions = null,
+    IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null,
+    IReadOnlyList<NavigationPoint>? selectedGoals = null) : IStagedNavigationGraph
 {
-    private readonly INavigationGraph live = Wrap(map, terminals);
+    private readonly INavigationGraph live = Wrap(map, terminals, collisions, touchGoals).ForGoals(selectedGoals ?? []);
+    public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
+        new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals, goals);
     public static INavigationGraph Create(FieldMapSnapshot map, IReadOnlyList<FieldActorSnapshot> actors,
         FieldStoryState story, GameNavigationCatalog.Scene scene,
-        IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> terminals) =>
+        IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> terminals,
+        FieldActorCollisionRules? collisions = null,
+        IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null) =>
         actors.Any(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember && a.ScriptCallsEnabled &&
             scene.Actors.Any(m => m.Matches(a) && m.Actions.Any(c => c.Touch && c.Kind == "Terrain" &&
                 c.Copy is { } copy && c.Available(story) && HasChanges(map, copy))))
-            ? new FieldTerrainGraph(map, actors, story, scene, terminals) : Wrap(map, terminals);
+            ? new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals) : Wrap(map, terminals, collisions, touchGoals);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => live.Neighbours(point);
     public bool IsTerminal(NavigationPoint point) => live.IsTerminal(point);
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => live.IsSameTerminal(point, goal);
@@ -40,7 +47,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
             {
                 var preview = Preview(map, action.Copy!);
                 if (preview is null) continue;
-                var after = Wrap(preview, terminals);
+                var after = Wrap(preview, terminals, collisions, touchGoals);
                 foreach (var contact in Contacts(actor, start.Layer))
                 {
                     if (live.IsTerminal(contact)) continue;
@@ -68,8 +75,11 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
     }
 
     private static INavigationGraph Wrap(FieldMapSnapshot value,
-        IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> passages) =>
-        passages.Count == 0 ? new FieldNavigationGraph(value) : new ScriptPassageGraph(new FieldNavigationGraph(value), passages);
+        IReadOnlyList<(string Id, int Left, int Top, int Right, int Bottom)> passages,
+        FieldActorCollisionRules? collisions,
+        IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals) =>
+        passages.Count == 0 ? new FieldNavigationGraph(value, collisions, touchGoals)
+            : new ScriptPassageGraph(new FieldNavigationGraph(value, collisions, touchGoals), passages);
 
     internal static FieldMapSnapshot? Preview(FieldMapSnapshot source, GameNavigationCatalog.TileCopy copy)
     {

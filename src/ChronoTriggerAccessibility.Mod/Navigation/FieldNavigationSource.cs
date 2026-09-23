@@ -41,7 +41,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Reset(); scene = identity;
             diagnostic($"Navigation field: scene={field.SceneId}; engine=0x{field.Engine:X}; map={map.Width}x{map.Height}; layer={map.PlayerLayer}; actors={field.ActorCount}; viewport={viewport}.");
         }
-        var graph = new FieldNavigationGraph(map);
+        var collisions = new FieldActorCollisionRules(field);
+        var touchGoals = new List<(int Actor, IReadOnlyList<NavigationPoint> Goals)>();
+        var graph = new FieldNavigationGraph(map, collisions, touchGoals);
         var player = new NavigationPoint(field.LeadPlayer?.FineX ?? 0, field.LeadPlayer?.FineY ?? 0, map.PlayerLayer);
         var targets = new List<NavigationTarget>();
         var storyAnchors = new List<NavigationTarget>();
@@ -90,6 +92,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(actionState)) == true)
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
+            if (touchOnly) touchGoals.Add((actor.Index, approaches));
             if (IsCathedralOrgan(actor))
                 approaches = approaches.Where(p => p.X + NavigationUnits.LocalStep / 8 < 18 * 256).ToArray();
             Add(id, label ?? description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
@@ -130,6 +133,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
+            if (touch && actor.ScriptCallsEnabled) touchGoals.Add((actor.Index, approaches));
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage($"landmark:{actor.Index}", actor);
@@ -281,7 +285,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), guideActive
                 ? FieldLandingGraph.Create(
-                    FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals),
+                    FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals, collisions, touchGoals),
                     map, GameNavigationCatalog.ForScene(field.SceneId))
                 : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
             { AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId) };
@@ -308,7 +312,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             diagnostic("Navigation actor facts: " + string.Join(" | ", field.Actors.Take(32).Select(a =>
                 $"id={a.Index},class=0x{a.ClassTag:X},visual=0x{a.VisualIndex:X},draw=0x{a.DrawMode:X}," +
                 $"loaded={a.LoadedFlag},usable={a.IsUsable},party={a.IsPartyMember}," +
-                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},scriptCalls={a.ScriptCallsEnabled},pos=({a.FineX},{a.FineY})")) + ".");
+                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},scriptCalls={a.ScriptCallsEnabled},collisionOffsetX={a.CollisionOffsetX},pos=({a.FineX},{a.FineY})")) + ".");
         }
 
         // Scripts park retired actors at tile FF,FF without necessarily clearing
@@ -355,11 +359,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // act on. Where another actor exists only to run this one's script, its own
             // standing room counts too, so long as it is really there and really itself.
             var proxy = InteractionProxy(actor);
-            // Fenced on some side, so one step out may all be the wrong side of a
-            // counter or hedge. Widen to everywhere the confirm handler would still
+            // A nearby goal can be blocked by a counter, hedge, or the actor's
+            // own body. Widen to everywhere the confirm handler would still
             // accept, and let the search pick whichever of them it can actually walk
             // to. An actor with all four steps open and no stand-in pays nothing.
-            if (direct.Count == 4 && proxy is null) return direct;
+            if (direct.Count == 4 && proxy is null && (actor.LoadedFlag & 1) == 0) return direct;
             var widened = direct.Concat(ConfirmApproach(actor.FineX, actor.FineY));
             if (proxy is not null) widened = widened.Concat(ConfirmApproach(proxy.FineX, proxy.FineY));
             return widened.Distinct()

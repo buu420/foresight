@@ -8,6 +8,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Capture\actor-collision-native-0330.json" />
     <EmbeddedResource Include="Capture\equipment-native-0326.json" />
     <EmbeddedResource Include="Capture\menu-modes-native-0327.json" />
     <ProjectReference Include="..\..\src\ChronoTriggerAccessibility.Native\ChronoTriggerAccessibility.Native.csproj" />

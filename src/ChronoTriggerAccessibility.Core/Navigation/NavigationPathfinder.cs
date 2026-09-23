@@ -19,6 +19,7 @@ public static class NavigationPathfinder
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumVisited, 1);
         if (goals.Count == 0) return new(null, false);
         if (goals.Count > 64) return new(null, true);
+        graph = graph.ForGoals(goals);
         var destinations = goals.ToHashSet();
         var first = new SearchNode(start, 0, 0);
         var previous = new Dictionary<SearchNode, SearchNode> { [first] = first };

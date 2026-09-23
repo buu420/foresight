@@ -16,6 +16,9 @@ public static class NavigationUnits
 
 public interface INavigationGraph
 {
+    /// <summary>Bind movement rules to the selected destination, when reaching
+    /// it requires a native contact that would block ordinary travel.</summary>
+    INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) => this;
     IEnumerable<NavigationPoint> Neighbours(NavigationPoint point);
     bool IsTerminal(NavigationPoint point) => false;
     bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => point == goal;

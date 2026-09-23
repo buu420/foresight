@@ -14,12 +14,15 @@ public sealed class CounterApproachTests
     private const int Scene = 118;
 
     [Fact]
-    public void AnActorWithOrdinaryOpenFloorAroundItKeepsItsOneStepApproach()
+    public void ALoadedActorOffersReachableStandingRoomOutsideItsBodyAndInsideConfirmRange()
     {
-        var target = Assert.Single(Build().Targets, t => t.Id == "actor:10:4:51");
-        Assert.Equal(4, target.ApproachPoints.Count);
-        foreach (var point in target.ApproachPoints)
-            Assert.Equal(256, Math.Abs(point.X - 14976) + Math.Abs(point.Y - 2560));
+        var frame = Build();
+        var target = Assert.Single(frame.Targets, t => t.Id == "actor:10:4:51");
+        var route = NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints).Route;
+        Assert.NotNull(route);
+        Assert.True(FieldInteractionRange.ReachesWithin(route[^1].X, route[^1].Y, 14976, 2559, 32));
+        Assert.Contains(target.ApproachPoints, p => Math.Abs(p.X - 14976) + Math.Abs(p.Y - 2559) > 272);
+        Assert.All(target.ApproachPoints, p => Assert.True(FieldInteractionRange.ReachesWithin(p.X, p.Y, 14976, 2559, 32)));
     }
 
     [Fact]

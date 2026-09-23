@@ -20,6 +20,9 @@ public sealed class FieldLandingGraph(INavigationGraph inner, FieldMapSnapshot m
 {
     private readonly FieldNavigationGraph positions = new(map);
 
+    public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
+        new FieldLandingGraph(inner.ForGoals(goals), map, scene);
+
     public static INavigationGraph Create(INavigationGraph inner, FieldMapSnapshot map,
         GameNavigationCatalog.Scene? scene) =>
         scene is not null && scene.Exits.Any(e => IsSameScene(e, map, scene.Id))

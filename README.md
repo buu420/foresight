@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.29 corrects Cathedral organ availability and routes around floors that push against the player, and fixes the dialogue error after changing areas. See [the repair evidence](docs/cathedral-dialogue-0329.md) and [the whole-game coverage audit](docs/whole-game-coverage-0328.md). The full story, optional quests, PC bonus areas, vehicle navigation, native menus and battle reader remain included.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.30 repairs the return to Marle in Guardia Castle and adds native character collision checks to field routes. See [the repair evidence](docs/castle-return-0330.md) and [the whole-game coverage audit](docs/whole-game-coverage-0328.md). The catalog spans the story, optional quests and PC bonus areas; this is not a claim that every route has been verified in live play.
 
 Earlier menu, battle, pendant, Telepod, Resume confirmation and race-choice repairs remain included. Current Story Events remain routable before discovery, with optional guide targets in People, Interactable Objects, and Exits. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. World/local transition recovery and the Settings speech repair remain included. Intro audio descriptions remain pending.
 

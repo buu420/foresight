@@ -18,6 +18,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Navigation\cathedral-map-0328.json" />
     <EmbeddedResource Include="Navigation\cathedral-rear-live-0329.json" />
+    <EmbeddedResource Include="Navigation\queen-chamber-map-0330.json" />
     <EmbeddedResource Include="..\ChronoTriggerAccessibility.Native.Tests\Capture\tech-native-0328.json" LogicalName="TechFrames" />
   </ItemGroup>
 </Project>

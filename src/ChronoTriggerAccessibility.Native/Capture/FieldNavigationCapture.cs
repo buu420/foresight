@@ -35,6 +35,8 @@ public sealed record FieldActorSnapshot(
     bool FacingValid,
     bool DrawModeKnown)
 {
+    /// <summary>Native contact center adjustment at +14C, in pixels (178980).</summary>
+    public int CollisionOffsetX { get; init; }
     /// <summary>Persistent call gates at actor+E8 and actor+30 bit80, tested by
     /// native confirm/touch dispatch (17FA20 / 16EF30). Neither is camera culling.</summary>
     public bool ScriptCallsEnabled { get; init; } = true;
@@ -94,7 +96,11 @@ public sealed record FieldNavigationSnapshot(
     int LeadPlayerActorIndex,
     FieldActorSnapshot? LeadPlayer,
     IReadOnlyList<FieldActorSnapshot> Actors,
-    IReadOnlyList<int> PartySlotActorIndices = null!);
+    IReadOnlyList<int> PartySlotActorIndices = null!)
+{
+    public int LastPartySlotRaw { get; init; } = 0x80;
+    public int ActorCollisionRadius { get; init; } = 160;
+}
 
 /// <summary>
 /// Reads live field navigation state out of the 0xE88 field engine at
@@ -386,13 +392,15 @@ public static class FieldNavigationCapture
         // 0x176119/0x176121/0x176129 compare against all three slots, so read them all:
         // every party member must be excluded from the target list, not just the lead.
         var partySlots = new int[PartySlotCount];
+        var lastPartySlotRaw = 0x80;
         for (var slot = 0; slot < PartySlotCount; slot++)
         {
             partySlots[slot] = -1;
             if (Int32(memory, fieldState + FieldStatePartySlotTableOffset + (nuint)(slot * 4),
-                    out var entry) && (entry & 0x80) == 0)
+                    out var entry))
             {
-                partySlots[slot] = entry >> 1;
+                if (slot == PartySlotCount - 1) lastPartySlotRaw = entry;
+                if ((entry & 0x80) == 0) partySlots[slot] = entry >> 1;
             }
         }
 
@@ -445,6 +453,14 @@ public static class FieldNavigationCapture
             }
         }
 
+        // 187527 assigns DAT_0081B4C4 to engine+40. The fair's special contact
+        // radius at 178980 reads that actor-base block's byte +68A0.
+        var fairFlags = 0;
+        if (sceneId == 5 && !Byte(memory, actorBase + 0x68A0u, out fairFlags))
+        {
+            error = "The fair's native actor collision state is unreadable.";
+            return false;
+        }
         snapshot = new FieldNavigationSnapshot(
             (uint)engine,
             (uint)actorBase,
@@ -459,7 +475,11 @@ public static class FieldNavigationCapture
             leadIndex,
             lead,
             new ReadOnlyCollection<FieldActorSnapshot>(actors),
-            new ReadOnlyCollection<int>(partySlots));
+            new ReadOnlyCollection<int>(partySlots))
+        {
+            LastPartySlotRaw = lastPartySlotRaw,
+            ActorCollisionRadius = FieldActorCollisionRules.Radius(sceneId, fairFlags),
+        };
         error = string.Empty;
         return true;
     }
@@ -487,6 +507,7 @@ public static class FieldNavigationCapture
             !Int32(memory, address + ActorClassTagOffset, out var classTag) ||
             !Int32(memory, address + ActorRenderPriorityPackedOffset, out var renderPriority) ||
             !Int32(memory, address + ActorActivationBindingOffset, out var activationBinding) ||
+            !Int32(memory, address + 0x14Cu, out var collisionOffsetX) ||
             !Byte(memory, address + ActorActivationEnabledOffset, out var activationEnabled) ||
             !Byte(memory, address + 0xE8u, out var scriptDisabled) ||
             !Byte(memory, address + 0x30u, out var callFlags))
@@ -514,6 +535,7 @@ public static class FieldNavigationCapture
             coordinatesCoherent, facingValid, drawModeKnown)
         {
             ScriptCallsEnabled = scriptDisabled == 0 && (callFlags & 0x80) == 0,
+            CollisionOffsetX = collisionOffsetX,
         };
         error = string.Empty;
         return true;

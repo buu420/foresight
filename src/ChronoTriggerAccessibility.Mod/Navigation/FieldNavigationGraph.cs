@@ -3,10 +3,18 @@ using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-/// <summary>Cardinal four-pixel edges, checked at each native pixel step. The normal
-/// game movement routine still owns movement and enforces dynamic actor collisions.</summary>
-public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGraph
+/// <summary>Cardinal four-pixel edges checked against native terrain and captured
+/// actor contacts. The normal game movement routine still performs movement.</summary>
+public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisionRules? actors = null,
+    IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null,
+    IReadOnlyList<NavigationPoint>? selectedGoals = null) : INavigationGraph
 {
+    private readonly HashSet<int> contactDestinations = selectedGoals is { Count: > 0 } && touchGoals is not null
+        ? touchGoals.Where(t => selectedGoals.All(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
+
+    public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
+        touchGoals is { Count: > 0 } ? new FieldNavigationGraph(map, actors, touchGoals, goals) : this;
+
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point)
     {
         if (point.X < 0 || point.Y < 0) yield break;
@@ -56,6 +64,7 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGrap
             done = Math.Min(distance, done + 16);
             var x = from.X + dx * done; var y = from.Y + dy * done;
             if (OpposesStrongFloor(x, y, dx, dy)) return false;
+            if (actors?.BlocksMove(from.X, from.Y, x, y, contactDestinations) == true) return false;
             // 175E90 dispatches cardinal movement to 175F70/176780 (horizontal)
             // and 176810/176AE0 (vertical). Before committing the foot's layer,
             // 175EE0 checks the two leading corners, seven pixels from the foot.

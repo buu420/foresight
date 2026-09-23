@@ -26,10 +26,9 @@ public sealed record FieldStoryState(int Point, bool MotherIntroducedFriend)
 /// sets global 0140 bit 0 after the initial conversation and name prompt.</summary>
 public static class FieldStoryCapture
 {
-    // Only script globals used by the story catalogs. Future: factory security /
-    // crane 58, hatch 5C, Arris bridges A4, rat EC, and power-room lock 1D0.
+    // Compact diagnostic subset. Capture below reads all 512 globals.
     public static IReadOnlyList<int> ObjectiveGlobalIndices { get; } = Array.AsReadOnly(new[]
-        { 0x54, 0x55, 0x56, 0x58, 0x5C, 0xA4, 0xEC, 0xFF, 0x190, 0x1D0 });
+        { 0x54, 0x55, 0x56, 0x58, 0x5C, 0xA1, 0xA4, 0xEC, 0xFF, 0x190, 0x1D0 });
 
     public static FieldStoryState? Capture(IReadableMemory memory, FieldNavigationSnapshot field)
     {

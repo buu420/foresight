@@ -147,8 +147,15 @@ public static class EarlyStoryTargets
             case 120 when p is >= 27 and < 33:
                 Exit("find-marle", "Return to the queen's chamber", [3]);
                 break;
-            case 122 when p is >= 27 and < 33:
-                Bind("find-marle", "Look for Marle in the queen's chamber", ["landmark:24"]);
+            case 122 when p is >= 28 and < 33:
+                // Atel0242 actor8 opens the doorway and arms actor24's startup
+                // event (A1:04). The disappearance region or contact25/26 sets
+                // local0C to start the return scene. Actor24 has no contact handler.
+                if (state.Flag(0xA1, 4) is null)
+                    Note("find-marle", "Look for Marle in the queen's chamber", "The chamber's current progress is unavailable.");
+                else if (state.Flag(0xA1, 4) == false)
+                    Bind("find-marle", "Enter the queen's chamber", ["landmark:8"]);
+                else Bind("find-marle", "Approach where Marle disappeared", ["landmark:25", "landmark:26"]);
                 break;
             case 122 when p is >= 33 and < 39:
                 Exit("leave-queen-room", "Return to the main hall", [0]);
@@ -258,9 +265,10 @@ public static class EarlyStoryTargets
         {
             (8, 12, 10) when state.Flag(0x56, 1) == true => "Left Telepod",
             (120, 9 or 10, _) when state.Local(6) == 0 => "Stairway past the guards",
+            (122, 8, >= 28 and < 33) when state.Flag(0xA1, 4) == false => "Passage into the queen's room",
             (122, 8, _) when state.Local(7) == 0 => "Passage into the queen's room",
             (120, 17, >= 16 and < 18) => "Foot of the queen's staircase",
-            (122, 24, >= 27 and < 33) => "Inside the queen's chamber",
+            (122, 25 or 26, >= 28 and < 33) when state.Flag(0xA1, 4) == true => "Where Marle disappeared",
             (129, 13, >= 18 and < 27) => "Organ",
             (129, 15, >= 18 and < 21) when actors.Any(a => a.Index == 14 && a.ClassTag == 4 &&
                 a.VisualIndex == 112 && a.IsUsable && a.IsDrawn && a.TileX == actor.TileX && a.TileY == actor.TileY) => "Sparkle on the floor",
@@ -272,7 +280,7 @@ public static class EarlyStoryTargets
         } : null;
 
     public static bool IsTouchLandmark(int scene, int actor) =>
-        (scene, actor) is (8, 12) or (120, 17) or (122, 24);
+        (scene, actor) is (8, 12) or (120, 17) or (122, 8 or 25 or 26);
 
     // These two script pickups can be drawn while the native +152 activation
     // byte is zero. Atel_0074 actor 15 uses the dropped/collected bits; Atel_0028
