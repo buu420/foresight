@@ -59,3 +59,19 @@ its snapshots. This is not a live replay of the full prison sequence.
 Release verification passed 1,926 tests: 149 Core, 846 Native, 920 Mod,
 3 footsteps run separately, and 8 Prism. All 151 native hook signatures still
 match the supported executable.
+
+## Installed release
+
+Installed while the game was closed on September 23, 2026, from commit
+`747e7a6d9457b42d9d9ef371055dfad1b3382178`. Product version: `1.0.0+747e7a6d9457b42d9d9ef371055dfad1b3382178`.
+
+- Mod DLL SHA256: `3DCF3CC50634C574EB88EFAD21FDA33BF43741E95512984CFC993B3B47E9F020`.
+- Manifest SHA256: `5783B6A667F9C6E28CEDAFFECC5961B6CE1C44AFDCA864507721B0311CC8CD86`.
+- All 28 mod files, 45 loader/shared-hook files, and both native launchers match
+  their packaged or vendored sources. The game executable remains unchanged.
+- Deployment verification passed all 25 checks, including the existing Steam
+  launcher registration and x86 runtime.
+- Previous installation: `X:\SteamLibrary\steamapps\common\Chrono Trigger\Accessibility\Backups\20260923-105036`.
+
+The machine-readable installation proof is saved alongside the release logs.
+No live prison playthrough was performed after installation.
