@@ -106,3 +106,29 @@ All 1,882 Release tests pass: Core 149, Native 831, Mod 891, footsteps 3,
 and Prism 8. All 151 native hook signatures match the supported executable.
 The installed update still requires normal in-game confirmation; no automated
 live traversal or complete playthrough is claimed.
+
+## Remaining navigation coverage limits
+
+Claude's additional static survey found strong floor flags on 17 of 338 maps.
+Forty of 42 tested scene/arrival pairs retained their reachable exits. The
+Blackbird's rear and forward passages (368/369) need live-state checks: their
+base-map results omit scripted terrain changes. This is not evidence of a
+completed live test of those areas. Weaker moving floors retain their previous
+behavior; a walking-speed interaction with them is outside this Cathedral fix.
+
+## Installed release
+
+Version 0.3.29 was deployed on September 23, 2026 from implementation commit
+`6406bd826c4f42240ff1bddc6d5c87ffab8f51ae`. All 25 deployment checks passed,
+including the existing launch redirect. Hash comparison verified all 28 mod
+files, 45 loader/shared-hook files and both native launcher files. The game
+executable is unchanged.
+
+Installed mod DLL SHA256:
+`47DD21C986C37E0116198C208C171508D1ABD53D29F217253FCE232A0180A448`.
+Installed manifest SHA256:
+`8661372CB123A7901B0CA0D30725C9229F876073936D98EB2908DF082A7D4C9D`.
+
+The previous 0.3.28 installation is retained under
+`Accessibility/Backups/20260923-024447/`. Full hashes, test totals and the exact
+implementation commit are in `deployment-proof.json` in the research directory.
