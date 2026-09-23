@@ -288,11 +288,34 @@ public sealed class DialogueCaptureTests
     }
 
     [Theory]
+    [InlineData("", 0)]
+    [InlineData("   ", 0)]
+    [InlineData("\u3000", 0)]
+    [InlineData("", 2)]
+    [InlineData("   ", 2)]
+    [InlineData("\u3000", 2)]
+    public void BlankOrdinaryRowIsCompleteWithoutSpeakingOrLookingAhead(string text, int phase)
+    {
+        var memory = CreateMemory([text, "Not reached yet"], [0x04, 0x08], currentLine: 0, pageBase: 0, phase: phase);
+
+        var status = DialogueCapture.CaptureStatus(memory, ImageBase, WindowAddress, out var snapshot, out var error);
+
+        Assert.Equal(DialogueCaptureStatus.Complete, status);
+        Assert.Empty(error);
+        Assert.Equal(0, snapshot.Cursor);
+        Assert.Equal(phase, snapshot.Phase);
+        Assert.Null(snapshot.Line);
+        Assert.Null(snapshot.Choices);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void TryCreateSnapshot_BlankRequiredVisibleTextIsRejected(string text)
+    [InlineData("\u3000")]
+    public void BlankChoiceLabelStillFails(string text)
     {
-        var memory = CreateMemory([text], [0x08], currentLine: 0, pageBase: 0, phase: 0);
+        var memory = CreateMemory([text, "No"], [0x10, 0x10], currentLine: 2, pageBase: 0,
+            phase: 4, choiceCount: 2, selectedChoice: 0);
 
         AssertFails(memory, "blank");
     }

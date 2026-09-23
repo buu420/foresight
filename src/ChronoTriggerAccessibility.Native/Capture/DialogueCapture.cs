@@ -256,12 +256,12 @@ public static class DialogueCapture
         // Until then, the parsed choice is neither ordinary dialogue nor an active choice.
         else if (phase is 0 or 2 && cursor < strings.Count && (flags[cursor] & ChoiceFlag) == 0)
         {
-            if (string.IsNullOrWhiteSpace(strings[cursor]))
-            {
-                error = $"Dialogue current line {cursor} is blank.";
-                return false;
-            }
-            line = new DialogueLineSnapshot(cursor, new string(strings[cursor].AsSpan()), flags[cursor]);
+            // The native parser retains empty rows after stripping formatting
+            // and timing tags. FLD_KMES0_000's final WAIT/AUTO_END row is one:
+            // 197530 keeps it active during the delay, then closes it normally.
+            // Preserve the snapshot without speech or looking ahead to another row.
+            if (!string.IsNullOrWhiteSpace(strings[cursor]))
+                line = new DialogueLineSnapshot(cursor, new string(strings[cursor].AsSpan()), flags[cursor]);
         }
 
         snapshot = new DialogueSnapshot(window, cursor, pageBase, phase, line, choices);

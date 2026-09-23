@@ -31,6 +31,62 @@ public sealed class DialogueHookSetTests
     ];
 
     [Fact]
+    public void PrisonCountdownBlankDelayRowsDoNotFaultLaterCountdownsOrDialogue()
+    {
+        var harness = CreateHarness();
+        harness.PrepareAndActivate();
+        foreach (var days in new[] { 2, 1 })
+        {
+            // FLD_KMES0_000 ends in a separate WAIT/AUTO_END row. The log
+            // opened at line 1, spoke the countdown, then faulted on blank line 2.
+            var text = $"Days remaining until execution: {days}";
+            harness.Memory.SetSnapshot(Window, ["", text, ""], [1, 0, 4],
+                cursor: 1, pageBase: 0, phase: 0, choiceCount: 0, selectedIndex: -1, active: 1);
+            harness.Open();
+            harness.Update();
+            harness.Memory.SetSnapshot(Window, ["", text, ""], [1, 0, 4],
+                cursor: 2, pageBase: 0, phase: 0, choiceCount: 0, selectedIndex: -1, active: 1);
+            harness.Update();
+            harness.Update();
+            Assert.Empty(harness.Dispatcher.Failures);
+            harness.Close();
+        }
+        harness.Memory.SetOrdinary(Window, ["Finally, the execution day has arrived..."], cursor: 0, pageBase: 0);
+        harness.Open();
+        harness.Update();
+        harness.Close();
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(new[] { "Days remaining until execution: 2", "Days remaining until execution: 1",
+            "Finally, the execution day has arrived..." },
+            harness.Dispatcher.Events.OfType<DialogueLinePresented>().Select(e => e.Text));
+        Assert.Equal(3, harness.Dispatcher.Events.OfType<DialogueOpened>().Count());
+        Assert.Equal(3, harness.Dispatcher.Events.OfType<DialogueClosed>().Count());
+    }
+
+    [Fact]
+    public void LeadingAndInteriorBlankRowsKeepDialogueOpenWithoutPrematureSpeech()
+    {
+        var harness = CreateHarness();
+        harness.PrepareAndActivate();
+        var lines = new[] { "", "First visible line", "   ", "Later visible line" };
+        harness.Memory.SetOrdinary(Window, lines, cursor: 0, pageBase: 0);
+        harness.Open();
+        Assert.Single(harness.Dispatcher.Events);
+        for (var cursor = 1; cursor < lines.Length; cursor++)
+        {
+            harness.Memory.SetOrdinary(Window, lines, cursor: cursor, pageBase: 0);
+            harness.Update();
+            harness.Update();
+            Assert.Equal(cursor < 3 ? 1 : 2, harness.Dispatcher.Events.OfType<DialogueLinePresented>().Count());
+        }
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(new[] { "First visible line", "Later visible line" },
+            harness.Dispatcher.Events.OfType<DialogueLinePresented>().Select(e => e.Text));
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueClosed>());
+    }
+
+    [Fact]
     public void PreparationOwnsFourVerifiedHooksUsesSafeProbeAndRollsBackProbeBeforeClose()
     {
         var harness = CreateHarness();
