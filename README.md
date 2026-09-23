@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.28 repairs narrow-door routing across the game, makes Cathedral Story Events follow the required switch and organ sequence, and reads the Tech character selector. See [the repair evidence](docs/cathedral-tech-0328.md) and [the whole-game coverage audit](docs/whole-game-coverage-0328.md). The full story, optional quests, PC bonus areas, vehicle navigation, native menus and battle reader remain included.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.29 corrects Cathedral organ availability and routes around floors that push against the player, and fixes the dialogue error after changing areas. See [the repair evidence](docs/cathedral-dialogue-0329.md) and [the whole-game coverage audit](docs/whole-game-coverage-0328.md). The full story, optional quests, PC bonus areas, vehicle navigation, native menus and battle reader remain included.
 
 Earlier menu, battle, pendant, Telepod, Resume confirmation and race-choice repairs remain included. Current Story Events remain routable before discovery, with optional guide targets in People, Interactable Objects, and Exits. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. World/local transition recovery and the Settings speech repair remain included. Intro audio descriptions remain pending.
 

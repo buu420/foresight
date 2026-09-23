@@ -55,10 +55,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
+            // Scene 131's PWHERE loop stores the player's X in local 6. The
+            // organ's local6 <= 17 guard describes its interaction side, not
+            // story progress. Evaluate that guard at a valid approach instead
+            // of removing the destination while the player is across the room.
+            var actionState = IsCathedralOrgan(actor) && story is not null
+                ? story with { Locals = new Dictionary<int, int>(story.Locals) { [6] = 17 } }
+                : story;
             var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
-                scriptInfo?.Actions.Any(a => a.Available(story)) == true;
+                scriptInfo?.Actions.Any(a => a.Available(actionState)) == true;
             var scriptedContact = scriptedAction &&
-                scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
+                scriptInfo?.Actions.Any(a => a.Touch && a.Available(actionState) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
             // These pickups have an initialization-time gate in addition to the
             // contact handler. Preserve the audited gate when the sprite lingers.
             if ((field.SceneId, actor.Index) is (8, 11) or (439, 15))
@@ -71,17 +78,21 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
-                FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) : null;
+                FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
+                (IsCathedralOrgan(actor) ? "Organ" : null) : null;
             // A stand-in with no name of its own is the same destination twice over: the
             // actor whose script it runs is already offered, and this would arrive at the
             // same spot under a name that tells the player nothing.
             if (label is null && field.SceneIdCoherent && FieldActorProxies.IsProxy(field.SceneId, actor.Index) &&
                 field.Actors.Any(owner => InteractionProxy(owner)?.Index == actor.Index)) continue;
-            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
+            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(actionState)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
-            if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
+            if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(actionState)) == true)
                 ProtectContactPassage(id, actor);
-            Add(id, label ?? description.Label, description.Category, position, touchOnly ? TouchApproach(actor) : ActorApproach(actor, position), viewport.Contains(position.X, position.Y),
+            var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
+            if (IsCathedralOrgan(actor))
+                approaches = approaches.Where(p => p.X + NavigationUnits.LocalStep / 8 < 18 * 256).ToArray();
+            Add(id, label ?? description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
                 guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction));
         }
         foreach (var chest in treasures)
@@ -304,6 +315,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         // their draw mode. Such actors must not keep their last discovered position.
         bool InsideMap(FieldActorSnapshot actor) => actor.FineX >= 0 && actor.FineY >= 0 &&
             actor.FineX / 256 < map.Width && actor.FineY / 256 < map.Height;
+
+        bool IsCathedralOrgan(FieldActorSnapshot actor) => field.SceneIdCoherent && field.SceneId == 131 &&
+            actor.Index == 36 && actor.ClassTag == 4 && actor.VisualIndex == 100;
 
         NavigationPoint Position(int x, int y)
         {

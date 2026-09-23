@@ -50,10 +50,12 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGrap
         var distance = Math.Abs(target.X - from.X) + Math.Abs(target.Y - from.Y);
         var dx = Math.Sign(target.X - from.X);
         var dy = Math.Sign(target.Y - from.Y);
+        if (OpposesStrongFloor(from.X, from.Y, dx, dy)) return false;
         for (var done = 0; done < distance;)
         {
             done = Math.Min(distance, done + 16);
             var x = from.X + dx * done; var y = from.Y + dy * done;
+            if (OpposesStrongFloor(x, y, dx, dy)) return false;
             // 175E90 dispatches cardinal movement to 175F70/176780 (horizontal)
             // and 176810/176AE0 (vertical). Before committing the foot's layer,
             // 175EE0 checks the two leading corners, seven pixels from the foot.
@@ -69,5 +71,23 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map) : INavigationGrap
             if (!TryPosition(x, y, next.Layer, out next)) return false;
         }
         return distance > 0;
+    }
+
+    private bool OpposesStrongFloor(int x, int y, int dx, int dy)
+    {
+        if (x < 0 || y < 0 || x / 256 >= map.Width || y / 256 >= map.Height) return false;
+        var flags = map.TerrainFlags[y / 256 * map.Width + x / 256];
+        // 178FF0 decodes bits 2..3 as floor speed 0/8/16/32 and bits
+        // 0..1 as north/south/west/east. Input at 175A94 tops out at 32.
+        // Opposing a speed-32 floor cannot make progress even while running.
+        // Check both ends: entering it may succeed for one frame, then bounce
+        // back. Occupancy alone therefore does not establish a walkable edge.
+        return (flags & 12) == 12 && (flags & 3) switch
+        {
+            0 => dy > 0,
+            1 => dy < 0,
+            2 => dx > 0,
+            _ => dx < 0,
+        };
     }
 }

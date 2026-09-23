@@ -188,6 +188,81 @@ public sealed class DialogueHookSetTests
     }
 
     [Fact]
+    public void InactiveRegisteredWindowEndsOnceAndDoesNotDisableLaterDialogue()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetOrdinary(Window, ["My thanks. Do come again!"], cursor: 0, pageBase: 0);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        // Leaving the field destroys its window without calling the animated
+        // close function. A later MsgWindow can reuse that address, inactive.
+        harness.Memory.SetInactive(Window);
+        harness.Update();
+        harness.Update();
+        harness.Close();
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Single(harness.Dispatcher.Events.OfType<DialogueClosed>());
+        harness.Memory.SetOrdinary(Window, ["New area dialogue"], cursor: 0, pageBase: 0);
+        harness.Update(); // A reused address cannot open itself without the open hook.
+        Assert.Single(harness.Dispatcher.Events.OfType<DialogueOpened>());
+        harness.Open();
+        harness.Update();
+        Assert.Equal(2, harness.Dispatcher.Events.OfType<DialogueOpened>().Count());
+        Assert.Equal(new[] { "My thanks. Do come again!", "New area dialogue" },
+            harness.Dispatcher.Events.OfType<DialogueLinePresented>().Select(line => line.Text));
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void InactiveRegisteredChoiceClearsConfirmWithoutActivatingAStaleSelection()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetChoices(Window, "Old prompt", ["Yes", "No"], selectedIndex: 0);
+        harness.PrepareAndActivate();
+        harness.Open();
+        harness.Assembly.Invoke(Window);
+
+        harness.Memory.SetInactive(Window);
+        harness.Update();
+        harness.Close();
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        Assert.Single(harness.Dispatcher.Events.OfType<DialogueClosed>());
+        Assert.Empty(harness.Dispatcher.Failures);
+
+        harness.Memory.SetChoices(Window, "New prompt", ["Stay", "Leave"], selectedIndex: 1);
+        harness.Open();
+        harness.Close(); // The old confirm marker must not survive this new opening.
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        harness.Open();
+        harness.Assembly.Invoke(Window);
+        harness.Close();
+        Assert.Equal(new[] { new DialogueChoiceActivated("Leave") },
+            harness.Dispatcher.Events.OfType<DialogueChoiceActivated>());
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void InactiveUnregisteredWindowCannotEndTheCurrentDialogue()
+    {
+        var harness = CreateHarness();
+        harness.Memory.SetOrdinary(Window, ["Current dialogue", "Next line"], cursor: 0, pageBase: 0);
+        harness.Memory.SetInactive(OtherWindow);
+        harness.PrepareAndActivate();
+        harness.Open();
+
+        harness.Functions.GetDetour<MsgWindowUpdateDelegate>(HookId.MsgWindowUpdate)((nint)OtherWindow, 0);
+        harness.Memory.SetOrdinary(Window, ["Current dialogue", "Next line"], cursor: 1, pageBase: 0);
+        harness.Update();
+
+        Assert.Empty(harness.Dispatcher.Events.OfType<DialogueClosed>());
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(new[] { "Current dialogue", "Next line" },
+            harness.Dispatcher.Events.OfType<DialogueLinePresented>().Select(line => line.Text));
+    }
+
+    [Fact]
     public void PendingOpeningInvalidStateFailsBeforeAnyOpenOrPartialText()
     {
         var harness = CreateHarness();

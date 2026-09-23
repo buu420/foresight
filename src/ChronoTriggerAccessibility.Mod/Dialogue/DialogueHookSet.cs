@@ -379,8 +379,16 @@ public sealed class DialogueHookSet : IHookActivationObserver
             window,
             out var snapshot,
             out var error);
-        if (status == DialogueCaptureStatus.Inactive && wasPending)
+        if (status == DialogueCaptureStatus.Inactive)
         {
+            // +2BD == 0 is a valid native lifecycle state. Scene teardown can
+            // destroy a MsgWindow without calling its animated close function;
+            // a newly constructed window may later reuse the registered address.
+            // Retire an old active interaction, including its confirm marker,
+            // without confirming a choice or faulting future dialogue. A pending
+            // open still waits for the game's activation callback at 1984F0.
+            if (!wasPending)
+                CompleteClose(epoch, window, new ClosePreparation(epoch, window, Recognized: true, null, null));
             return;
         }
         if (status != DialogueCaptureStatus.Complete)
