@@ -26,4 +26,14 @@ The focused battle and composition suite passes 52 tests. Regressions cover plai
 
 The release suites pass 1,094 Mod tests (excluding the three unrelated audio playback tests) and 851 Native tests. The production hook-factory regression also verifies the exact instruction-site exception and rejects execution after the original instructions. A fresh check of the installed game executable verifies all 171 hook signatures. Independent review found no remaining blocker after the timing and factory corrections.
 
-Automated validation does not establish a live battle keyboard test. Release packaging and installation results are recorded below when completed.
+Automated validation does not establish a live battle keyboard test.
+
+## Installation and startup
+
+Version 0.3.33 is deployed from source commit `bac90eca1134697e9e9f0541b946385b06a7338c`. The release build has no warnings or errors. All 25 deployment checks pass; all 28 installed mod files, 45 loader/shared-hook files and two launchers match their package/source payloads. The executable hash remains unchanged. The previous 0.3.32 installation is preserved under `Accessibility/Backups/20260926-161331`.
+
+Installed mod DLL SHA-256: `CD3029E4385B3C7C81B1978E9D29CB60EE9A0A6EFC03DF8B0185A365BA92A40D`.
+
+Manifest SHA-256: `CE0C5F47AB1CBF9A0000E5A463BC99A2EA125539214AEC18BA55712EC818BD70`.
+
+A normal Steam startup on September 26 loads all 171 hooks, including the new keyboard filter, and activates the accessibility runtime. Startup speech and Resume confirmation appear in the log. No game input was injected for this check. The snapshot is saved as `startup-smoke.log` beside `deployment-proof.json` in the research directory. Shift+H in a live battle remains unverified.
