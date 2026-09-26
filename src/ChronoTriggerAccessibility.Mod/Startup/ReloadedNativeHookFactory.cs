@@ -219,11 +219,17 @@ public sealed class ReloadedNativeHookFactory :
         // `or edi,[esi+0x331C]` instruction executed before the managed probe.
         var worldInstruction = contract.Kind == NativeHookKind.AssemblyInstructionSite &&
             contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("0BBE1C330000"));
-        if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction)
+        // GameController's XOR ECX,ECX / NOP boundary follows GetKeyboardState.
+        // Filter its local buffer before the original instructions start the key scan.
+        var keyboardInstruction = contract.Id == HookId.GameKeyboardStateFilter &&
+            contract.Kind == NativeHookKind.AssemblyInstructionSite && contract.Rva == 0x18F58B &&
+            contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("33C90F1F00"));
+        if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction && !keyboardInstruction)
         {
-            throw new ArgumentException("A function-entry contract cannot be installed as an assembly call-site hook.", nameof(id));
+            throw new ArgumentException("Only audited call-site or instruction-site contracts can be installed as assembly hooks.", nameof(id));
         }
-        if (!worldInstruction && (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8))
+        if (!worldInstruction && !keyboardInstruction &&
+            (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8))
         {
             throw new NotSupportedException(
                 $"Assembly call-site '{contract.Symbol}' is not an audited exact five-byte direct CALL.");

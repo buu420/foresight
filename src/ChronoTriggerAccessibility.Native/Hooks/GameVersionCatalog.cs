@@ -494,6 +494,10 @@ public static class GameVersionCatalog
         Create(HookId.MenuManagerUpdate, "Menu manager completed update", 0x1DCF10,
             "55 8B EC 83 E4 F8 83 EC 14 53 8B D9 56 57 80 BB 90 02 00 00",
             typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall),
+        // GetKeyboardState has filled EBP-110; filter before the key-to-pad loop.
+        // These complete XOR/NOP instructions have no interior branch targets.
+        new(HookId.GameKeyboardStateFilter, "Game keyboard snapshot before action mapping", 0x18F58B,
+            Convert.FromHexString("33C90F1F00"), NativeHookKind.AssemblyInstructionSite, null, null),
     ]);
 
     public static HookContract Get(HookId id) => Hooks.Single(hook => hook.Id == id);

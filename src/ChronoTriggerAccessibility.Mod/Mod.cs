@@ -161,7 +161,8 @@ public sealed class Mod : ModBase
             engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); },
             footsteps.Suspend, World, context => World(context), footsteps.SetGuidance,
             Flight, worldSource.IsVehicleActive);
-        var battle = new BattleRuntime(navigationSpeech.Publish, new BattleKeyboard(),
+        var battleKeyboard = new BattleKeyboard();
+        var battle = new BattleRuntime(navigationSpeech.Publish, battleKeyboard,
             NavigationKeyboard.IsGameForeground, _ =>
             {
                 navigation.Suspend("battle state changed");
@@ -171,6 +172,7 @@ public sealed class Mod : ModBase
         var battleHooks = new BattleHookSet(hookFactory, battleSession.Tick, battleSession.Close,
             battleSession.Message, battleSession.Number, battleSession.Miss, battleSession.Render,
             battleSession.BindImageBase, battleSession.Disable);
+        var battleKeyboardHooks = new BattleKeyboardHookSet(asmHookFactory, battleKeyboard, () => battle.IsActive);
         var navigationHooks = new FieldNavigationHookSet(asmHookFactory, (engine, pad) =>
         {
             if (battle.IsActive) return pad;
@@ -255,6 +257,7 @@ public sealed class Mod : ModBase
             .Concat(worldHooks.Registrations)
             .Concat(timeGauge.Registrations)
             .Concat(battleHooks.Registrations)
+            .Concat(battleKeyboardHooks.Registrations)
             .Concat(submenuHooks.Registrations)
             .Concat(shopHooks.Registrations)
             .ToArray();
@@ -275,6 +278,7 @@ public sealed class Mod : ModBase
             worldHooks,
             timeGauge,
             battleHooks,
+            battleKeyboardHooks,
             submenuHooks,
             shopHooks,
         };

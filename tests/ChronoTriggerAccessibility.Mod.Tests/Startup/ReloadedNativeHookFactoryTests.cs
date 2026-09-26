@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Mod.Reloaded;
+using ChronoTriggerAccessibility.Mod.Battle;
 using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Native.Hooks;
 using Reloaded.Hooks.Definitions;
@@ -179,6 +180,26 @@ public sealed class ReloadedNativeHookFactoryTests
         Assert.Equal(1, controller.AsmCreateCount);
         Assert.Equal(ExpectedNoArgumentAssembly, controller.Code);
         Assert.Contains(callback, prepared.LifetimeRoots);
+    }
+
+    [Fact]
+    public void AuditedKeyboardSnapshotFiltersBeforeTheFiveOriginalBytes()
+    {
+        var controller = new RecordingAsmHookController();
+        var factory = new ReloadedNativeHookFactory(controller);
+        GameKeyboardStateProbeDelegate callback = _ => { };
+        var prepared = factory.CreateAsmHook(HookId.GameKeyboardStateFilter, "Keyboard snapshot", callback,
+            0x58F58B, BattleKeyboardHookSet.BuildAssembly, ValidOptions);
+        Assert.Equal(1, controller.AsmCreateCount);
+        Assert.Equal(5, controller.Options!.hookLength);
+        Assert.Equal(AsmHookBehaviour.ExecuteFirst, controller.Options.Behaviour);
+        Assert.Equal(new[] { "use32", "pushfd", "pushad", "lea eax, [ebp-0x110]", "push eax",
+            controller.AbsoluteCallMnemonic, "add esp, 4", "popad", "popfd" }, controller.Code);
+        Assert.Contains(callback, prepared.LifetimeRoots);
+        Assert.Throws<ArgumentException>(() => factory.CreateAsmHook(HookId.GameKeyboardStateFilter,
+            "Keyboard snapshot", callback, 0x58F58B, BattleKeyboardHookSet.BuildAssembly,
+            ValidOptions with { Behaviour = AsmHookBehaviour.ExecuteAfter }));
+        Assert.Equal(1, controller.AsmCreateCount);
     }
 
     [Fact]

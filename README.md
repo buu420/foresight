@@ -1,6 +1,6 @@
 # Chrono Trigger Accessibility
 
-This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.32 adds shared engine repairs for interaction availability, routes with multiple destinations, and large maps. Story and optional objectives span the ending, classic side quests and PC bonus areas. See [the engine and coverage report](docs/whole-game-engine-0332.md) for the whole-game resource audit, route replay results and remaining validation limits. These checks do not establish a complete live playthrough.
+This mod adds screen-reader output to the Windows Steam release of Chrono Trigger. Version 0.3.33 moves battle HP inspection to Shift+H and consumes that chord before the game handles H. Plain H retains its native action. See [the shortcut verification](docs/battle-hp-shortcut-0333.md). The previous release adds shared engine repairs for interaction availability, routes with multiple destinations, and large maps. Story and optional objectives span the ending, classic side quests and PC bonus areas. See [the engine and coverage report](docs/whole-game-engine-0332.md) for the whole-game resource audit, route replay results and remaining validation limits. These checks do not establish a complete live playthrough.
 
 Earlier menu, battle, pendant, Telepod, Resume confirmation and race-choice repairs remain included. Current Story Events remain routable before discovery, with optional guide targets in People, Interactable Objects, and Exits. Manual directions continue one leg at a time, with the countable footsteps confirmed by the player. World/local transition recovery and the Settings speech repair remain included. Intro audio descriptions remain pending.
 
@@ -27,13 +27,13 @@ Use the game's normal directions, X to confirm, and C to cancel. The reader anno
 | Key | Action during battle |
 |---|---|
 | 1 / 2 / 3 | Select the corresponding party member for inspection and read their name |
-| H | Read that member's current and maximum HP |
+| Shift+H | Read that member's current and maximum HP |
 | M | Read that member's current and maximum MP |
 | K | Repeat the current battle command or target selection |
 
-The inspection member stays selected when another character's turn starts. Empty slots are announced. These shortcuts do not issue battle commands. Navigation and footsteps stop at battle entry and become available again when the native battle menu is destroyed. Shortcuts run only while the game has focus, without Ctrl, Alt, Shift, or Windows held. Persistent capture failures are spoken and recorded in the Reloaded log.
+The inspection member stays selected when another character's turn starts. Empty slots are announced. These shortcuts do not issue battle commands. Navigation and footsteps stop at battle entry and become available again when the native battle menu is destroyed. Shortcuts run only while the game has focus, without Ctrl, Alt, or Windows held. Shift is required for HP; use the other shortcuts without Shift. Press Shift before H. A captured HP press blocks the game's H action until H is released, including when Shift is released first. Plain H keeps its normal game action. Persistent capture failures are spoken and recorded in the Reloaded log.
 
-Live validation still needs a real encounter in each interface, including party reordering, commands, targets, Techs, Items, status effects, defeat, rewards, and return to exploration. Reading observes the game's timing and does not pause combat or select actions. The battle Item panel has no description to read; descriptions from other screens are not inserted into it. Popups announce the recipient and displayed damage or recovery amount. HP versus MP is not appended to popup amounts until that distinction is verified; H and M read the exact party HUD values. Element icons within battle messages still need a separate reader.
+Live validation still needs a real encounter in each interface, including party reordering, commands, targets, Techs, Items, status effects, defeat, rewards, and return to exploration. Reading observes the game's timing and does not pause combat or select actions. The battle Item panel has no description to read; descriptions from other screens are not inserted into it. Popups announce the recipient and displayed damage or recovery amount. HP versus MP is not appended to popup amounts until that distinction is verified; Shift+H and M read the exact party HUD values. Element icons within battle messages still need a separate reader.
 
 ## Navigation
 

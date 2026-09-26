@@ -16,13 +16,19 @@ public sealed class BattleSessionTests
     public void NativeMemoryToKeyboardAndSpeechUsesTheSelectedMemberAndTheDisplayedHit()
     {
         var m = World(); var events = new List<AccessibilityEvent>(); var keys = new HashSet<int>();
-        var runtime = new BattleRuntime(events.Add, new BattleKeyboard(keys.Contains, () => true), () => true, _ => { });
+        var keyboard = new BattleKeyboard(keys.Contains, () => true);
+        var runtime = new BattleRuntime(events.Add, keyboard, () => true, _ => { });
         var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
         session.Tick(Menu);
+        keyboard.FilterGameKeyboardState(new byte[256], runtime.IsActive);
         Assert.Equal("Crono: Attack", Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
         keys.Add('2'); session.Tick(Menu); keys.Clear(); session.Tick(Menu);
         m.U16(Canvas + 0x15BA3 + 0x80, 27);
-        keys.Add('H'); session.Tick(Menu); keys.Clear(); session.Tick(Menu);
+        var snapshot = new byte[256]; snapshot['H'] = 0x80; snapshot[0x10] = 0x80;
+        keyboard.FilterGameKeyboardState(snapshot, runtime.IsActive);
+        Assert.Equal(0, snapshot['H']);
+        session.Tick(Menu);
+        keyboard.FilterGameKeyboardState(new byte[256], runtime.IsActive);
         keys.Add('M'); session.Tick(Menu);
         Assert.Equal(["Marle.", "Marle. HP 27 of 80.", "Marle. MP 7 of 12."],
             events.OfType<BattleInspectionRequested>().Select(e => e.Text));

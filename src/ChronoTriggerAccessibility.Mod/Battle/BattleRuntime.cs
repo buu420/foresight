@@ -139,7 +139,7 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
                 if (string.IsNullOrWhiteSpace(name)) name = BattleIdentity.Unnamed(popup.Slot);
                 // The native presentation proves recovery versus damage. Its two
                 // motion tables do not yet prove an HP versus MP unit, so do not
-                // append one to the displayed number. H/M use the audited HUD.
+                // append one to the displayed number. Shift+H/M use the audited HUD.
                 var text = presentation.Kind switch
                 {
                     1 or 2 => $"{name} recovers {popup.Text}.",
