@@ -14,7 +14,7 @@ using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Extras;
 
-public sealed class ExtrasHookSetTests
+public sealed partial class ExtrasHookSetTests
 {
     private const nuint ImageBase = 0x00400000;
     private const nuint Scene = 0x00900000;
@@ -23,8 +23,12 @@ public sealed class ExtrasHookSetTests
     private const nuint Closure = 0x00930000;
     private const nuint ControlVector = 0x00940000;
     private const nuint TargetNode = 0x00950000;
+    private const nuint ViewerManager = 0x00960000;
+    private const nuint ViewerClosure = 0x00970000;
+    private const nuint ViewerControl = 0x00980000;
     private const nuint SaveData = 0x00B00000;
     private const nuint TransitionPayload = 0x00E00000;
+    private const nuint BackPayload = 0x00E10000;
 
     private static readonly HookId[] ExpectedHookIds =
     [
@@ -40,6 +44,18 @@ public sealed class ExtrasHookSetTests
         HookId.EndingDetailCallback,
         HookId.ExtrasLogTransition,
         HookId.ExtrasDetailTransition,
+        HookId.GalleryHubDispatch,
+        HookId.GalleryMoviesDispatch,
+        HookId.GallerySoundBack,
+        HookId.GalleryIllustrationsBack,
+        HookId.ExtrasMoviesOnEnter,
+        HookId.ExtrasSoundOnEnter,
+        HookId.ExtrasIllustrationsOnEnter,
+        HookId.ExtrasMoviesCallback,
+        HookId.ExtrasSoundCallback,
+        HookId.ExtrasIllustrationsCallback,
+        HookId.ExtrasIllustrationViewerCallback,
+        HookId.ExtrasSoundIdle,
     ];
 
     [Fact]
@@ -132,11 +148,10 @@ public sealed class ExtrasHookSetTests
             new MenuFocusChanged(new MenuFocus("Movies", null, 1, 5, "Movie help", false)),
             harness.Dispatcher.Events[1]);
 
+        // An unlocked category is an ordinary menu choice now that every Gallery page is read.
         harness.HubCallback(0, 0);
-        var unsupported = Assert.IsType<MenuUnsupported>(harness.Dispatcher.Events[2]);
-        Assert.Equal("Movies", unsupported.SelectedLabel);
-        Assert.Contains("not yet covered", unsupported.BoundaryText, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Back", unsupported.ReturnInstruction, StringComparison.Ordinal);
+        Assert.Equal(new MenuActivated("Movies"), harness.Dispatcher.Events[2]);
+        Assert.Equal(3, harness.Dispatcher.Events.Count);
         Assert.Empty(harness.Dispatcher.Failures);
     }
 
@@ -557,12 +572,145 @@ public sealed class ExtrasHookSetTests
         Assert.Empty(harness.Dispatcher.Failures);
     }
 
+    [Fact]
+    public void TwoLogDecidesBeforeDispatchBothBuildTheLatestNativeSelectionWithoutReadingRetiredLog()
+    {
+        var harness = CreateHarness();
+        var sourceControls = Controls(20);
+        var targetControls = Controls(2, 0x00A50000);
+        ConfigureEndingRecords(harness.Memory, unlockedFlags: 3);
+        ConfigureNode(harness.Memory, Node, ExtrasHookSet.EndingLogVtableRva);
+        ConfigureNode(harness.Memory, TargetNode, ExtrasHookSet.EndingDetailVtableRva);
+        ConfigureManagerAndControls(harness.Memory, sourceControls, focusedKey: 0);
+        harness.Memory
+            .AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, Node)
+            .AddInt32(ImageBase + ExtrasHookSet.SelectedEndingGlobalRva, 0)
+            .AddInt32(ImageBase + ExtrasHookSet.EndingRequirementTableRva + 0x2C, 0x201)
+            .AddInt32(TransitionPayload, 3)
+            .AddPointer(TransitionPayload + 4, Scene);
+        ConfigureSwitch(harness, 3, 0x1A, 0x0F, "Ending Log", Node);
+        ConfigureEndingLogOnEnter(harness, sourceControls, focusedKey: 0, unlockedFlags: 3);
+        ConfigureEndingDetailOnEnter(harness, targetControls, focusedKey: 0,
+            expectedNode: TargetNode, requirementMessage: 0x201);
+        ConfigureLogClosure(harness.Memory, Node);
+        harness.Factory.SetOriginal<EndingLogCallbackDelegate>(HookId.EndingLogCallback, (_, eventType, action) =>
+        {
+            Assert.Equal(0, eventType);
+            harness.Memory.AddInt32(ImageBase + ExtrasHookSet.SelectedEndingGlobalRva, action);
+        });
+        var builds = 0;
+        harness.Factory.SetOriginal<ExtrasLogTransitionDelegate>(HookId.ExtrasLogTransition, _ =>
+        {
+            // 0x2A5E20 reads the current global, not a row in the queued payload.
+            harness.Exit(builds == 0 ? Node : TargetNode);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, 0);
+            harness.ObserveText(0x0F, 0x101, "Ending Two");
+            harness.DetailEnter(TargetNode);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, TargetNode);
+            builds++;
+        });
+        harness.PrepareAndActivate();
+        harness.Switch(3);
+        harness.LogEnter();
+        harness.Dispatcher.Events.Clear();
+
+        harness.LogCallback(0, 0);
+        // 0x1D4850 accepts an unlocked row even when entry focus still points elsewhere.
+        harness.LogCallback(0, 1);
+        harness.LogTransition();
+        // The first dispatcher retired the original page. Its native storage is no longer valid.
+        harness.Memory.AddPointer(Node, 0);
+        harness.LogTransition();
+
+        Assert.True(harness.Dispatcher.Failures.Count == 0, string.Join(" | ", harness.Dispatcher.Failures));
+        Assert.Equal(2, builds);
+        var pages = harness.Dispatcher.Events.OfType<MenuPresented>().ToArray();
+        Assert.Equal(2, pages.Length);
+        Assert.All(pages, page =>
+        {
+            Assert.Equal("Ending Two", page.Title);
+            Assert.Equal("Review", page.Focus!.Label);
+        });
+    }
+
+    [Fact]
+    public void QueuedLogChoiceUsesSelectionResetByAnEarlierQueuedHubRebuild()
+    {
+        const nuint SecondLogNode = 0x00BF0000;
+        const nuint DetailNode = 0x00BE0000;
+        var harness = CreateHarness();
+        var hubControls = Controls(5);
+        var logControls = Controls(20, 0x00A50000);
+        var detailControls = Controls(2, 0x00AB0000);
+        ConfigureEnabledHub(harness, hubControls, focusedKey: 3, Node);
+        ConfigureEndingRecords(harness.Memory, unlockedFlags: 3);
+        ConfigureNode(harness.Memory, TargetNode, ExtrasHookSet.EndingLogVtableRva);
+        ConfigureNode(harness.Memory, SecondLogNode, ExtrasHookSet.EndingLogVtableRva);
+        ConfigureNode(harness.Memory, DetailNode, ExtrasHookSet.EndingDetailVtableRva);
+        harness.Memory
+            .AddInt32(ImageBase + ExtrasHookSet.SelectedEndingGlobalRva, 0)
+            .AddInt32(ImageBase + ExtrasHookSet.EndingRequirementTableRva, 0x200)
+            .AddInt32(TransitionPayload, 3)
+            .AddPointer(TransitionPayload + 4, Scene);
+        var logBuilds = 0;
+        ConfigureEndingLogOnEnter(harness, logControls, focusedKey: 0, unlockedFlags: 3,
+            expectedNodeProvider: () => logBuilds == 0 ? TargetNode : SecondLogNode,
+            // Hub3 constructs Log with row0; Log onEnter1D39D3 writes that native selection.
+            onEnterObserved: () => harness.Memory.AddInt32(ImageBase + ExtrasHookSet.SelectedEndingGlobalRva, 0));
+        ConfigureEndingDetailOnEnter(harness, detailControls, focusedKey: 0, expectedNode: DetailNode);
+        harness.Factory.SetOriginal<GalleryHubDispatchDelegate>(HookId.GalleryHubDispatch, _ =>
+        {
+            harness.Exit(logBuilds == 0 ? Node : TargetNode);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, 0);
+            harness.ObserveText(0x1A, 0x0F, "Ending Log");
+            var next = logBuilds == 0 ? TargetNode : SecondLogNode;
+            harness.LogEnter(next);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, next);
+            logBuilds++;
+        });
+        harness.Factory.SetOriginal<EndingLogCallbackDelegate>(HookId.EndingLogCallback, (_, _, action) =>
+            harness.Memory.AddInt32(ImageBase + ExtrasHookSet.SelectedEndingGlobalRva, action));
+        var detailBuilds = 0;
+        harness.Factory.SetOriginal<ExtrasLogTransitionDelegate>(HookId.ExtrasLogTransition, _ =>
+        {
+            harness.Exit(SecondLogNode);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, 0);
+            harness.ObserveText(0x0F, 0x100, "Ending One");
+            harness.DetailEnter(DetailNode);
+            harness.Memory.AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, DetailNode);
+            detailBuilds++;
+        });
+        harness.PrepareAndActivate();
+        harness.Switch();
+        harness.HubEnter();
+        harness.Dispatcher.Events.Clear();
+
+        harness.HubCallback(0, 3);
+        harness.HubCallback(0, 3);
+        harness.HubDispatch();
+        ConfigureLogClosure(harness.Memory, TargetNode);
+        harness.LogCallback(0, 1);
+        harness.HubDispatch();
+        harness.LogTransition();
+
+        Assert.True(harness.Dispatcher.Failures.Count == 0, string.Join(" | ", harness.Dispatcher.Failures));
+        Assert.Equal(2, logBuilds);
+        Assert.Equal(1, detailBuilds);
+        var last = Assert.IsType<MenuPresented>(harness.Dispatcher.Events.Last());
+        Assert.Equal("Ending One", last.Title);
+        Assert.Equal("Review", last.Focus!.Label);
+    }
+
     [Theory]
-    [InlineData(3, true)]
-    [InlineData(4, false)]
+    [InlineData(3, true, 2, 77)]
+    [InlineData(4, false, 2, 77)]
+    [InlineData(3, true, 0, 0)]
+    [InlineData(3, true, 0, 77)]
     public void LogBackRequiresExactNestedHubSwitchRawFocusAndDefersUntilPostStore(
         int targetFocusKey,
-        bool valid)
+        bool valid,
+        int eventType,
+        int entryFocusKey)
     {
         var harness = CreateHarness();
         var sourceControls = Controls(20);
@@ -570,7 +718,7 @@ public sealed class ExtrasHookSetTests
         ConfigureEndingRecords(harness.Memory, unlockedFlags: 1);
         ConfigureNode(harness.Memory, Node, ExtrasHookSet.EndingLogVtableRva);
         ConfigureNode(harness.Memory, TargetNode, ExtrasHookSet.ExtrasHubVtableRva);
-        ConfigureManagerAndControls(harness.Memory, sourceControls, focusedKey: 77);
+        ConfigureManagerAndControls(harness.Memory, sourceControls, focusedKey: entryFocusKey);
         harness.Memory
             .AddPointer(Scene + ExtrasHookSet.GalleryCurrentNodeOffset, Node)
             .AddInt32(TargetNode + 0x2E4, 1).AddInt32(TargetNode + 0x2EC, 1)
@@ -592,7 +740,7 @@ public sealed class ExtrasHookSetTests
             harness.ObserveText(0x41, 0x06, "Extras");
             return (nint)TargetNode;
         });
-        ConfigureEndingLogOnEnter(harness, sourceControls, focusedKey: 77);
+        ConfigureEndingLogOnEnter(harness, sourceControls, focusedKey: entryFocusKey);
         ConfigureHubOnEnter(
             harness,
             targetControls,
@@ -618,7 +766,7 @@ public sealed class ExtrasHookSetTests
         harness.LogEnter();
         harness.Dispatcher.Events.Clear();
 
-        harness.LogCallback(2, 0);
+        harness.LogCallback(eventType, eventType == 0 ? 77 : 0);
 
         Assert.Equal(1, transitionCalls);
         if (!valid)
@@ -702,7 +850,7 @@ public sealed class ExtrasHookSetTests
     }
 
     [Fact]
-    public void DetailReviewTransitionRemainsUnsupportedWithoutDepartingTheMenu()
+    public void DetailReviewStatesTheReplayIsNotDescribedAndKeepsThePageUntilThePushedSceneExits()
     {
         var harness = CreateHarness();
         var controls = Controls(2);
@@ -731,7 +879,9 @@ public sealed class ExtrasHookSetTests
 
         Assert.Equal(1, transitionCalls);
         var unsupported = Assert.IsType<MenuUnsupported>(Assert.Single(harness.Dispatcher.Events));
-        Assert.Equal("Review", unsupported.SelectedLabel);
+        Assert.Equal(
+            new MenuUnsupported("Review", ExtrasHookSet.ReviewDescription, ExtrasHookSet.ReviewReturn),
+            unsupported);
         Assert.DoesNotContain(harness.Dispatcher.Events, item => item is MenuExited or MenuPresented);
         Assert.Empty(harness.Dispatcher.Failures);
     }
@@ -1101,11 +1251,12 @@ public sealed class ExtrasHookSetTests
         int focusedKey,
         nuint expectedNode = Node,
         int unlockedFlags = 1,
-        Action? onEnterObserved = null)
+        Action? onEnterObserved = null,
+        Func<nuint>? expectedNodeProvider = null)
     {
         harness.Factory.SetOriginal<EndingLogOnEnterDelegate>(HookId.EndingLogOnEnter, node =>
         {
-            Assert.Equal((nint)expectedNode, node);
+            Assert.Equal((nint)(expectedNodeProvider?.Invoke() ?? expectedNode), node);
             onEnterObserved?.Invoke();
             ConfigureManagerAndControls(harness.Memory, controls, focusedKey);
             harness.ObserveText(0x1A, 0x40, "Endings");
@@ -1309,9 +1460,38 @@ public sealed class ExtrasHookSetTests
             Factory.GetDetour<ExtrasLogTransitionDelegate>(HookId.ExtrasLogTransition)((nint)TransitionPayload);
         public void DetailTransition() =>
             Factory.GetDetour<ExtrasDetailTransitionDelegate>(HookId.ExtrasDetailTransition)((nint)TransitionPayload);
-        public void Exit() => Factory.GetDetour<ExtrasNodeOnExitDelegate>(HookId.ExtrasNodeOnExit)((nint)Node);
+        public void Exit(nuint node = Node) =>
+            Factory.GetDetour<ExtrasNodeOnExitDelegate>(HookId.ExtrasNodeOnExit)((nint)node);
         public nint HubDelete() => Factory.GetDetour<ExtrasHubDeletingDestructorDelegate>(
             HookId.ExtrasHubDeletingDestructor)((nint)Node, 1);
+        public nint SharedDelete(nuint node = Node) => Factory.GetDetour<EndingLogDeletingDestructorDelegate>(
+            HookId.EndingLogDeletingDestructor)((nint)node, 1);
+        public void MoviesEnter(nuint node = Node) =>
+            Factory.GetDetour<ExtrasMoviesOnEnterDelegate>(HookId.ExtrasMoviesOnEnter)((nint)node);
+        public void SoundEnter(nuint node = Node) =>
+            Factory.GetDetour<ExtrasSoundOnEnterDelegate>(HookId.ExtrasSoundOnEnter)((nint)node);
+        public void IllustrationsEnter(nuint node = Node) =>
+            Factory.GetDetour<ExtrasIllustrationsOnEnterDelegate>(HookId.ExtrasIllustrationsOnEnter)((nint)node);
+        public void MoviesCallback(int eventType, int action) =>
+            Factory.GetDetour<ExtrasMoviesCallbackDelegate>(HookId.ExtrasMoviesCallback)((nint)Closure, eventType, action);
+        public void SoundCallback(int eventType, int action) =>
+            Factory.GetDetour<ExtrasSoundCallbackDelegate>(HookId.ExtrasSoundCallback)((nint)Closure, eventType, action);
+        public void IllustrationsCallback(int eventType, int action) =>
+            Factory.GetDetour<ExtrasIllustrationsCallbackDelegate>(HookId.ExtrasIllustrationsCallback)(
+                (nint)Closure, eventType, action);
+        public void ViewerCallback(int eventType) =>
+            Factory.GetDetour<ExtrasIllustrationViewerCallbackDelegate>(HookId.ExtrasIllustrationViewerCallback)(
+                (nint)ViewerClosure, eventType, 0);
+        public void SoundIdle(nuint node = Node) =>
+            Factory.GetDetour<ExtrasSoundIdleDelegate>(HookId.ExtrasSoundIdle)((nint)node);
+        public void HubDispatch() =>
+            Factory.GetDetour<GalleryHubDispatchDelegate>(HookId.GalleryHubDispatch)((nint)TransitionPayload);
+        public void MoviesDispatch() =>
+            Factory.GetDetour<GalleryMoviesDispatchDelegate>(HookId.GalleryMoviesDispatch)((nint)TransitionPayload);
+        public void SoundBack() =>
+            Factory.GetDetour<GallerySoundBackDelegate>(HookId.GallerySoundBack)((nint)BackPayload);
+        public void IllustrationsBack() =>
+            Factory.GetDetour<GalleryIllustrationsBackDelegate>(HookId.GalleryIllustrationsBack)((nint)BackPayload);
     }
 
     private sealed class RecordingHookFactory : IRuntimeNativeHookFactory
@@ -1330,6 +1510,18 @@ public sealed class ExtrasHookSetTests
             [HookId.EndingDetailCallback] = (EndingDetailCallbackDelegate)((_, _, _) => { }),
             [HookId.ExtrasLogTransition] = (ExtrasLogTransitionDelegate)(_ => { }),
             [HookId.ExtrasDetailTransition] = (ExtrasDetailTransitionDelegate)(_ => { }),
+            [HookId.GalleryHubDispatch] = (GalleryHubDispatchDelegate)(_ => { }),
+            [HookId.GalleryMoviesDispatch] = (GalleryMoviesDispatchDelegate)(_ => { }),
+            [HookId.GallerySoundBack] = (GallerySoundBackDelegate)(_ => { }),
+            [HookId.GalleryIllustrationsBack] = (GalleryIllustrationsBackDelegate)(_ => { }),
+            [HookId.ExtrasMoviesOnEnter] = (ExtrasMoviesOnEnterDelegate)(_ => { }),
+            [HookId.ExtrasSoundOnEnter] = (ExtrasSoundOnEnterDelegate)(_ => { }),
+            [HookId.ExtrasIllustrationsOnEnter] = (ExtrasIllustrationsOnEnterDelegate)(_ => { }),
+            [HookId.ExtrasMoviesCallback] = (ExtrasMoviesCallbackDelegate)((_, _, _) => { }),
+            [HookId.ExtrasSoundCallback] = (ExtrasSoundCallbackDelegate)((_, _, _) => { }),
+            [HookId.ExtrasIllustrationsCallback] = (ExtrasIllustrationsCallbackDelegate)((_, _, _) => { }),
+            [HookId.ExtrasIllustrationViewerCallback] = (ExtrasIllustrationViewerCallbackDelegate)((_, _, _) => { }),
+            [HookId.ExtrasSoundIdle] = (ExtrasSoundIdleDelegate)(_ => { }),
         };
         private readonly Dictionary<HookId, Delegate> detours = [];
         public List<(HookId Id, nuint Address)> Created { get; } = [];

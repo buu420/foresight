@@ -7,8 +7,16 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 public sealed class SaveSlotCapture(IReadableMemory memory)
 {
     public const uint NodeVtableRva = 0x3A980C;
+
+    /// <summary>The node's StatusBar: 0x218A20 creates it (0x22E500) under the node's layer and
+    /// fills it once through 0x22F160 with 0x218E00's line for the mode: "select a file", "you
+    /// can save your current progress", "you cannot save at this time", or "select a file to
+    /// load".</summary>
+    public const uint StatusBarOffset = 0x2DC;
+    private const int MaximumStatusLines = 8;
     private readonly RenderedNodeTextCapture labels = new(memory);
     private readonly LoadedGameTextCapture messages = new(memory);
+    private readonly MsvcWideStringReader wide = new(memory);
 
     public FieldSubmenuSnapshot? Capture(nuint image, nuint node)
     {
@@ -24,7 +32,10 @@ public sealed class SaveSlotCapture(IReadableMemory memory)
         var cardText = labels.Read(card);
         var details = occupied != 0 ? labels.Read(preview) : [];
         var title = mode == 1 ? messages.Get(image, 0x41, 0x0A) : messages.Get(image, 0x23, 0x26);
+        if (!TryReadInstruction(image, node, out var bar, out var instruction)) return null;
         if (title is null || cardText is null || cardText.Count == 0 || details is null ||
+            !TryReadInstruction(image, node, out var bar2, out var instruction2) || bar2 != bar ||
+            instruction2 != instruction ||
             (occupied != 0 && details.Count == 0) || !Owner(image, node) ||
             !Word(node + 0x2CC, out var mode2) || mode2 != mode ||
             !Word(node + 0x304, out var m2) || m2 != manager ||
@@ -38,9 +49,32 @@ public sealed class SaveSlotCapture(IReadableMemory memory)
         var text = $"File {key + 1} of {count}. {string.Join(" ", cardText)}";
         if (details.Count > 0) text = $"{text.TrimEnd('.')}. {string.Join(" ", details)}";
         if (mode == 1 && occupied == 0) text += ". Unavailable";
-        return new("SaveSlots", title, $"save:{mode}:{key}", text);
+        // The instruction is part of the page, so it is spoken when the page is presented rather
+        // than again for every file.
+        return new("SaveSlots", $"{title.TrimEnd('.')}. {instruction}", $"save:{mode}:{key}", text);
     }
     public bool ConfirmationActive(nuint node) => Byte(node + 0x2EC, out var active) && active != 0;
+
+    /// <summary>0x22F160 keeps the complete UTF-16 lines, split only at the message's own line
+    /// breaks, at +0x2D4/+0x2D8 while 0x22F7B0 reveals them a character at a time through its
+    /// labels; the complete source is read so a partly revealed line is never spoken.</summary>
+    private bool TryReadInstruction(nuint image, nuint node, out uint bar, out string instruction)
+    {
+        instruction = string.Empty;
+        if (!Word(node + StatusBarOffset, out bar) || !Word(bar, out var vt) ||
+            vt != image + TopMenuCaptureScope.StatusBarVtableRva || !Under(node, bar) ||
+            !Word(bar + 0x2D4, out var begin) || !Word(bar + 0x2D8, out var end) || end < begin ||
+            (end - begin) % MsvcWideStringReader.LayoutSize != 0 ||
+            (end - begin) / MsvcWideStringReader.LayoutSize > MaximumStatusLines) return false;
+        var lines = new List<string>();
+        for (var at = begin; at < end; at += MsvcWideStringReader.LayoutSize)
+        {
+            if (!wide.TryRead(at, out var line, out _)) return false;
+            if (!string.IsNullOrWhiteSpace(line)) lines.Add(line.Trim());
+        }
+        instruction = string.Join(" ", lines);
+        return lines.Count > 0;
+    }
     private bool Under(nuint root, uint node)
     {
         for (var i = 0; node != 0 && i < 64; i++)

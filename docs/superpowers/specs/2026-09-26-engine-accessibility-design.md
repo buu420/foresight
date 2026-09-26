@@ -1,6 +1,6 @@
 # Engine accessibility coverage
 
-The user's later instruction, "Just decompile the entire game," makes the full native and script reference the immediate deliverable. That completed export and its explicit limits are documented in [the decompilation report](../../full-game-decompilation.md). The architecture below describes the broader accessibility work, not runtime features delivered by the export.
+The complete native and script export is finished; see [the decompilation report](../../full-game-decompilation.md). The user's latest instruction authorizes implementing and deploying the full-game accessibility work described here. Minigame destinations and entry points are required; minigame internal controls are the explicitly deferred scope.
 
 The user wants ordinary play to remain accessible across the entire PC game without having to report each missing menu or route. The existing controls, counted footsteps, guide categories, and native game behavior remain the interaction contract. The user has authorized Ghidra research, use of their guides, Claude Opus 5.5 at maximum effort, implementation, and deployment.
 

@@ -23,6 +23,9 @@ public sealed class NavigationController
     private IReadOnlyList<NavigationPoint> plannedGoals = [];
     private long? passageWaitStarted;
     private long nextPassageCheck;
+    private long? contactStarted;
+    private NavigationPoint contactOrigin;
+    private NavigationDirection contactDirection;
     // Survives Stop(), which a failed plan performs before anyone can read the
     // destination back. Without it the one case this field explains reports zero.
     private int plannedApproaches;
@@ -167,6 +170,11 @@ public sealed class NavigationController
         var index = targets.FindIndex(target => target.Id == selection);
         if (index < 0) { speech.Add(EmptyCategory()); return; }
         var target = targets[index];
+        if (contactStarted is not null)
+        {
+            speech.Add(target.Label + ". " + ContactInstruction());
+            return;
+        }
         if (waitingForManualStop)
         {
             speech.Add($"{target.Label}, {index + 1} of {targets.Count}. Stop moving for new directions.");
@@ -192,6 +200,8 @@ public sealed class NavigationController
 
     private bool Plan(NavigationFrame frame, List<string> speech)
     {
+        contactStarted = null;
+        contactDirection = NavigationDirection.None;
         if (destination!.IsStoryNote)
         {
             speech.Add($"{destination.Label}. {destination.Instruction}");
@@ -234,6 +244,12 @@ public sealed class NavigationController
         frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
         if (mustReplan)
         {
+            if (contactStarted is not null)
+            {
+                lastProgress = now;
+                lastPosition = frame.Player;
+                announcedDirection = NavigationDirection.None;
+            }
             if (leftContact)
             {
                 passageWaitStarted = null;
@@ -278,6 +294,26 @@ public sealed class NavigationController
             lastProgress = now;
             lastPosition = frame.Player;
         }
+        if (contactStarted is not null || destination.ContactDirection != NavigationDirection.None &&
+            Arrived(frame.Graph, frame.Player, route[^1]))
+        {
+            nextPoint = route.Count;
+            if (contactStarted is null)
+            {
+                contactStarted = now;
+                contactOrigin = frame.Player;
+                contactDirection = destination.ContactDirection;
+                speech.Add(ContactInstruction());
+            }
+            else if (frame.Player.Layer != contactOrigin.Layer ||
+                SquaredDistance(frame.Player, contactOrigin) > Math.Pow(unitsPerTile / 2.0, 2) ||
+                walking && (now < contactStarted.Value || now - contactStarted.Value >= 1500))
+            {
+                speech.Add("Navigation stopped: the contact did not register.");
+                Stop();
+            }
+            return;
+        }
         if (Arrived(frame.Graph, frame.Player, route[^1]))
         {
             speech.Add(Arrival(destination));
@@ -320,7 +356,7 @@ public sealed class NavigationController
             }
             if (route!.Count == 1)
             {
-                if (intermediateId is not null) return;
+                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None) return;
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;
@@ -356,8 +392,8 @@ public sealed class NavigationController
     }
 
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
-        new(speech.AsReadOnly(), walking && route is not null && nextPoint < route.Count
-            ? Steering(player) : NavigationDirection.None, guiding, walking)
+        new(speech.AsReadOnly(), walking && contactStarted is not null ? contactDirection :
+            walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
             ManualLeg = guiding && !walking && !waitingForManualStop && route is not null && nextPoint < route.Count
                 ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision) : null
@@ -446,7 +482,15 @@ public sealed class NavigationController
         intermediateId = null;
         plannedGoals = [];
         passageWaitStarted = null;
+        contactStarted = null;
+        contactDirection = NavigationDirection.None;
     }
+
+    private string ContactInstruction() => "Continue " + (contactDirection switch
+    {
+        NavigationDirection.North => "up", NavigationDirection.South => "down",
+        NavigationDirection.West => "left", NavigationDirection.East => "right", _ => "toward the checkpoint",
+    }) + " until the checkpoint registers.";
 
     private bool Near(NavigationPoint a, NavigationPoint b) =>
         a.Layer == b.Layer && Math.Abs((long)a.X - b.X) <= Math.Max(1, unitsPerTile / 16) &&

@@ -53,11 +53,13 @@ public static class FutureAreaLabels
             (235, 10, < 63) when state.Flag(0x1D0, 1) == true => "Power switch",
             (235, 15, < 63) => "Security passcode console",
             (464, 24, 73) => "Steps toward the pillars of light",
+            (465, >= 16 and <= 20, 76) => "Clockwise walking checkpoint",
             _ => null,
         };
     }
 
-    public static bool IsTouchLandmark(int scene, int actor) => (scene, actor) == (464, 24);
+    public static bool IsTouchLandmark(int scene, int actor) => (scene, actor) == (464, 24) ||
+        scene == 465 && actor is >= 16 and <= 20;
 
     public static string? ExitLabel(int scene, int exit) => (scene, exit) switch
     {

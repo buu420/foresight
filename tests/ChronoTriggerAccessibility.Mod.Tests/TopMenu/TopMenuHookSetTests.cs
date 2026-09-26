@@ -264,7 +264,6 @@ public sealed class TopMenuHookSetTests
     [InlineData(1, "Equipment")]
     [InlineData(2, "Load")]
     [InlineData(3, "Items")]
-    [InlineData(5, "Tech")]
     [InlineData(6, "Formation")]
     public void EveryEnabledDeepPageActionPublishesItsExactVisibleLabelAndExplicitReturnBoundary(
         int action,
@@ -284,6 +283,44 @@ public sealed class TopMenuHookSetTests
         Assert.Equal("This top-menu subpage is not accessible yet.", unsupported.BoundaryText);
         Assert.Equal("Press Cancel to return to the accessible top menu.", unsupported.ReturnInstruction);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void ClassicBookmarkLeavesSpeechToTheSaveNodesOwnConfirmation()
+    {
+        // 0x2A8630 case 5 opens the save node in mode 2, which raises its Yes/No confirmation
+        // inside the dispatch; nothing may follow it and cut the prompt off.
+        var harness = CreateHarness(TopMenuStyle.Classic);
+        ConfigureSuccessfulBuilder(harness);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+        harness.SetActionEnabled(TopMenuHookSet.ClassicBookmarkAction, enabled: true);
+
+        harness.DispatchAction(TopMenuHookSet.ClassicBookmarkAction);
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuActionDispatcher]);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void TouchBookmarkStillStatesItsSubpageIsNotAccessible()
+    {
+        // The Touch save node 0x213AB0 builds its own confirmation, which nothing reads yet.
+        var harness = CreateHarness(TopMenuStyle.Touch);
+        ConfigureSuccessfulBuilder(harness);
+        harness.PrepareAndActivate();
+        harness.BuildMenu();
+        harness.Dispatcher.Events.Clear();
+        harness.SetActionEnabled(TopMenuHookSet.ClassicBookmarkAction, enabled: true);
+
+        harness.DispatchAction(TopMenuHookSet.ClassicBookmarkAction);
+
+        var unsupported = Assert.IsType<MenuUnsupported>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal("This top-menu subpage is not accessible yet.", unsupported.BoundaryText);
+        Assert.Equal(1, harness.Factory.OriginalCalls[HookId.TouchTopMenuActionDispatcher]);
         Assert.Empty(harness.Dispatcher.Failures);
     }
 

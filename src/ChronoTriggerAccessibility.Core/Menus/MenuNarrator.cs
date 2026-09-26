@@ -28,6 +28,7 @@ public sealed class MenuNarrator
                 MenuPresented presented => Present(presented),
                 MenuContentPresented content => PresentContent(content),
                 MenuContentChanged content => ChangeContent(content),
+                MenuNoticePresented notice => PresentNotice(notice),
                 MenuFocusChanged changed => ChangeFocus(changed),
                 MenuActivated activated => Activate(activated),
                 MenuExited exited => Exit(exited),
@@ -110,6 +111,25 @@ public sealed class MenuNarrator
         return [Interrupt(WithPeriod(content.Title)), Queue(content.Text)];
     }
 
+    private IReadOnlyList<Announcement> PresentNotice(MenuNoticePresented notice)
+    {
+        if (!IsIdentified(notice.Owner) || notice.Lines is null || notice.Lines.Count == 0 ||
+            notice.Lines.Any(string.IsNullOrWhiteSpace))
+        {
+            return Fail("Notice presentation is missing its owner or visible text.");
+        }
+
+        active = true;
+        activeOwner = notice.Owner;
+        confirmationChoices = null;
+        lastConfirmationPrompt = null;
+        lastConfirmationText = null;
+        lastFocusText = string.Join(" ", notice.Lines);
+        var announcements = new List<Announcement>(notice.Lines.Count) { Interrupt(notice.Lines[0]) };
+        announcements.AddRange(notice.Lines.Skip(1).Select(Queue));
+        return new ReadOnlyCollection<Announcement>(announcements);
+    }
+
     private IReadOnlyList<Announcement> ChangeContent(MenuContentChanged content)
     {
         if (!active || activeOwner != content.Owner) return NoAnnouncements;
@@ -174,7 +194,11 @@ public sealed class MenuNarrator
 
     private IReadOnlyList<Announcement> PresentConfirmation(MenuConfirmationPresented confirmation)
     {
-        if (!active || string.IsNullOrWhiteSpace(confirmation.Prompt) ||
+        // An owned confirmation is a window of its own: it needs no earlier presentation, but
+        // it must name the native owner that a later close is checked against.
+        var owned = confirmation.Owner is not null;
+        if ((owned ? !IsIdentified(confirmation.Owner) : !active) ||
+            string.IsNullOrWhiteSpace(confirmation.Prompt) ||
             confirmation.Choices is null || confirmation.Choices.Count == 0 ||
             confirmation.Choices.Any(string.IsNullOrWhiteSpace) ||
             confirmation.SelectedIndex < 0 || confirmation.SelectedIndex >= confirmation.Choices.Count)
@@ -184,12 +208,21 @@ public sealed class MenuNarrator
 
         var choice = confirmation.Choices[confirmation.SelectedIndex];
         var text = FormatChoice(choice, confirmation.SelectedIndex, confirmation.Choices.Count);
-        if (confirmationChoices is not null &&
+        // Each owned confirmation is a newly built native window, so the same prompt shown
+        // again is a new question and is spoken again.
+        if (!owned && confirmationChoices is not null &&
             string.Equals(lastConfirmationText, text, StringComparison.Ordinal) &&
             confirmationChoices.SequenceEqual(confirmation.Choices, StringComparer.Ordinal) &&
             string.Equals(lastConfirmationPrompt, confirmation.Prompt, StringComparison.Ordinal))
         {
             return NoAnnouncements;
+        }
+
+        if (owned)
+        {
+            active = true;
+            activeOwner = confirmation.Owner;
+            lastFocusText = null;
         }
 
         confirmationChoices = confirmation.Choices.ToArray();

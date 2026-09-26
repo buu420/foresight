@@ -50,7 +50,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                 var after = Wrap(preview, terminals, collisions, touchGoals);
                 foreach (var contact in Contacts(actor, start.Layer))
                 {
-                    if (live.IsTerminal(contact)) continue;
+                    if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);
                     if (approach.Route is null) continue;
                     var continuation = NavigationPathfinder.Search(after, contact, goals, maximumVisited);

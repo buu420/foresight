@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using ChronoTriggerAccessibility.Core.Events;
+using ChronoTriggerAccessibility.Core.Menus;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.Menus;
 using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -26,6 +28,13 @@ namespace ChronoTriggerAccessibility.Mod.SaveLoad;
 /// CustomButton constructor and control binder, and finishes on the shared focus setter with
 /// key 1, so "No" is preselected. Every spoken string is the string the game itself just
 /// produced; the node mode only decides which message id is <em>expected</em>.</para>
+/// <para>The node draws that prompt through its notice window 0x21AA40, which splits the text on
+/// 0x5C (0x21AE40) and creates one font-0x0C label per line (0x21AEB5). The same window then
+/// shows what happens after "Yes": "Saving data." and "Save complete." (0x21AFC0, 0x21D880),
+/// "Loading file." and "Load complete." (0x21B5C0, 0x21D4E0) and the bookmark result that waits
+/// for a key (0x21B420). Only calls outside this set's own confirmation capture are notices;
+/// the prompt inside it is already spoken as the confirmation. Evidence:
+/// artifacts/research/engine-0332/claude-ui-report.md.</para>
 /// </summary>
 public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, ISharedNativeHookObserver
 {
@@ -63,14 +72,26 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
     public const int SaveOverwriteModeA = 4;
     public const int SaveOverwriteModeB = 5;
 
+    /// <summary>The font size the notice window passes for every line (0x21AEAB).</summary>
+    public const int NoticeLineFontSize = 0x0C;
+
+    /// <summary>A sanity bound; the longest audited notice has two lines.</summary>
+    public const int MaximumNoticeLineCount = 8;
+
+    public const string NoticeOwnerSource = "SaveLoadNotice";
+
     private static readonly HookId[] DedicatedHookIds =
     [
         HookId.SaveLoadConfirmationBuilder,
         HookId.SaveLoadNodeDestructor,
+        HookId.SaveLoadNoticeWindow,
     ];
 
     [ThreadStatic]
     private static ConfirmationScope? threadScope;
+
+    [ThreadStatic]
+    private static NoticeScope? noticeScope;
 
     private readonly IRuntimeNativeHookFactory hookFactory;
     private readonly IReadableMemory memory;
@@ -83,6 +104,7 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
     private readonly IReadOnlyList<IHookRegistration> registrations;
     private nuint imageBase;
     private ActiveConfirmation? active;
+    private ActiveNotice? activeNotice;
     private bool screenEntered;
     private int activeEpoch = 1;
     private bool hooksActive = true;
@@ -105,6 +127,7 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
         [
             CreateRegistration(HookId.SaveLoadConfirmationBuilder, PrepareConfirmationBuilder),
             CreateRegistration(HookId.SaveLoadNodeDestructor, PrepareNodeDestructor),
+            CreateRegistration(HookId.SaveLoadNoticeWindow, PrepareNoticeWindow),
         ]);
     }
 
@@ -139,12 +162,52 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
             {
                 threadScope = null;
             }
+
+            if (ReferenceEquals(noticeScope?.Owner, this))
+            {
+                noticeScope = null;
+            }
         }
 
         lock (stateGate)
         {
             active = null;
+            activeNotice = null;
             screenEntered = false;
+        }
+    }
+
+    /// <summary>Each notice line is one label the notice window just created.</summary>
+    public void AfterMenuTextLabelFactory(nint position, nint text, nint anchor, int fontSize, nint returned)
+    {
+        _ = position;
+        _ = anchor;
+        try
+        {
+            if (!TryCaptureActiveEpoch(out _) || GetOwnedNoticeScope() is not { } scope)
+            {
+                return;
+            }
+
+            if (fontSize != NoticeLineFontSize || returned == 0)
+            {
+                scope.Errors.Add(
+                    $"Save/load notice label used font size {fontSize} or returned no node; the audited lines use {NoticeLineFontSize}.");
+                return;
+            }
+
+            if (!stringReader.TryRead((nuint)text, out var line, out var error))
+            {
+                scope.Errors.Add($"Save/load notice label text is unreadable: {error}");
+                return;
+            }
+
+            scope.Lines.Add(new string(line.AsSpan()));
+        }
+        catch (Exception exception)
+        {
+            dispatcher.ReportCoverageFailure(
+                $"Save/load notice label capture failed: {FormatException(exception)}");
         }
     }
 
@@ -398,11 +461,170 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
                     {
                         RunIfActive(epoch, () => boundary.Run(
                             "MenuNodeSaveLoadSteam destructor capture",
-                            () => { CloseConfirmation((nuint)node); nodeClosing?.Invoke((nuint)node); }));
+                            () =>
+                            {
+                                CloseConfirmation((nuint)node);
+                                CloseNotice((nuint)node);
+                                nodeClosing?.Invoke((nuint)node);
+                            }));
                     }
 
                     original()(node);
                 }));
+
+    private IPreparedHook PrepareNoticeWindow(
+        IVerifiedGameBuild build,
+        UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<SaveLoadNoticeWindowDelegate>(
+            HookId.SaveLoadNoticeWindow,
+            build,
+            original => (node, text) => boundary.Run(
+                "MenuNodeSaveLoadSteam notice window",
+                () =>
+                {
+                    // The confirmation builder draws its prompt with this window too; that
+                    // prompt is already spoken as the confirmation it belongs to.
+                    var instrument = TryCaptureActiveEpoch(out var epoch) && GetOwnedScope() is null;
+                    NoticeScope? scope = null;
+                    Exception? captureFailure = null;
+                    if (instrument)
+                    {
+                        try
+                        {
+                            instrument = RunIfActive(epoch, () => scope = BeginNotice((nuint)node, (nuint)text, epoch));
+                        }
+                        catch (Exception exception)
+                        {
+                            captureFailure = exception;
+                        }
+                    }
+
+                    nint result;
+                    try
+                    {
+                        result = original()(node, text);
+                    }
+                    finally
+                    {
+                        if (scope is not null && ReferenceEquals(noticeScope, scope))
+                        {
+                            noticeScope = null;
+                        }
+                    }
+
+                    if (scope is not null && captureFailure is null && instrument)
+                    {
+                        RunIfActive(epoch, () => CompleteNotice(scope));
+                    }
+
+                    if (captureFailure is not null && instrument)
+                    {
+                        RunIfActive(epoch, () => boundary.Run(
+                            "MenuNodeSaveLoadSteam notice capture",
+                            () => throw captureFailure));
+                    }
+
+                    return result;
+                },
+                fallback: (nint)0));
+
+    private NoticeScope BeginNotice(nuint node, nuint text, int epoch)
+    {
+        if (noticeScope is not null)
+        {
+            throw new InvalidOperationException("A save/load notice capture is already active on this thread.");
+        }
+
+        var scope = new NoticeScope(this, node, epoch);
+        if (!TryReadExactVtable(node, SaveLoadNodeVtableRva))
+        {
+            scope.Errors.Add("Save/load notice window ran on a node that is not the audited class.");
+        }
+        else if (!stringReader.TryRead(text, out var value, out var error))
+        {
+            scope.Errors.Add($"Save/load notice text is unreadable: {error}");
+        }
+        else
+        {
+            scope.Text = new string(value.AsSpan());
+        }
+
+        noticeScope = scope;
+        return scope;
+    }
+
+    private NoticeScope? GetOwnedNoticeScope() =>
+        noticeScope is { } scope && ReferenceEquals(scope.Owner, this) ? scope : null;
+
+    /// <summary>Speaks the notice only when its labels are exactly the lines the native
+    /// splitter produced from the text the window was given, in order.</summary>
+    private void CompleteNotice(NoticeScope scope)
+    {
+        if (scope.Errors.Count != 0)
+        {
+            dispatcher.ReportCoverageFailure(scope.Errors[0]);
+            return;
+        }
+
+        if (scope.Text is not { } text)
+        {
+            dispatcher.ReportCoverageFailure("Save/load notice has no text to validate its labels against.");
+            return;
+        }
+
+        var expected = NativeTextLines.Split(text);
+        if (expected.Count > MaximumNoticeLineCount)
+        {
+            dispatcher.ReportCoverageFailure(
+                $"Save/load notice has {expected.Count} lines; at most {MaximumNoticeLineCount} are audited.");
+            return;
+        }
+
+        if (!scope.Lines.SequenceEqual(expected, StringComparer.Ordinal))
+        {
+            dispatcher.ReportCoverageFailure(
+                $"Save/load notice drew {scope.Lines.Count} label(s) that do not match its {expected.Count} line(s) in order.");
+            return;
+        }
+
+        var visible = NativeTextLines.Visible(scope.Lines);
+        if (visible.Count == 0)
+        {
+            dispatcher.ReportCoverageFailure("Save/load notice drew no visible text.");
+            return;
+        }
+
+        var owner = new MenuOwner(NoticeOwnerSource, (ulong)scope.Node);
+        lock (stateGate)
+        {
+            if (scope.Epoch != activeEpoch)
+            {
+                dispatcher.ReportCoverageFailure("Save/load notice completed outside the active hook lifecycle.");
+                return;
+            }
+
+            activeNotice = new ActiveNotice(scope.Node, owner);
+        }
+
+        dispatcher.Publish(new MenuNoticePresented(owner, visible));
+    }
+
+    private void CloseNotice(nuint node)
+    {
+        MenuOwner owner;
+        lock (stateGate)
+        {
+            if (activeNotice is not { } current || current.Node != node)
+            {
+                return;
+            }
+
+            owner = current.Owner;
+            activeNotice = null;
+        }
+
+        dispatcher.Publish(new MenuExited(owner));
+    }
 
     private ConfirmationScope BeginScope(nuint node, int epoch)
     {
@@ -756,4 +978,16 @@ public sealed class SaveLoadConfirmationHookSet : IHookActivationObserver, IShar
         string Prompt,
         IReadOnlyList<string> Choices,
         IReadOnlyDictionary<int, int> IndexByKey);
+
+    private sealed record ActiveNotice(nuint Node, MenuOwner Owner);
+
+    private sealed class NoticeScope(SaveLoadConfirmationHookSet owner, nuint node, int epoch)
+    {
+        public SaveLoadConfirmationHookSet Owner { get; } = owner;
+        public nuint Node { get; } = node;
+        public int Epoch { get; } = epoch;
+        public string? Text { get; set; }
+        public List<string> Lines { get; } = [];
+        public List<string> Errors { get; } = [];
+    }
 }

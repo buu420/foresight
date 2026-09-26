@@ -132,6 +132,12 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
     private const string UnsupportedBoundary = "This top-menu subpage is not accessible yet.";
     private const string UnsupportedReturnInstruction = "Press Cancel to return to the accessible top menu.";
 
+    /// <summary>Classic Bookmark: case 5 of 0x2A8630 builds the save node through 0x2A91D0 in mode
+    /// 2, and that node's init 0x218A20 opens its own Yes/No confirmation 0x21A1D0 during this
+    /// dispatch. SaveLoadConfirmationHookSet speaks that prompt; an announcement published after
+    /// the original would cut it off. The Touch node 0x213AB0 has no such reader.</summary>
+    public const int ClassicBookmarkAction = 5;
+
     private static readonly HookId[] FunctionHookIds =
     [
         HookId.ClassicTopMenuBuilder,
@@ -1105,12 +1111,15 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
                 diagnostic = $"Top-menu action {action} does not identify one currently enabled visible native-key control.";
                 return false;
             }
-            pendingEvent = action == 4
-                ? new MenuActivated(control.Focus.Label)
-                : new MenuUnsupported(
+            pendingEvent = action switch
+            {
+                4 => new MenuActivated(control.Focus.Label),
+                ClassicBookmarkAction when style == TopMenuStyle.Classic => null,
+                _ => new MenuUnsupported(
                     control.Focus.Label,
                     UnsupportedBoundary,
-                    UnsupportedReturnInstruction);
+                    UnsupportedReturnInstruction),
+            };
         }
         var candidate = new ActionTransaction(
             capturedEpoch,

@@ -52,6 +52,25 @@ public sealed record MenuContentPresented(MenuOwner Owner, string Title, string 
 
 public sealed record MenuContentChanged(MenuOwner Owner, string Text) : MenuAccessibilityEvent;
 
+/// <summary>
+/// A native window whose whole content is text the game just rendered, one entry per visible
+/// line, with nothing to select (an ending result, or a saving or completion notice). It owns
+/// narration like any other presentation, so a close for <see cref="Owner"/> ends it.
+/// </summary>
+public sealed record MenuNoticePresented : MenuAccessibilityEvent
+{
+    public MenuNoticePresented(MenuOwner owner, IReadOnlyList<string>? lines)
+    {
+        Owner = owner;
+        Lines = lines is null
+            ? null
+            : new ReadOnlyCollection<string>(lines.ToArray());
+    }
+
+    public MenuOwner Owner { get; }
+    public IReadOnlyList<string>? Lines { get; }
+}
+
 public sealed record MenuActivated(string Label) : MenuAccessibilityEvent;
 
 public sealed record MenuExited(MenuOwner? Owner) : MenuAccessibilityEvent;
@@ -69,6 +88,18 @@ public sealed record MenuConfirmationPresented : MenuAccessibilityEvent
         Choices = Snapshot(choices);
         SelectedIndex = selectedIndex;
     }
+
+    /// <summary>A confirmation that is its own native window rather than a layer over a menu
+    /// that already presented. It takes ownership of narration, so it needs no earlier
+    /// presentation, and a close for <paramref name="owner"/> ends it.</summary>
+    public MenuConfirmationPresented(MenuOwner owner, string prompt, IReadOnlyList<string>? choices, int selectedIndex)
+        : this(prompt, choices, selectedIndex)
+    {
+        Owner = owner;
+    }
+
+    /// <summary>Null for a confirmation layered over the active menu.</summary>
+    public MenuOwner? Owner { get; }
 
     public string Prompt { get; }
     public IReadOnlyList<string>? Choices { get; }

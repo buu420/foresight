@@ -30,9 +30,47 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     public const uint CustomButtonVtableRva = 0x3A4364;
     public const uint FocusableStateVtableRva = 0x3AC3F4;
 
+    /// <summary>GalleryNodeMovieTop, GalleryNodeSoundTop and GalleryNodeIllustTop.</summary>
+    public const uint MoviesVtableRva = 0x3A52C8;
+    public const uint SoundVtableRva = 0x3A5630;
+    public const uint IllustrationsVtableRva = 0x3A4F2C;
+
+    /// <summary>Title message IDs (bank 0x10) the list builders read per row: Movies 0x1D7570 and
+    /// Illustrations 0x1D5380 step 0x20 through tables their static initializers fill (0x9B82,
+    /// 0x9092); Sound 0x1D9200 steps 0xC through a static table (bank 1).</summary>
+    public const uint MoviesTitleTableRva = 0x3FBEEC;
+    public const uint IllustrationsTitleTableRva = 0x3FB9A4;
+    public const uint SoundTitleTableRva = 0x39A340;
+    public const int MovieCount = 8;
+    public const int IllustrationCount = 16;
+    public const int TrackCount = 65;
+
+    /// <summary>0x1D83C0 stores the decided row here before asking for playback.</summary>
+    public const uint MoviesSelectedRowOffset = 0x2C8;
+
+    /// <summary>0x1DA600 sets this byte when a track starts; 0x1DA820 clears it.</summary>
+    public const uint SoundPlayingOffset = 0x2E4;
+
+    /// <summary>What the mod can say about content the game shows without text. The menu that
+    /// opens it is fully read; the pictures and videos themselves are not described.</summary>
+    public const string NoVideoDescription = "No video description is available.";
+    public const string MoviesReturn = "The Movies list returns when the movie ends.";
+    public const string NoImageDescription = "No image description is available.";
+    public const string IllustrationReturn = "Confirm or Cancel returns to the illustration list.";
+    public const string ReviewDescription = "The ending replays in the game. Its visuals are not described.";
+    public const string ReviewReturn = "The ending details return when the replay ends.";
+
     private const int EndingCount = 19;
     private const int EndingRecordStride = 0x2C;
     private const int MaximumSelectedEnding = EndingCount - 1;
+    private const int MediaTableStride = 0x20;
+    private const int SoundTableStride = 0x0C;
+
+    /// <summary>The Sound and Illustrations Back dispatchers carry no action; they are planned as Back.</summary>
+    private const int BackAction = 4;
+
+    /// <summary>The pending action of a page re-entered after a pushed scene pops.</summary>
+    private const int ResumeAction = -1;
 
     private static readonly HookId[] DedicatedHookIds =
     [
@@ -48,6 +86,18 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         HookId.EndingDetailCallback,
         HookId.ExtrasLogTransition,
         HookId.ExtrasDetailTransition,
+        HookId.GalleryHubDispatch,
+        HookId.GalleryMoviesDispatch,
+        HookId.GallerySoundBack,
+        HookId.GalleryIllustrationsBack,
+        HookId.ExtrasMoviesOnEnter,
+        HookId.ExtrasSoundOnEnter,
+        HookId.ExtrasIllustrationsOnEnter,
+        HookId.ExtrasMoviesCallback,
+        HookId.ExtrasSoundCallback,
+        HookId.ExtrasIllustrationsCallback,
+        HookId.ExtrasIllustrationViewerCallback,
+        HookId.ExtrasSoundIdle,
     ];
 
     private static readonly LocalizedKey[] HubLabelKeys =
@@ -69,6 +119,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     private static TransitionScope? threadTransitionScope;
     [ThreadStatic]
     private static PendingNode? threadPendingNode;
+    [ThreadStatic]
+    private static IdleScope? threadIdleScope;
 
     private readonly IRuntimeNativeHookFactory hookFactory;
     private readonly IReadableMemory memory;
@@ -79,6 +131,19 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     private readonly IReadOnlyList<IHookRegistration> registrations;
     private nuint imageBase;
     private ActiveContext? active;
+
+    /// <summary>The page a movie or ending replay left; only its own node may re-enter.</summary>
+    private ActiveContext? suspended;
+
+    /// <summary>
+    /// Scheduled dispatchers per Gallery scene, oldest first. The page input managers
+    /// (0x1DCF10 → 0x1DD0A0 → 0x1DD4C0) stay enabled after a decide or cancel, and each
+    /// scheduled Sequence(DelayTime(1/120), CallFunc) runs on the scene's ActionManager in the
+    /// order it was added, its first ActionInterval::step (0x295BE1) counting zero elapsed time.
+    /// So a second decide or cancel can be scheduled before the first dispatcher runs, and each
+    /// dispatcher consumes exactly the oldest request of its scene.
+    /// </summary>
+    private readonly Dictionary<nuint, List<QueuedDispatch>> dispatchQueues = [];
     private int activeEpoch;
     private int faulted;
     private bool hooksActive;
@@ -108,6 +173,18 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             CreateRegistration(HookId.EndingDetailCallback, PrepareDetailCallback),
             CreateRegistration(HookId.ExtrasLogTransition, PrepareLogTransition),
             CreateRegistration(HookId.ExtrasDetailTransition, PrepareDetailTransition),
+            CreateRegistration(HookId.GalleryHubDispatch, PrepareHubDispatch),
+            CreateRegistration(HookId.GalleryMoviesDispatch, PrepareMoviesDispatch),
+            CreateRegistration(HookId.GallerySoundBack, PrepareSoundBack),
+            CreateRegistration(HookId.GalleryIllustrationsBack, PrepareIllustrationsBack),
+            CreateRegistration(HookId.ExtrasMoviesOnEnter, PrepareMoviesOnEnter),
+            CreateRegistration(HookId.ExtrasSoundOnEnter, PrepareSoundOnEnter),
+            CreateRegistration(HookId.ExtrasIllustrationsOnEnter, PrepareIllustrationsOnEnter),
+            CreateRegistration(HookId.ExtrasMoviesCallback, PrepareMoviesCallback),
+            CreateRegistration(HookId.ExtrasSoundCallback, PrepareSoundCallback),
+            CreateRegistration(HookId.ExtrasIllustrationsCallback, PrepareIllustrationsCallback),
+            CreateRegistration(HookId.ExtrasIllustrationViewerCallback, PrepareViewerCallback),
+            CreateRegistration(HookId.ExtrasSoundIdle, PrepareSoundIdle),
         ]);
     }
 
@@ -181,7 +258,9 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     {
         try
         {
-            if (!TryCaptureActiveEpoch(out _) || GetOwnedBuildScope() is not { } scope)
+            // Pages construct their controls while building; the illustration viewer constructs
+            // its one control inside the list callback that opens it.
+            if (!TryCaptureActiveEpoch(out _) || GetOwnedControlSink() is not { } scope)
             {
                 return;
             }
@@ -208,7 +287,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     {
         try
         {
-            if (!TryCaptureActiveEpoch(out _) || GetOwnedBuildScope() is not { } scope)
+            if (!TryCaptureActiveEpoch(out _) || GetOwnedControlSink() is not { } scope)
             {
                 return;
             }
@@ -336,19 +415,21 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 }
                 if (GetOwnedTransitionScope() is { } transition)
                 {
-                    if (transition.Source != Surface.EndingLog || transition.Action != 4 ||
-                        transition.Scene != (nuint)galleryScene || action != 0 || rawStackWord != 3 ||
+                    if (!IsPlannedNestedSwitch(transition, (nuint)galleryScene, action, rawStackWord) ||
                         transition.NestedSwitchStarted)
                     {
                         throw new InvalidOperationException(
-                            "The enclosing Ending Log Back transition did not invoke exactly one Gallery switch action 0/raw word 3 for its scene.");
+                            $"The enclosing {transition.Source} transition did not invoke exactly its one planned Gallery switch for its scene.");
                     }
                     transition.NestedSwitchStarted = true;
                 }
                 else
                 {
+                    // Outside a dispatcher only GalleryScene::init (0x2A51A0) switches: a new scene
+                    // has no scheduled dispatcher, even at a reused address.
                     ClearPendingNode();
                     ClearActiveForTransition();
+                    ResetDispatchQueue((nuint)galleryScene);
                 }
                 scope = new SwitchScope(this, epoch, (nuint)galleryScene, action, rawStackWord);
                 threadSwitchScope = scope;
@@ -399,6 +480,18 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         PrepareHook<EndingDetailOnEnterDelegate>(HookId.EndingDetailOnEnter, build, original => node =>
             boundary.Run("Ending Detail onEnter", () => HandleOnEnter(Surface.EndingDetail, node, original)));
 
+    private IPreparedHook PrepareMoviesOnEnter(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasMoviesOnEnterDelegate>(HookId.ExtrasMoviesOnEnter, build, original => node =>
+            boundary.Run("Extras Movies onEnter", () => HandleOnEnter(Surface.Movies, node, original)));
+
+    private IPreparedHook PrepareSoundOnEnter(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasSoundOnEnterDelegate>(HookId.ExtrasSoundOnEnter, build, original => node =>
+            boundary.Run("Extras Sound onEnter", () => HandleOnEnter(Surface.Sound, node, original)));
+
+    private IPreparedHook PrepareIllustrationsOnEnter(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasIllustrationsOnEnterDelegate>(HookId.ExtrasIllustrationsOnEnter, build, original => node =>
+            boundary.Run("Extras Illustrations onEnter", () => HandleOnEnter(Surface.Illustrations, node, original)));
+
     private void HandleOnEnter<TDelegate>(Surface surface, nint node, Func<TDelegate> original)
         where TDelegate : Delegate
     {
@@ -437,6 +530,15 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                     break;
                 case EndingDetailOnEnterDelegate detail:
                     detail(node);
+                    break;
+                case ExtrasMoviesOnEnterDelegate movies:
+                    movies(node);
+                    break;
+                case ExtrasSoundOnEnterDelegate sound:
+                    sound(node);
+                    break;
+                case ExtrasIllustrationsOnEnterDelegate illustrations:
+                    illustrations(node);
                     break;
                 default:
                     throw new InvalidOperationException($"Unsupported Extras onEnter original {typedOriginal.GetType().FullName}.");
@@ -498,6 +600,11 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             transition.Pending = pending;
             threadPendingNode = pending;
         }
+        if (pending is null && transition is null && TryResumeSuspended(surface, node, epoch, out var resumed))
+        {
+            pending = resumed;
+            threadPendingNode = resumed;
+        }
         if (pending is null || pending.Epoch != epoch || pending.Surface != surface ||
             pending.Node != node || !TryReadExactVtable(node, ExpectedVtable(surface)))
         {
@@ -513,6 +620,32 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 $"{surface} transition onEnter did not occur while the exact Gallery scene slot was empty.");
         }
         return pending;
+    }
+
+    /// <summary>
+    /// A pushed scene (the movie player 0x1C, or the ending replay through scene 0x13) calls
+    /// onExit on the Gallery page, and popping back calls the same node's onEnter, which rebuilds
+    /// the page. Only the last page the running scene exited, still attached to its scene, may
+    /// re-enter this way, and only with no switch or transition pending; its title is the one it
+    /// had, because nothing re-resolves it. Transitions clear the page before removing it, so a
+    /// removed page is never remembered.
+    /// </summary>
+    private bool TryResumeSuspended(Surface surface, nuint node, int epoch, out PendingNode pending)
+    {
+        pending = null!;
+        ActiveContext? candidate;
+        lock (stateGate)
+        {
+            candidate = suspended;
+        }
+        if (candidate is null || candidate.Node != node || candidate.Surface != surface ||
+            !TryReadExactVtable(node, ExpectedVtable(surface)) ||
+            !TryReadPointer(candidate.Scene + GalleryCurrentNodeOffset, out var attached) || attached != node)
+        {
+            return false;
+        }
+        pending = new PendingNode(this, epoch, candidate.Scene, ResumeAction, surface, node, candidate.Title);
+        return true;
     }
 
     private bool TryResolveDirectTransitionTitle(
@@ -565,6 +698,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 },
                 node));
 
+    /// <summary>0x1D38E0 is a shared base-class deleting destructor (it reinstalls vtable 0x3A6388):
+    /// the Ending Log, Movies and Illustrations pages all use it as vtable slot 0.</summary>
     private IPreparedHook PrepareLogDeletingDestructor(
         IVerifiedGameBuild build,
         UnmanagedBoundaryGuard boundary) =>
@@ -574,9 +709,9 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 () =>
                 {
                     var captureFailure = CaptureTeardownFailure(
-                        () => ClearMatchingNode(
+                        () => ClearMatchingNodeOfAny(
                             (nuint)node,
-                            EndingLogVtableRva,
+                            [EndingLogVtableRva, MoviesVtableRva, IllustrationsVtableRva],
                             "Ending Log deleting destructor"));
                     var returned = original()(node, deletingFlags);
                     ReportTeardownFailure("Ending Log deleting destructor", captureFailure);
@@ -602,43 +737,90 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 "Ending Detail callback",
                 () => HandleCallback(Surface.EndingDetail, closure, eventType, action, () => original()(closure, eventType, action))));
 
+    private IPreparedHook PrepareMoviesCallback(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasMoviesCallbackDelegate>(HookId.ExtrasMoviesCallback, build, original =>
+            (closure, eventType, action) => boundary.Run(
+                "Extras Movies callback",
+                () => HandleCallback(Surface.Movies, closure, eventType, action, () => original()(closure, eventType, action))));
+
+    private IPreparedHook PrepareSoundCallback(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasSoundCallbackDelegate>(HookId.ExtrasSoundCallback, build, original =>
+            (closure, eventType, action) => boundary.Run(
+                "Extras Sound callback",
+                () => HandleCallback(Surface.Sound, closure, eventType, action, () => original()(closure, eventType, action))));
+
+    private IPreparedHook PrepareIllustrationsCallback(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasIllustrationsCallbackDelegate>(HookId.ExtrasIllustrationsCallback, build, original =>
+            (closure, eventType, action) => boundary.Run(
+                "Extras Illustrations callback",
+                () => HandleCallback(Surface.Illustrations, closure, eventType, action, () => original()(closure, eventType, action))));
+
+    private IPreparedHook PrepareViewerCallback(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasIllustrationViewerCallbackDelegate>(HookId.ExtrasIllustrationViewerCallback, build, original =>
+            (closure, eventType, action) => boundary.Run(
+                "Extras Illustration viewer callback",
+                () => HandleViewerCallback(closure, eventType, () => original()(closure, eventType, action))));
+
+    private IPreparedHook PrepareSoundIdle(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<ExtrasSoundIdleDelegate>(HookId.ExtrasSoundIdle, build, original => node =>
+            boundary.Run("Extras Sound idle state", () => HandleSoundIdle(node, () => original()(node))));
+
     private IPreparedHook PrepareLogTransition(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
         PrepareHook<ExtrasLogTransitionDelegate>(HookId.ExtrasLogTransition, build, original => payload =>
             boundary.Run(
                 "Extras Ending Log transition",
-                () => HandleTransition(Surface.EndingLog, payload, () => original()(payload))));
+                () => HandleTransition(Surface.EndingLog, payload, payloadHasAction: true, () => original()(payload))));
 
     private IPreparedHook PrepareDetailTransition(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
         PrepareHook<ExtrasDetailTransitionDelegate>(HookId.ExtrasDetailTransition, build, original => payload =>
             boundary.Run(
                 "Extras Ending Detail transition",
-                () => HandleTransition(Surface.EndingDetail, payload, () => original()(payload))));
+                () => HandleTransition(Surface.EndingDetail, payload, payloadHasAction: true, () => original()(payload))));
 
-    private void HandleTransition(Surface source, nint payload, Action invokeOriginal)
+    private IPreparedHook PrepareHubDispatch(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<GalleryHubDispatchDelegate>(HookId.GalleryHubDispatch, build, original => payload =>
+            boundary.Run(
+                "GalleryScene deferred Hub action",
+                () => HandleTransition(Surface.Hub, payload, payloadHasAction: true, () => original()(payload))));
+
+    private IPreparedHook PrepareMoviesDispatch(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<GalleryMoviesDispatchDelegate>(HookId.GalleryMoviesDispatch, build, original => payload =>
+            boundary.Run(
+                "GalleryScene deferred Movies action",
+                () => HandleTransition(Surface.Movies, payload, payloadHasAction: true, () => original()(payload))));
+
+    private IPreparedHook PrepareSoundBack(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<GallerySoundBackDelegate>(HookId.GallerySoundBack, build, original => payload =>
+            boundary.Run(
+                "GalleryScene deferred Sound Back",
+                () => HandleTransition(Surface.Sound, payload, payloadHasAction: false, () => original()(payload))));
+
+    private IPreparedHook PrepareIllustrationsBack(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary) =>
+        PrepareHook<GalleryIllustrationsBackDelegate>(HookId.GalleryIllustrationsBack, build, original => payload =>
+            boundary.Run(
+                "GalleryScene deferred Illustrations Back",
+                () => HandleTransition(Surface.Illustrations, payload, payloadHasAction: false, () => original()(payload))));
+
+    /// <summary>
+    /// Every Gallery page asks for its next page through its own std::function, which only
+    /// schedules the dispatcher: a Sequence of DelayTime(1/120) and CallFunc (Hub 0x2A5590,
+    /// Ending Log 0x2A5D60, Ending Detail 0x2A6000, Movies 0x2A59C0, Sound 0x2A5B10, Illustrations
+    /// 0x2A6C70). The dispatcher therefore runs on a later frame, after the page callback has
+    /// returned, and it constructs, attaches and enters its target synchronously.
+    /// </summary>
+    private void HandleTransition(Surface source, nint payload, bool payloadHasAction, Action invokeOriginal)
     {
         var instrument = TryCaptureActiveEpoch(out var epoch);
         TransitionScope? scope = null;
         string? setupError = null;
-        var preserveUnsupportedReview = false;
-        var unsupportedReviewValidated = false;
         if (instrument)
         {
             try
             {
-                if (!TryReadInt32((nuint)payload, out var action))
+                var (action, scene) = ReadTransitionPayload(source, (nuint)payload, payloadHasAction);
+                scope = BeginTransition(source, action, scene, epoch);
+                if (scope.Plan.Kind is TransitionKind.Build or TransitionKind.NestedSwitch)
                 {
-                    throw new InvalidOperationException(
-                        $"{source} transition payload 0x{(nuint)payload:X} has no readable action.");
-                }
-                preserveUnsupportedReview = source == Surface.EndingDetail && action == 3;
-                if (preserveUnsupportedReview)
-                {
-                    ValidateUnsupportedReviewTransition((nuint)payload, epoch);
-                    unsupportedReviewValidated = true;
-                }
-                else
-                {
-                    scope = BeginTransition(source, (nuint)payload, action, epoch);
                     threadTransitionScope = scope;
                     ClearPendingNode();
                     ClearActiveForTransition();
@@ -656,7 +838,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         }
         finally
         {
-            if (ReferenceEquals(threadTransitionScope, scope))
+            if (scope is not null && ReferenceEquals(threadTransitionScope, scope))
             {
                 threadTransitionScope = null;
             }
@@ -672,14 +854,6 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         }
         RunInstrumentationSafely(epoch, $"{source} transition post-capture failed", () =>
         {
-            if (preserveUnsupportedReview)
-            {
-                if (!unsupportedReviewValidated)
-                {
-                    FailCoverage($"{source} Review transition validation failed: {setupError}");
-                }
-                return;
-            }
             if (scope is null)
             {
                 FailCoverage($"{source} transition validation failed: {setupError}");
@@ -689,160 +863,300 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         });
     }
 
-    private void ValidateUnsupportedReviewTransition(nuint payload, int epoch)
+    /// <summary>The Hub, Ending Log, Ending Detail and Movies dispatchers receive {action, scene};
+    /// the Sound and Illustrations Back dispatchers receive only {scene}.</summary>
+    private (int Action, nuint Scene) ReadTransitionPayload(Surface source, nuint payload, bool payloadHasAction)
     {
-        if (threadTransitionScope is not null || threadSwitchScope is not null ||
-            threadBuildScope is not null || threadPendingNode is not null)
+        if (!payloadHasAction)
         {
-            throw new InvalidOperationException(
-                "Ending Detail Review was nested inside another Extras transition, switch, or build observation.");
+            if (!TryReadPointer(payload, out var onlyScene) || onlyScene == 0)
+            {
+                throw new InvalidOperationException($"{source} Back payload 0x{payload:X} has no readable Gallery scene.");
+            }
+            return (BackAction, onlyScene);
         }
-        if (!TryReadPointer(payload + 4, out var scene) || scene == 0)
+        if (!TryReadInt32(payload, out var action))
         {
-            throw new InvalidOperationException(
-                "Ending Detail Review payload has no readable Gallery scene identity.");
-        }
-
-        var callback = GetOwnedCallbackScope();
-        var context = GetActiveContext();
-        if (callback is null || callback.Epoch != epoch || callback.ReviewTransitionObserved ||
-            callback.Context.Surface != Surface.EndingDetail || context is null ||
-            !ReferenceEquals(callback.Context, context) || context.Scene != scene)
-        {
-            throw new InvalidOperationException(
-                "Ending Detail Review does not belong to one exact active Detail callback and Gallery scene.");
-        }
-        if (!TryValidateActiveContext(context, out var error))
-        {
-            throw new InvalidOperationException(error);
-        }
-        if (callback.EventType != 0 || callback.Action != 0 || callback.EntryFocusKey != 0 ||
-            !context.Controls.TryGetValue(0, out var review) || review.Focus.Position != 1 ||
-            review.Focus.Disabled)
-        {
-            throw new InvalidOperationException(
-                "Ending Detail Review is not related to its exact focused, enabled Review control callback.");
-        }
-        callback.ReviewTransitionObserved = true;
-    }
-
-    private TransitionScope BeginTransition(Surface source, nuint payload, int action, int epoch)
-    {
-        if (threadTransitionScope is not null || threadSwitchScope is not null || threadBuildScope is not null)
-        {
-            throw new InvalidOperationException("A nested or overlapping Extras transition observation was attempted.");
+            throw new InvalidOperationException($"{source} transition payload 0x{payload:X} has no readable action.");
         }
         if (!TryReadPointer(payload + 4, out var scene) || scene == 0)
         {
             throw new InvalidOperationException($"{source} transition payload has no readable Gallery scene identity.");
         }
-        var target = (source, action) switch
-        {
-            (Surface.EndingLog, 3) => Surface.EndingDetail,
-            (Surface.EndingLog, 4) => Surface.Hub,
-            (Surface.EndingDetail, 4) => Surface.EndingLog,
-            _ => throw new InvalidOperationException(
-                $"{source} transition action {action} is not an audited menu transition."),
-        };
-        var callback = GetOwnedCallbackScope();
-        var context = GetActiveContext();
-        if (callback is null || callback.Epoch != epoch || callback.Context.Surface != source ||
-            context is null || !ReferenceEquals(callback.Context, context) || context.Scene != scene)
-        {
-            throw new InvalidOperationException(
-                $"{source} transition does not belong to the exact active callback and Gallery scene.");
-        }
-        if (!TryValidateActiveContext(context, out var error))
-        {
-            throw new InvalidOperationException(error);
-        }
-        if (!TryValidateTransitionCallbackRelationship(callback, action, out var selectedEnding, out error))
-        {
-            throw new InvalidOperationException(error);
-        }
-
-        LocalizedKey? expectedTitle = null;
-        if (source == Surface.EndingLog && action == 3)
-        {
-            if (!TryReadInt32(
-                    imageBase + EndingRecordTableRva + (nuint)(selectedEnding * EndingRecordStride),
-                    out var messageId))
-            {
-                throw new InvalidOperationException(
-                    "Ending Log transition cannot read the exact selected ending title message ID.");
-            }
-            expectedTitle = new LocalizedKey(0x0F, messageId);
-        }
-        else if (source == Surface.EndingDetail && action == 4)
-        {
-            expectedTitle = new LocalizedKey(0x1A, 0x0F);
-        }
-        return new TransitionScope(
-            this,
-            epoch,
-            source,
-            target,
-            action,
-            scene,
-            selectedEnding,
-            expectedTitle);
+        return (action, scene);
     }
 
-    private bool TryValidateTransitionCallbackRelationship(
-        CallbackScope callback,
-        int transitionAction,
+    private TransitionScope BeginTransition(Surface source, int action, nuint scene, int epoch)
+    {
+        if (threadTransitionScope is not null || threadSwitchScope is not null || threadBuildScope is not null)
+        {
+            throw new InvalidOperationException("A nested or overlapping Extras transition observation was attempted.");
+        }
+        var active = GetActiveContext();
+        if (active is not null && active.Scene != scene)
+        {
+            throw new InvalidOperationException(
+                $"{source} transition does not belong to the active page's Gallery scene.");
+        }
+
+        // Natively the page callback has returned before its dispatcher runs and the request
+        // waits in its scene's queue; an enclosing callback scope only exists when a dispatcher is
+        // replayed synchronously. Either way one decide or cancel answers for exactly one dispatcher.
+        var callback = GetOwnedCallbackScope();
+        TransitionRequest? request;
+        QueuedDispatch? queued = null;
+        if (callback is not null && ReferenceEquals(callback.Context, active))
+        {
+            request = callback.RequestConsumed ? null : callback.Request;
+            callback.RequestConsumed = true;
+        }
+        else
+        {
+            queued = DequeueDispatch(scene);
+            request = queued?.Request;
+        }
+        if (request is null || request.Epoch != epoch || request.Context.Surface != source ||
+            request.Context.Scene != scene ||
+            (queued is not null && queued.DispatchAction != action) ||
+            (queued is null && ScheduledDispatchAction(request) != action))
+        {
+            throw new InvalidOperationException(
+                $"{source} transition action {action} has no preceding decide or cancel on the same page.");
+        }
+
+        // The dispatcher operates the scene's current node (+0x290), so an earlier dispatcher may
+        // already have replaced the page that asked for this one; that page is then retired.
+        var sourceActive = ReferenceEquals(active, request.Context);
+        if (active is not null && !TryValidateActiveContext(active, out var error))
+        {
+            throw new InvalidOperationException(error);
+        }
+        if (!TryValidateTransitionRequest(request, queued, source, action, out var selectedEnding, out error) ||
+            !TryPlanTransition(source, action, selectedEnding, out var plan, out error))
+        {
+            throw new InvalidOperationException(error);
+        }
+        if (plan.Kind == TransitionKind.Suspending && sourceActive)
+        {
+            request.Context.SuspendRequested = true;
+        }
+        return new TransitionScope(this, epoch, source, plan, action, scene, selectedEnding)
+        {
+            SourceWasActive = sourceActive,
+        };
+    }
+
+    /// <summary>
+    /// What each page callback schedules, read from its body: Hub 0x1DC610, Ending Log 0x1D4850,
+    /// Ending Detail 0x1D35A0, Movies 0x1D83C0, Sound 0x1D9F70 and Illustrations 0x1D6160. A decide
+    /// on an unfocused control only moves focus except in Ending Log; a locked Hub tile or ending only plays a buzzer,
+    /// a track decide plays it, an illustration decide opens the viewer, and a Cancel while a
+    /// track plays only stops it; none of those schedules a dispatcher.
+    /// </summary>
+    private static int? ScheduledDispatchAction(TransitionRequest request)
+    {
+        var context = request.Context;
+        RuntimeControl? control = null;
+        var decided = request.EventType == 0 && context.Controls.TryGetValue(request.Action, out control);
+        var focusedDecide = decided && request.EntryFocusKey == request.Action;
+        var cancel = request.EventType == 2;
+        switch (context.Surface)
+        {
+            case Surface.Hub:
+                if (cancel) return 4;
+                return focusedDecide && !control!.Focus.Disabled && request.Action is >= 0 and <= 4
+                    ? request.Action
+                    : null;
+            case Surface.EndingLog:
+                // 0x1D4850 checks the unlock mask, not the focus, before scheduling 3.
+                if (cancel) return 4;
+                if (!decided) return null;
+                if (control!.Focus.Position == EndingCount + 1) return 4;
+                return request.Action is >= 0 and <= MaximumSelectedEnding && !control.Focus.Disabled ? 3 : null;
+            case Surface.EndingDetail:
+                if (cancel) return 4;
+                return focusedDecide ? (control!.Focus.Position == 1 ? 3 : 4) : null;
+            case Surface.Movies:
+                if (cancel) return 4;
+                return focusedDecide ? (request.Action < MovieCount ? 0 : 4) : null;
+            case Surface.Sound:
+                if (cancel) return request.SoundWasPlaying ? null : BackAction;
+                return focusedDecide && request.Action == TrackCount ? BackAction : null;
+            case Surface.Illustrations:
+                if (cancel) return BackAction;
+                return focusedDecide && request.Action == IllustrationCount ? BackAction : null;
+            default:
+                return null;
+        }
+    }
+
+    private void EnqueueDispatch(QueuedDispatch dispatch)
+    {
+        lock (stateGate)
+        {
+            var scene = dispatch.Request.Context.Scene;
+            if (!dispatchQueues.TryGetValue(scene, out var queue))
+            {
+                queue = [];
+                dispatchQueues[scene] = queue;
+            }
+            queue.Add(dispatch);
+        }
+    }
+
+    private QueuedDispatch? DequeueDispatch(nuint scene)
+    {
+        lock (stateGate)
+        {
+            if (!dispatchQueues.TryGetValue(scene, out var queue) || queue.Count == 0)
+            {
+                return null;
+            }
+            var head = queue[0];
+            queue.RemoveAt(0);
+            return head;
+        }
+    }
+
+    private void ResetDispatchQueue(nuint scene)
+    {
+        lock (stateGate)
+        {
+            dispatchQueues.Remove(scene);
+        }
+    }
+
+    /// <summary>
+    /// What each dispatcher does, read from its body: Hub 0x2A5650, Ending Log 0x2A5E20, Ending
+    /// Detail 0x2A60C0, Movies 0x2A5A80, Sound Back 0x2A5BD0 and Illustrations Back 0x2A6D30.
+    /// </summary>
+    private bool TryPlanTransition(
+        Surface source,
+        int action,
+        int selectedEnding,
+        out TransitionPlan plan,
+        out string error)
+    {
+        plan = null!;
+        error = string.Empty;
+        switch (source, action)
+        {
+            case (Surface.Hub, 0):
+                plan = TransitionPlan.Switch(Surface.Movies, switchAction: 1, raw: 0, finalFocusKey: null);
+                return true;
+            case (Surface.Hub, 1):
+                plan = TransitionPlan.Build(Surface.Illustrations, new LocalizedKey(0x1A, 0x45), finalFocusKey: null);
+                return true;
+            case (Surface.Hub, 2):
+                plan = TransitionPlan.Build(Surface.Sound, new LocalizedKey(0x1A, 0x44), finalFocusKey: null);
+                return true;
+            case (Surface.Hub, 3):
+                plan = TransitionPlan.Build(Surface.EndingLog, new LocalizedKey(0x1A, 0x0F), finalFocusKey: null);
+                return true;
+            case (Surface.Hub, 4):
+                plan = TransitionPlan.Leaving;
+                return true;
+            case (Surface.EndingLog, 3):
+                if (!TryReadInt32(
+                        imageBase + EndingRecordTableRva + (nuint)(selectedEnding * EndingRecordStride),
+                        out var messageId))
+                {
+                    error = "Ending Log transition cannot read the exact selected ending title message ID.";
+                    return false;
+                }
+                plan = TransitionPlan.Build(Surface.EndingDetail, new LocalizedKey(0x0F, messageId), finalFocusKey: null);
+                return true;
+            case (Surface.EndingLog, 4):
+                plan = TransitionPlan.Switch(Surface.Hub, switchAction: 0, raw: 3, finalFocusKey: 3);
+                return true;
+            case (Surface.EndingDetail, 3):
+                plan = TransitionPlan.Suspending;
+                return true;
+            case (Surface.EndingDetail, 4):
+                plan = TransitionPlan.Build(Surface.EndingLog, new LocalizedKey(0x1A, 0x0F), finalFocusKey: null);
+                return true;
+            case (Surface.Movies, 0):
+                plan = TransitionPlan.Suspending;
+                return true;
+            case (Surface.Movies, 4):
+                plan = TransitionPlan.Switch(Surface.Hub, switchAction: 0, raw: 0, finalFocusKey: 0);
+                return true;
+            case (Surface.Sound, BackAction):
+                plan = TransitionPlan.Build(Surface.Hub, new LocalizedKey(0x41, 0x06), finalFocusKey: 2);
+                return true;
+            case (Surface.Illustrations, BackAction):
+                plan = TransitionPlan.Build(Surface.Hub, new LocalizedKey(0x41, 0x06), finalFocusKey: 1);
+                return true;
+            default:
+                error = $"{source} transition action {action} is not an audited Gallery transition.";
+                return false;
+        }
+    }
+
+    /// <summary>The dispatcher must follow the decide or cancel that asks for it natively.</summary>
+    private bool TryValidateTransitionRequest(
+        TransitionRequest request,
+        QueuedDispatch? queued,
+        Surface source,
+        int action,
         out int selectedEnding,
         out string error)
     {
         selectedEnding = -1;
-        if (callback.Context.Surface == Surface.EndingLog && transitionAction == 3)
+        error = string.Empty;
+        var context = request.Context;
+        bool Decides(int key) => request.EventType == 0 && request.Action == key && request.EntryFocusKey == key &&
+            context.Controls.TryGetValue(key, out var control) && !control.Focus.Disabled;
+        var related = (source, action) switch
         {
-            if (callback.EventType != 0 || callback.Action < 0 || callback.Action > MaximumSelectedEnding ||
-                callback.EntryFocusKey != callback.Action ||
-                !callback.Context.Controls.TryGetValue(callback.Action, out var row) || row.Focus.Disabled ||
-                !TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) ||
-                selectedEnding != callback.Action)
-            {
-                error = "Ending Log detail transition is not related to one focused, unlocked selected row.";
-                return false;
-            }
-            error = string.Empty;
-            return true;
-        }
-        if (callback.Context.Surface == Surface.EndingLog && transitionAction == 4)
+            (Surface.Hub, >= 0 and <= 3) => Decides(action),
+            (Surface.Hub, 4) => IsExactBackRequest(request, expectedPosition: 5),
+            // 0x1D4850 stores the callback row; 0x2A5E20 uses the live global at dispatch.
+            // Later choices and Log initialization (0x1D39D3) can both change that global.
+            (Surface.EndingLog, 3) =>
+                request.EventType == 0 && request.Action is >= 0 and <= MaximumSelectedEnding &&
+                context.Controls.TryGetValue(request.Action, out var endingRow) && !endingRow.Focus.Disabled &&
+                TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) &&
+                selectedEnding is >= 0 and <= MaximumSelectedEnding &&
+                (queued is null
+                    ? selectedEnding == request.Action
+                    : queued.SelectedEnding == request.Action),
+            // Ending Log 0x1D4850 activates Back immediately too, without a focus-first branch.
+            (Surface.EndingLog, 4) => IsExactBackRequest(request, expectedPosition: 20, requireEntryFocus: false),
+            (Surface.EndingDetail, 3) =>
+                Decides(0) && context.Controls[0].Focus.Position == 1,
+            (Surface.EndingDetail, 4) =>
+                IsExactBackRequest(request, expectedPosition: 2) &&
+                TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) &&
+                selectedEnding is >= 0 and <= MaximumSelectedEnding,
+            // The stored row is read when the callback returns; the page may be retired by now.
+            (Surface.Movies, 0) =>
+                request.EventType == 0 && request.Action is >= 0 and < MovieCount && Decides(request.Action) &&
+                (queued is not null
+                    ? queued.MovieRow == request.Action
+                    : TryReadInt32(context.Node + MoviesSelectedRowOffset, out var storedRow) && storedRow == request.Action),
+            (Surface.Movies, 4) => IsExactBackRequest(request, expectedPosition: MovieCount + 1),
+            (Surface.Sound, BackAction) =>
+                IsExactBackRequest(request, expectedPosition: TrackCount + 1) &&
+                (request.EventType == 0 || !request.SoundWasPlaying),
+            (Surface.Illustrations, BackAction) => IsExactBackRequest(request, expectedPosition: IllustrationCount + 1),
+            _ => false,
+        };
+        if (!related)
         {
-            if (!IsExactBackCallback(callback, expectedPosition: 20))
-            {
-                error = "Ending Log Hub transition is not related to its exact Back callback.";
-                return false;
-            }
-            error = string.Empty;
-            return true;
+            error = $"{source} transition action {action} is not related to the exact decide or cancel that preceded it.";
         }
-        if (callback.Context.Surface == Surface.EndingDetail && transitionAction == 4)
-        {
-            if (!IsExactBackCallback(callback, expectedPosition: 2) ||
-                !TryReadInt32(imageBase + SelectedEndingGlobalRva, out selectedEnding) ||
-                selectedEnding < 0 || selectedEnding > MaximumSelectedEnding)
-            {
-                error = "Ending Detail Log transition is not related to its exact Back callback and selected ending.";
-                return false;
-            }
-            error = string.Empty;
-            return true;
-        }
-        error = $"{callback.Context.Surface} transition action {transitionAction} has no audited callback relationship.";
-        return false;
+        return related;
     }
 
-    private static bool IsExactBackCallback(CallbackScope callback, int expectedPosition)
+    private static bool IsExactBackRequest(TransitionRequest request, int expectedPosition, bool requireEntryFocus = true)
     {
-        if (callback.EventType == 2)
+        if (request.EventType == 2)
         {
-            return callback.Context.Controls.Values.Count(control => control.Focus.Position == expectedPosition) == 1;
+            return request.Context.Controls.Values.Count(control => control.Focus.Position == expectedPosition) == 1;
         }
-        return callback.EventType == 0 && callback.EntryFocusKey == callback.Action &&
-            callback.Context.Controls.TryGetValue(callback.Action, out var control) &&
+        return request.EventType == 0 && (!requireEntryFocus || request.EntryFocusKey == request.Action) &&
+            request.Context.Controls.TryGetValue(request.Action, out var control) &&
             control.Focus.Position == expectedPosition && !control.Focus.Disabled;
     }
 
@@ -938,17 +1252,20 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             this, scope.Epoch, scope.Scene, scope.Action, surface, returnedNode, title);
         if (GetOwnedTransitionScope() is { } transition)
         {
-            if (transition.Source != Surface.EndingLog || transition.Action != 4 ||
-                transition.Target != Surface.Hub || transition.Scene != scope.Scene ||
-                scope.Action != 0 || scope.RawStackWord != 3 || transition.Pending is not null)
+            if (!IsPlannedNestedSwitch(transition, scope.Scene, scope.Action, scope.RawStackWord) ||
+                transition.Target != surface || transition.Pending is not null)
             {
-                FailCoverage("Ending Log Back nested switch does not match its exact Hub transition relationship.");
+                FailCoverage($"{transition.Source} nested switch does not match its exact planned transition target.");
                 return;
             }
             transition.Pending = pending;
         }
         threadPendingNode = pending;
     }
+
+    private static bool IsPlannedNestedSwitch(TransitionScope transition, nuint scene, int action, uint raw) =>
+        transition.Plan.Kind == TransitionKind.NestedSwitch && transition.Scene == scene &&
+        transition.Plan.SwitchAction == action && transition.Plan.SwitchRaw == raw;
 
     private bool TryResolveSwitchTitle(
         SwitchScope scope,
@@ -964,6 +1281,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         else if (surface == Surface.EndingLog)
         {
             expected = new(0x1A, 0x0F);
+        }
+        else if (PageTitleKey(surface) is { } pageTitle)
+        {
+            expected = pageTitle;
         }
         else
         {
@@ -1005,7 +1326,101 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             case Surface.EndingDetail:
                 FinalizeEndingDetail(scope, manager, focusedKey);
                 break;
+            case Surface.Movies:
+                FinalizeMediaPage(scope, manager, focusedKey, MoviesPage);
+                break;
+            case Surface.Sound:
+                FinalizeMediaPage(scope, manager, focusedKey, SoundPage);
+                break;
+            case Surface.Illustrations:
+                FinalizeMediaPage(scope, manager, focusedKey, IllustrationsPage);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Movies (builder 0x1D7390 → 0x1D7570), Sound (0x1D9070 → 0x1D9200, then the idle state
+    /// 0x1DA820) and Illustrations (0x1D51A0 → 0x1D5380) share one shape: Back is constructed
+    /// first (0x1D85F0 or 0x1D6910, (0x23, 0xD8)), then one CustomButton per row whose title the
+    /// row builder localizes in table order; the rows bind keys 0..N-1 and Back binds key N. No
+    /// builder reads an unlock flag: locking exists only at the Hub category.
+    /// </summary>
+    private void FinalizeMediaPage(BuildScope scope, nuint manager, int focusedKey, MediaPage page)
+    {
+        var controls = scope.ConstructedControls.ToArray();
+        var keys = Enumerable.Range(0, page.Rows).Append(page.Rows).ToArray();
+        var ordered = controls.Length == page.Rows + 1 ? controls.Skip(1).Append(controls[0]).ToArray() : controls;
+        if (controls.Length != page.Rows + 1 ||
+            !TryRequireExactBindings(scope, manager, ordered, keys, out var error))
+        {
+            FailCoverage($"{page.Surface} did not construct Back and exactly {page.Rows} rows bound to keys 0..{page.Rows}.");
+            return;
+        }
+        var titleKeys = new LocalizedKey[page.Rows];
+        for (var row = 0; row < page.Rows; row++)
+        {
+            if (!TryReadTitleId(page, row, out var titleId))
+            {
+                FailCoverage($"{page.Surface} title table row {row} is unreadable.");
+                return;
+            }
+            titleKeys[row] = new LocalizedKey(page.TitleBank, titleId);
+        }
+        var back = new LocalizedKey(0x23, 0xD8);
+        var required = new List<LocalizedKey>(titleKeys) { back, page.Status };
+        if (!TryRequireOnly(scope.Text, required, out var values, out _, out error))
+        {
+            FailCoverage($"{page.Surface} localized text is incomplete: {error}");
+            return;
+        }
+        var observedTitles = scope.Text.Where(item => item.Key.File == page.TitleBank).Select(item => item.Key).ToArray();
+        if (!observedTitles.SequenceEqual(titleKeys))
+        {
+            FailCoverage($"{page.Surface} row titles were not localized in native row order.");
+            return;
+        }
+        if (page.Surface == Surface.Sound &&
+            (!TryReadByte(scope.Pending.Node + SoundPlayingOffset, out var playing) || playing != 0))
+        {
+            FailCoverage("Sound did not finish its build in the idle state.");
+            return;
+        }
+
+        var count = page.Rows + 1;
+        var controlMap = new Dictionary<int, RuntimeControl>();
+        for (var row = 0; row < page.Rows; row++)
+        {
+            controlMap[row] = new RuntimeControl(
+                ordered[row],
+                new MenuFocus(values[titleKeys[row]], null, row + 1, count, null, false));
+        }
+        controlMap[page.Rows] = new RuntimeControl(
+            controls[0],
+            new MenuFocus(values[back], null, count, count, null, false));
+        if (!controlMap.TryGetValue(focusedKey, out var focused))
+        {
+            FailCoverage($"{page.Surface} focused key {focusedKey} has no captured row or Back control.");
+            return;
+        }
+        var context = new ActiveContext(
+            page.Surface,
+            scope.Pending.Scene,
+            scope.Pending.Node,
+            manager,
+            controlMap,
+            scope.Pending.Title)
+        {
+            StatusText = values[page.Status],
+        };
+        CompleteBuild(scope, context, ToPresented(context, focused.Focus, [context.StatusText]));
+    }
+
+    private bool TryReadTitleId(MediaPage page, int row, out int titleId)
+    {
+        titleId = -1;
+        return row >= 0 && row < page.Rows &&
+            TryReadInt32(imageBase + page.TitleTableRva + (nuint)(row * page.TitleStride), out titleId) &&
+            titleId >= 0;
     }
 
     private bool TryValidateBuildCommon(
@@ -1332,11 +1747,33 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             Surface.Hub => FinalizeHubCallback(scope),
             Surface.EndingLog => FinalizeLogCallback(scope),
             Surface.EndingDetail => FinalizeDetailCallback(scope),
+            Surface.Movies => FinalizeMoviesCallback(scope),
+            Surface.Sound => FinalizeSoundCallback(scope),
+            Surface.Illustrations => FinalizeIllustrationsCallback(scope),
             _ => null,
         };
         if (Volatile.Read(ref faulted) != 0)
         {
             return;
+        }
+        // A decide or cancel that schedules a dispatcher queues exactly one request behind any
+        // already scheduled on this scene; the dispatcher that runs later consumes it.
+        if (!scope.RequestConsumed && ReferenceEquals(GetActiveContext(), scope.Context) &&
+            ScheduledDispatchAction(scope.Request) is { } dispatchAction)
+        {
+            int? movieRow = null;
+            if (scope.Context.Surface == Surface.Movies && dispatchAction == 0 &&
+                TryReadInt32(scope.Context.Node + MoviesSelectedRowOffset, out var storedRow))
+            {
+                movieRow = storedRow;
+            }
+            int? selected = null;
+            if (scope.Context.Surface == Surface.EndingLog && dispatchAction == 3 &&
+                TryReadInt32(imageBase + SelectedEndingGlobalRva, out var selectedEnding))
+            {
+                selected = selectedEnding;
+            }
+            EnqueueDispatch(new QueuedDispatch(scope.Request, dispatchAction, movieRow, selected));
         }
         if (primary is not null)
         {
@@ -1375,13 +1812,6 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                     return null;
                 }
                 return new MenuUnsupported(control.Focus.Label, help, "Choose another Extras item or Back.");
-            }
-            if (scope.Action is 0 or 1 or 2)
-            {
-                return new MenuUnsupported(
-                    control.Focus.Label,
-                    "Detailed reading is not yet covered on this screen.",
-                    "Use Back to return to Extras.");
             }
             return new MenuActivated(control.Focus.Label);
         }
@@ -1423,11 +1853,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             {
                 return FinalizeCallbackFocus(scope);
             }
+            // Review replays the ending through the field engine (0x2A60C0 → NextScene(1) → scene
+            // 0x13) and pops back here afterwards; the replay's visuals have no description.
             return scope.Action == 0
-                ? new MenuUnsupported(
-                    control.Focus.Label,
-                    "Ending review playback is not yet covered.",
-                    "Use Back to return to the Ending Log.")
+                ? new MenuUnsupported(control.Focus.Label, ReviewDescription, ReviewReturn)
                 : new MenuActivated(control.Focus.Label);
         }
         if (scope.EventType == 2 && context.Controls.TryGetValue(1, out var back))
@@ -1435,6 +1864,301 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             return new MenuActivated(back.Focus.Label);
         }
         return scope.Focus.Count > 0 ? FinalizeCallbackFocus(scope) : null;
+    }
+
+    /// <summary>Movies input 0x1D83C0: decide on the focused row stores it at node + 0x2C8 and asks
+    /// for playback (PlayMovieScene 0x1C shows only the video); key 8 and Cancel ask for Back.</summary>
+    private AccessibilityEvent? FinalizeMoviesCallback(CallbackScope scope)
+    {
+        var context = scope.Context;
+        if (scope.EventType == 0 && context.Controls.TryGetValue(scope.Action, out var control))
+        {
+            if (!TryReadContextFocusAtEntry(scope, out var entryKey))
+            {
+                FailCoverage("Movies callback entry focus is unavailable.");
+                return null;
+            }
+            if (entryKey != scope.Action)
+            {
+                return FinalizeCallbackFocus(scope);
+            }
+            return scope.Action < MovieCount
+                ? new MenuUnsupported(control.Focus.Label, NoVideoDescription, MoviesReturn)
+                : new MenuActivated(control.Focus.Label);
+        }
+        if (scope.EventType == 2 && TryGetControlAtPosition(context, MovieCount + 1, out var back))
+        {
+            return new MenuActivated(back.Focus.Label);
+        }
+        return scope.Focus.Count > 0 ? FinalizeCallbackFocus(scope) : null;
+    }
+
+    /// <summary>Sound input 0x1D9F70: decide on a track plays it and 0x1DA600 localizes "Now
+    /// Playing" and the title into the two labels it shows; Cancel while playing stops the track
+    /// through 0x1DA820, which restores the StatusBar instruction; otherwise Cancel and key 65
+    /// ask for Back.</summary>
+    private AccessibilityEvent? FinalizeSoundCallback(CallbackScope scope)
+    {
+        var context = scope.Context;
+        if (scope.EventType == 0 && context.Controls.TryGetValue(scope.Action, out var control))
+        {
+            if (!TryReadContextFocusAtEntry(scope, out var entryKey))
+            {
+                FailCoverage("Sound callback entry focus is unavailable.");
+                return null;
+            }
+            if (entryKey != scope.Action)
+            {
+                return FinalizeCallbackFocus(scope);
+            }
+            if (scope.Action >= TrackCount)
+            {
+                return new MenuActivated(control.Focus.Label);
+            }
+            if (!TryReadTitleId(SoundPage, scope.Action, out var titleId))
+            {
+                FailCoverage($"Sound title table row {scope.Action} is unreadable.");
+                return null;
+            }
+            // 0x1DA600 pads "Now Playing" with leading spaces (0xAFCB0) and the update 0x1DA9B0
+            // animates trailing dots; the words are the localized message itself.
+            var nowPlaying = new LocalizedKey(0x1A, 0x46);
+            var title = new LocalizedKey(SoundPage.TitleBank, titleId);
+            if (!TryRequireOnly(scope.Text, [nowPlaying, title], out var values, out _, out var error))
+            {
+                FailCoverage($"Sound did not show exactly Now Playing and track {scope.Action + 1}'s title: {error}");
+                return null;
+            }
+            if (!TryReadByte(context.Node + SoundPlayingOffset, out var playing) || playing != 1)
+            {
+                FailCoverage($"Sound track {scope.Action + 1} did not enter the playing state.");
+                return null;
+            }
+            context.SoundPlaying = true;
+            return new MenuNoticePresented(OwnerOf(context), [values[nowPlaying], values[title]]);
+        }
+        if (scope.EventType == 2)
+        {
+            if (scope.Request.SoundWasPlaying)
+            {
+                return FinishSoundIdle(context, scope.Text, "Sound Cancel while playing");
+            }
+            return TryGetControlAtPosition(context, TrackCount + 1, out var back)
+                ? new MenuActivated(back.Focus.Label)
+                : null;
+        }
+        return scope.Focus.Count > 0 ? FinalizeCallbackFocus(scope) : null;
+    }
+
+    /// <summary>Illustrations input 0x1D6160: decide on the focused row opens the viewer 0x1D6390,
+    /// which draws only the picture and gives it one control focused at key 0 on its own
+    /// manager; key 16 and Cancel ask for Back.</summary>
+    private AccessibilityEvent? FinalizeIllustrationsCallback(CallbackScope scope)
+    {
+        var context = scope.Context;
+        if (scope.EventType == 0 && context.Controls.TryGetValue(scope.Action, out var control))
+        {
+            if (!TryReadContextFocusAtEntry(scope, out var entryKey))
+            {
+                FailCoverage("Illustrations callback entry focus is unavailable.");
+                return null;
+            }
+            if (entryKey != scope.Action)
+            {
+                return FinalizeCallbackFocus(scope);
+            }
+            if (scope.Action >= IllustrationCount)
+            {
+                return new MenuActivated(control.Focus.Label);
+            }
+            var viewerFocus = scope.Focus.Where(item => item.Manager != context.Manager).ToArray();
+            var viewerBindings = scope.Bindings.Where(item => item.Manager != context.Manager).ToArray();
+            if (viewerFocus.Length != 1 || viewerFocus[0].Key != 0 ||
+                viewerBindings.Length != 1 || viewerBindings[0].Manager != viewerFocus[0].Manager ||
+                viewerBindings[0].Key != 0 || scope.ConstructedControls.Count != 1 ||
+                !scope.ConstructedControls.Contains(viewerBindings[0].Control) ||
+                scope.Focus.Any(item => item.Manager == context.Manager) ||
+                scope.Bindings.Any(item => item.Manager == context.Manager))
+            {
+                FailCoverage("The illustration viewer did not open as one control focused at key 0 on its own manager.");
+                return null;
+            }
+            context.Viewer = new ViewerState(viewerFocus[0].Manager, scope.Action);
+            return new MenuUnsupported(control.Focus.Label, NoImageDescription, IllustrationReturn);
+        }
+        if (scope.EventType == 2 && TryGetControlAtPosition(context, IllustrationCount + 1, out var back))
+        {
+            return new MenuActivated(back.Focus.Label);
+        }
+        return scope.Focus.Count > 0 ? FinalizeCallbackFocus(scope) : null;
+    }
+
+    private static bool TryGetControlAtPosition(ActiveContext context, int position, out RuntimeControl control)
+    {
+        var matches = context.Controls.Values.Where(item => item.Focus.Position == position).ToArray();
+        control = matches.Length == 1 ? matches[0] : null!;
+        return matches.Length == 1;
+    }
+
+    /// <summary>0x1DA820 restores the StatusBar instruction (0x1A, 0x3D) and clears both Now
+    /// Playing labels and the playing byte.</summary>
+    private AccessibilityEvent? FinishSoundIdle(ActiveContext context, IReadOnlyList<TextObservation> text, string what)
+    {
+        if (!TryRequireOnly(text, [new LocalizedKey(0x1A, 0x3D)], out _, out var instruction, out var error) ||
+            !TryReadByte(context.Node + SoundPlayingOffset, out var playing) || playing != 0)
+        {
+            FailCoverage($"{what} did not return to the idle Sound page: {error}");
+            return null;
+        }
+        context.SoundPlaying = false;
+        return new MenuNoticePresented(OwnerOf(context), [instruction]);
+    }
+
+    /// <summary>
+    /// The illustration viewer's own input 0x1D6890 closes it on decide or cancel: it removes the
+    /// picture and its control, restores the list focus (0x1DD5F0) and re-enables the list.
+    /// </summary>
+    private void HandleViewerCallback(nint closure, int eventType, Action invokeOriginal)
+    {
+        var instrument = TryCaptureActiveEpoch(out var epoch);
+        ActiveContext? viewerContext = null;
+        CallbackScope? scope = null;
+        string? setupError = null;
+        if (instrument)
+        {
+            try
+            {
+                if (threadCallbackScope is not null)
+                {
+                    throw new InvalidOperationException("A nested Extras callback observation was attempted.");
+                }
+                var context = GetActiveContext();
+                if (context is { Surface: Surface.Illustrations, Viewer: { } viewer })
+                {
+                    if (!TryReadPointer((nuint)closure + 4, out var node) || node != context.Node ||
+                        !TryReadPointer((nuint)closure + 0x0C, out var manager) || manager != viewer.Manager)
+                    {
+                        throw new InvalidOperationException(
+                            "Illustration viewer callback closure does not name the open viewer and its page.");
+                    }
+                    viewerContext = context;
+                    scope = new CallbackScope(this, epoch, context, eventType, -1);
+                    threadCallbackScope = scope;
+                }
+            }
+            catch (Exception exception)
+            {
+                setupError = FormatException(exception);
+            }
+        }
+
+        try
+        {
+            invokeOriginal();
+        }
+        finally
+        {
+            if (ReferenceEquals(threadCallbackScope, scope))
+            {
+                threadCallbackScope = null;
+            }
+        }
+
+        if (!instrument)
+        {
+            return;
+        }
+        RunInstrumentationSafely(epoch, "Illustration viewer post-capture failed", () =>
+        {
+            if (setupError is not null)
+            {
+                FailCoverage($"Illustration viewer callback validation failed: {setupError}");
+                return;
+            }
+            if (viewerContext is null || eventType is not (0 or 2))
+            {
+                return;
+            }
+            if (!ReferenceEquals(GetActiveContext(), viewerContext) || scope!.Errors.Count > 0 ||
+                !TryReadInt32(viewerContext.Manager + ManagerFocusKeyOffset, out var focusedKey) ||
+                !viewerContext.Controls.TryGetValue(focusedKey, out var focused))
+            {
+                FailCoverage(scope?.Errors.FirstOrDefault() ??
+                    "The illustration list did not regain one captured focused row when its viewer closed.");
+                return;
+            }
+            viewerContext.Viewer = null;
+            dispatcher.Publish(ToPresented(viewerContext, focused.Focus, [viewerContext.StatusText]));
+        });
+    }
+
+    /// <summary>
+    /// The Sound page's update 0x1DA9B0 calls the idle state 0x1DA820 when the track ends. Calls
+    /// from the builder or from a Cancel callback are read by those scopes instead.
+    /// </summary>
+    private void HandleSoundIdle(nint node, Action invokeOriginal)
+    {
+        var instrument = TryCaptureActiveEpoch(out var epoch);
+        IdleScope? scope = null;
+        string? setupError = null;
+        if (instrument && GetActiveTextScope() is null)
+        {
+            try
+            {
+                var context = GetActiveContext();
+                if (context is { Surface: Surface.Sound, SoundPlaying: true } && context.Node == (nuint)node)
+                {
+                    if (!TryValidateActiveContext(context, out var error))
+                    {
+                        throw new InvalidOperationException(error);
+                    }
+                    scope = new IdleScope(this, epoch, context);
+                    threadIdleScope = scope;
+                }
+            }
+            catch (Exception exception)
+            {
+                setupError = FormatException(exception);
+            }
+        }
+
+        try
+        {
+            invokeOriginal();
+        }
+        finally
+        {
+            if (scope is not null && ReferenceEquals(threadIdleScope, scope))
+            {
+                threadIdleScope = null;
+            }
+        }
+
+        if (!instrument || (scope is null && setupError is null))
+        {
+            return;
+        }
+        RunInstrumentationSafely(epoch, "Sound idle post-capture failed", () =>
+        {
+            if (scope is null)
+            {
+                FailCoverage($"Sound idle observation could not start: {setupError}");
+                return;
+            }
+            if (scope.Errors.Count > 0)
+            {
+                FailCoverage(scope.Errors[0]);
+                return;
+            }
+            if (!ReferenceEquals(GetActiveContext(), scope.Context))
+            {
+                return;
+            }
+            if (FinishSoundIdle(scope.Context, scope.Text, "The finished Sound track") is { } idle)
+            {
+                dispatcher.Publish(idle);
+            }
+        });
     }
 
     private AccessibilityEvent? FinalizeCallbackFocus(CallbackScope scope)
@@ -1574,9 +2298,12 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             error = string.Empty;
             return true;
         }
+        // The Illustrations closure keeps its container at +8 for the viewer (0x1D623A) and its
+        // control vector at +0xC; every other page keeps {manager, node, vector}.
+        var vectorOffset = context.Surface == Surface.Illustrations ? 0x0Cu : 0x08u;
         if (!TryReadPointer(closure, out var manager) || manager != context.Manager ||
             !TryReadPointer(closure + 4, out var nodePointer) || nodePointer != context.Node ||
-            !TryReadPointer(closure + 8, out var vector) || vector == 0)
+            !TryReadPointer(closure + vectorOffset, out var vector) || vector == 0)
         {
             error = $"{context.Surface} callback closure manager/node/vector does not match the active capture.";
             return false;
@@ -1653,29 +2380,47 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage(scope.Errors[0]);
             return;
         }
-        if (scope.Source == Surface.EndingLog && scope.Action == 4)
+        switch (scope.Plan.Kind)
         {
-            if (!scope.NestedSwitchStarted || scope.Text.Count != 0)
-            {
-                FailCoverage(
-                    "Ending Log Back did not complete through one exact nested Hub switch without outer title observations.");
+            case TransitionKind.Leaving:
+                // Hub Back: NextScene(-1) replaces the Gallery with the title; its teardown
+                // clears the page through onExit and the destructors.
                 return;
-            }
-        }
-        else
-        {
-            if (!TryResolveDirectTransitionTitle(scope, out var title, out var titleError) ||
-                scope.Pending is null || !string.Equals(scope.Pending.Title, title, StringComparison.Ordinal))
-            {
-                FailCoverage(string.IsNullOrWhiteSpace(titleError)
-                    ? $"{scope.Target} transition title no longer matches its exact pending target."
-                    : titleError);
+            case TransitionKind.Suspending:
+                // Movie playback or the ending replay: the page stays until the pushed scene
+                // calls onExit, and the same node's onEnter rebuilds it when the scene pops.
+                // A retired source means an earlier dispatcher replaced the page first; the push
+                // then exits whichever page is attached, and that page is the one that re-enters.
+                var source = GetActiveContext();
+                if (scope.SourceWasActive &&
+                    (source is null || source.Surface != scope.Source || source.Scene != scope.Scene ||
+                     !source.SuspendRequested))
+                {
+                    FailCoverage($"{scope.Source} did not keep its exact page while the game started its playback.");
+                }
                 return;
-            }
+            case TransitionKind.NestedSwitch:
+                if (!scope.NestedSwitchStarted || scope.Text.Count != 0)
+                {
+                    FailCoverage(
+                        $"{scope.Source} did not complete through its one planned nested Gallery switch without outer title observations.");
+                    return;
+                }
+                break;
+            default:
+                if (!TryResolveDirectTransitionTitle(scope, out var title, out var titleError) ||
+                    scope.Pending is null || !string.Equals(scope.Pending.Title, title, StringComparison.Ordinal))
+                {
+                    FailCoverage(string.IsNullOrWhiteSpace(titleError)
+                        ? $"{scope.Target} transition title no longer matches its exact pending target."
+                        : titleError);
+                    return;
+                }
+                break;
         }
         var pending = scope.Pending;
         var completed = scope.Completed;
-        var expectedPendingAction = scope.Source == Surface.EndingLog && scope.Action == 4 ? 0 : scope.Action;
+        var expectedPendingAction = scope.Plan.Kind == TransitionKind.NestedSwitch ? scope.Plan.SwitchAction : scope.Action;
         if (pending is null || completed is null || pending.Epoch != scope.Epoch ||
             pending.Scene != scope.Scene || pending.Surface != scope.Target ||
             pending.Action != expectedPendingAction ||
@@ -1723,9 +2468,11 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             error = $"{scope.Target} transition final manager focus does not match the exact published target focus.";
             return false;
         }
-        if (scope.Source == Surface.EndingLog && scope.Action == 4 && focusedKey != 3)
+        // The Hub constructor 0x1DB370 takes its first focus in ECX: 3 from the Ending Log's
+        // switchNode(0, 3), 0 from Movies' switchNode(0, 0), 2 and 1 from Sound and Illustrations.
+        if (scope.Plan.FinalFocusKey is { } expected && focusedKey != expected)
         {
-            error = "Ending Log Back did not restore Hub manager key 3 from its exact action 0/raw word 3 switch.";
+            error = $"{scope.Source} Back did not restore Hub manager key {expected}.";
             return false;
         }
         error = string.Empty;
@@ -1737,6 +2484,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         lock (stateGate)
         {
             active = context;
+            suspended = null;
         }
         PublishOrDefer(presented);
     }
@@ -1800,11 +2548,40 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage($"{boundary} matched the active pointer but not its audited pre-original vtable.");
             return;
         }
-        ClearMatchingContext(context);
+        ClearMatchingContext(context, fromExit: true);
+    }
+
+    private void ClearMatchingNodeOfAny(nuint node, IReadOnlyList<uint> sharedVtableRvas, string boundary)
+    {
+        ForgetSuspended(node);
+        var context = GetActiveContext();
+        if (context is null || context.Node != node)
+        {
+            return;
+        }
+        var expected = ExpectedVtable(context.Surface);
+        if (!sharedVtableRvas.Contains(expected) || !TryReadExactVtable(node, expected))
+        {
+            FailCoverage($"{boundary} matched the active pointer but not one of its exact shared surface vtables.");
+            return;
+        }
+        ClearMatchingContext(context, fromExit: false);
+    }
+
+    private void ForgetSuspended(nuint node)
+    {
+        lock (stateGate)
+        {
+            if (suspended?.Node == node)
+            {
+                suspended = null;
+            }
+        }
     }
 
     private void ClearMatchingNode(nuint node, uint expectedVtableRva, string boundary)
     {
+        ForgetSuspended(node);
         var context = GetActiveContext();
         if (context is null || context.Node != node)
         {
@@ -1816,10 +2593,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             FailCoverage($"{boundary} matched the active pointer but not its exact surface/vtable identity.");
             return;
         }
-        ClearMatchingContext(context);
+        ClearMatchingContext(context, fromExit: false);
     }
 
-    private void ClearMatchingContext(ActiveContext context)
+    private void ClearMatchingContext(ActiveContext context, bool fromExit)
     {
         var cleared = false;
         lock (stateGate)
@@ -1828,6 +2605,14 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             {
                 active = null;
                 cleared = true;
+                if (fromExit)
+                {
+                    // A pushed scene (movie or ending replay) calls onExit on whichever page is
+                    // attached, even one a later dispatcher built first, and popping re-enters
+                    // that same node. A removed page is destroyed instead and never re-enters.
+                    context.SuspendRequested = false;
+                    suspended = context;
+                }
             }
         }
         if (cleared)
@@ -1853,6 +2638,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         lock (stateGate)
         {
             active = null;
+            suspended = null;
+            dispatchQueues.Clear();
         }
     }
 
@@ -1882,6 +2669,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         if (ReferenceEquals(threadCallbackScope?.Owner, this)) threadCallbackScope = null;
         if (ReferenceEquals(threadTransitionScope?.Owner, this)) threadTransitionScope = null;
         if (ReferenceEquals(threadPendingNode?.Owner, this)) threadPendingNode = null;
+        if (ReferenceEquals(threadIdleScope?.Owner, this)) threadIdleScope = null;
     }
 
     private TextScope? GetActiveTextScope()
@@ -1890,8 +2678,12 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         if (ReferenceEquals(threadSwitchScope?.Owner, this)) return threadSwitchScope;
         if (GetOwnedTransitionScope() is { } transition) return transition;
         if (GetOwnedCallbackScope() is { } callback) return callback;
+        if (ReferenceEquals(threadIdleScope?.Owner, this)) return threadIdleScope;
         return null;
     }
+
+    private ControlScope? GetOwnedControlSink() =>
+        GetOwnedBuildScope() is { } build ? build : GetOwnedCallbackScope();
 
     private BuildScope? GetOwnedBuildScope() =>
         ReferenceEquals(threadBuildScope?.Owner, this) ? threadBuildScope : null;
@@ -1902,16 +2694,20 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
     private TransitionScope? GetOwnedTransitionScope() =>
         ReferenceEquals(threadTransitionScope?.Owner, this) ? threadTransitionScope : null;
 
+    /// <summary>GalleryScene::switchNode 0x2A52B0 builds one page per action.</summary>
     private static bool TryMapAction(int action, out Surface surface)
     {
         surface = action switch
         {
             0 => Surface.Hub,
+            1 => Surface.Movies,
+            2 => Surface.Sound,
             3 => Surface.EndingLog,
             4 => Surface.EndingDetail,
+            5 => Surface.Illustrations,
             _ => default,
         };
-        return action is 0 or 3 or 4;
+        return action is >= 0 and <= 5;
     }
 
     private static uint ExpectedVtable(Surface surface) => surface switch
@@ -1919,7 +2715,19 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         Surface.Hub => ExtrasHubVtableRva,
         Surface.EndingLog => EndingLogVtableRva,
         Surface.EndingDetail => EndingDetailVtableRva,
+        Surface.Movies => MoviesVtableRva,
+        Surface.Sound => SoundVtableRva,
+        Surface.Illustrations => IllustrationsVtableRva,
         _ => throw new ArgumentOutOfRangeException(nameof(surface)),
+    };
+
+    /// <summary>The Gallery title switchNode shows for a media page (extra.txt).</summary>
+    private static LocalizedKey? PageTitleKey(Surface surface) => surface switch
+    {
+        Surface.Movies => new LocalizedKey(0x1A, 0x43),
+        Surface.Sound => new LocalizedKey(0x1A, 0x44),
+        Surface.Illustrations => new LocalizedKey(0x1A, 0x45),
+        _ => null,
     };
 
     private bool TryRequireExactBindings(
@@ -2166,6 +2974,13 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         public List<string> Errors { get; } = [];
     }
 
+    /// <summary>A scope that also records CustomButton construction and manager bindings.</summary>
+    private abstract class ControlScope(ExtrasHookSet owner) : TextScope(owner)
+    {
+        public OrderedSet<nuint> ConstructedControls { get; } = new();
+        public List<Binding> Bindings { get; } = [];
+    }
+
     private sealed class SwitchScope(
         ExtrasHookSet owner,
         int epoch,
@@ -2183,20 +2998,21 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         ExtrasHookSet owner,
         int epoch,
         Surface source,
-        Surface target,
+        TransitionPlan plan,
         int action,
         nuint scene,
-        int selectedEnding,
-        LocalizedKey? expectedTitle) : TextScope(owner)
+        int selectedEnding) : TextScope(owner)
     {
         public int Epoch { get; } = epoch;
         public Surface Source { get; } = source;
-        public Surface Target { get; } = target;
+        public TransitionPlan Plan { get; } = plan;
+        public Surface? Target => Plan.Target;
         public int Action { get; } = action;
         public nuint Scene { get; } = scene;
         public int SelectedEnding { get; } = selectedEnding;
-        public LocalizedKey? ExpectedTitle { get; } = expectedTitle;
+        public LocalizedKey? ExpectedTitle => Plan.ExpectedTitle;
         public bool NestedSwitchStarted { get; set; }
+        public bool SourceWasActive { get; init; }
         public PendingNode? Pending { get; set; }
         public CompletedBuild? Completed { get; set; }
     }
@@ -2205,17 +3021,15 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         ExtrasHookSet owner,
         int epoch,
         Surface surface,
-        PendingNode pending) : TextScope(owner)
+        PendingNode pending) : ControlScope(owner)
     {
         public int Epoch { get; } = epoch;
         public Surface Surface { get; } = surface;
         public PendingNode Pending { get; } = pending;
-        public OrderedSet<nuint> ConstructedControls { get; } = new();
-        public List<Binding> Bindings { get; } = [];
         public List<FocusObservation> Focus { get; } = [];
     }
 
-    private sealed class CallbackScope : TextScope
+    private sealed class CallbackScope : ControlScope
     {
         public CallbackScope(
             ExtrasHookSet owner,
@@ -2237,6 +3051,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             {
                 EntryFocusKey = entryFocus;
             }
+            // 0x1D9F70 decides Cancel by the playing byte at entry: stop the track, or go Back.
+            var wasPlaying = context.Surface == Surface.Sound &&
+                owner.TryReadByte(context.Node + SoundPlayingOffset, out var playing) && playing != 0;
+            Request = new TransitionRequest(context, epoch, eventType, action, EntryFocusKey, wasPlaying);
         }
 
         public int Epoch { get; }
@@ -2244,10 +3062,17 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         public int EventType { get; }
         public int Action { get; }
         public int EntryFocusKey { get; }
+        public TransitionRequest Request { get; }
+        public bool RequestConsumed { get; set; }
         public List<FocusObservation> Focus { get; } = [];
         public List<AccessibilityEvent> DeferredEvents { get; } = [];
         public MenuOwner? ExitOwner { get; set; }
-        public bool ReviewTransitionObserved { get; set; }
+    }
+
+    private sealed class IdleScope(ExtrasHookSet owner, int epoch, ActiveContext context) : TextScope(owner)
+    {
+        public int Epoch { get; } = epoch;
+        public ActiveContext Context { get; } = context;
     }
 
     private sealed record PendingNode(
@@ -2263,6 +3088,68 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         BuildScope Build,
         ActiveContext Context,
         MenuPresented Presented);
+
+    /// <summary>The decide or cancel a page callback saw, which its deferred dispatcher must follow.</summary>
+    private sealed record TransitionRequest(
+        ActiveContext Context,
+        int Epoch,
+        int EventType,
+        int Action,
+        int EntryFocusKey,
+        bool SoundWasPlaying);
+
+    /// <summary>One scheduled dispatcher: the request, the action its payload carries, and what
+    /// the callback stored natively when it scheduled (Movies row +0x2C8, selected ending).</summary>
+    private sealed record QueuedDispatch(
+        TransitionRequest Request,
+        int DispatchAction,
+        int? MovieRow,
+        int? SelectedEnding);
+
+    private enum TransitionKind
+    {
+        Build,
+        NestedSwitch,
+        Suspending,
+        Leaving,
+    }
+
+    private sealed record TransitionPlan(
+        TransitionKind Kind,
+        Surface? Target,
+        LocalizedKey? ExpectedTitle,
+        int SwitchAction,
+        uint SwitchRaw,
+        int? FinalFocusKey)
+    {
+        public static TransitionPlan Leaving { get; } = new(TransitionKind.Leaving, null, null, -1, 0, null);
+        public static TransitionPlan Suspending { get; } = new(TransitionKind.Suspending, null, null, -1, 0, null);
+
+        public static TransitionPlan Build(Surface target, LocalizedKey title, int? finalFocusKey) =>
+            new(TransitionKind.Build, target, title, -1, 0, finalFocusKey);
+
+        public static TransitionPlan Switch(Surface target, int switchAction, uint raw, int? finalFocusKey) =>
+            new(TransitionKind.NestedSwitch, target, null, switchAction, raw, finalFocusKey);
+    }
+
+    private sealed record ViewerState(nuint Manager, int Row);
+
+    private sealed record MediaPage(
+        Surface Surface,
+        int Rows,
+        int TitleBank,
+        uint TitleTableRva,
+        int TitleStride,
+        LocalizedKey Status);
+
+    private static readonly MediaPage MoviesPage = new(
+        Surface.Movies, MovieCount, 0x10, MoviesTitleTableRva, MediaTableStride, new LocalizedKey(0x1A, 0x3B));
+
+    private static readonly MediaPage SoundPage = new(
+        Surface.Sound, TrackCount, 0x01, SoundTitleTableRva, SoundTableStride, new LocalizedKey(0x1A, 0x3D));
+
+    private static readonly MediaPage IllustrationsPage = new(
+        Surface.Illustrations, IllustrationCount, 0x10, IllustrationsTitleTableRva, MediaTableStride, new LocalizedKey(0x1A, 0x4E));
 
     private static MenuOwner OwnerOf(ActiveContext context) => new("Extras", (ulong)context.Node);
 
@@ -2285,6 +3172,10 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         public EndingLogSnapshot? EndingLog { get; init; }
         public EndingDetailSnapshot? EndingDetail { get; init; }
         public string BuilderTitle { get; init; } = string.Empty;
+        public string StatusText { get; init; } = string.Empty;
+        public bool SuspendRequested { get; set; }
+        public bool SoundPlaying { get; set; }
+        public ViewerState? Viewer { get; set; }
     }
 
     private sealed class OrderedSet<T> : IReadOnlyCollection<T>
@@ -2299,6 +3190,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
             ordered.Add(value);
             return true;
         }
+        public bool Contains(T value) => set.Contains(value);
         public bool SetEquals(IEnumerable<T> values) => set.SetEquals(values);
         public T[] ToArray() => ordered.ToArray();
         public IEnumerator<T> GetEnumerator() => ordered.GetEnumerator();
@@ -2316,5 +3208,8 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
         Hub,
         EndingLog,
         EndingDetail,
+        Movies,
+        Sound,
+        Illustrations,
     }
 }

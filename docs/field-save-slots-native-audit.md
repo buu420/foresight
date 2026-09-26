@@ -48,6 +48,22 @@ Save caption is loaded bank `0x23`, message `0x26`; Load is bank `0x41`, message
 builder explicitly pauses the submenu session before producing its own speech;
 returning to the file list presents the selected file again.
 
+### Save-list instruction, 0.3.32
+
+The Steam node creates its StatusBar through `0x22E500` during `0x218A20`
+and retains it at node `+0x2DC`. Capture verifies its vtable, visibility and
+ancestry, then reads the complete UTF-16 line vector at bar `+0x2D4/+0x2D8`.
+`0x22F160` stores those lines before `0x22F7B0` reveals individual characters,
+so narration does not stop at a partially animated instruction. A second read
+must agree on the bar and text. Missing, hidden, foreign, empty or changing
+instructions reject the snapshot through the existing retry path.
+
+The displayed instruction becomes part of the page title, including the native
+message when saving is unavailable. It is read when entering or returning to
+the list, rather than repeated for every file. Bookmark/Resume modes 2/3 hide
+this bar and remain handled by their confirmation reader. Eleven capture tests
+cover file details and this instruction behavior.
+
 ## Bounded rendered text
 
 `RenderedNodeTextCapture` only visits an independently identified selected card,

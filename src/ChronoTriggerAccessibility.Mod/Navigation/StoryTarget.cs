@@ -8,10 +8,10 @@ public static class StoryTarget
         IReadOnlyList<string> ids, NavigationPoint player, string? instruction = null)
     {
         var choices = available.Where(t => ids.Contains(t.Id)).ToArray();
-        // Prefer the currently rendered part of a multi-floor scene. Previously visited
-        // floors retain their discovery, but cannot displace the current staircase.
-        if (choices.Any(t => t.Visible)) choices = choices.Where(t => t.Visible).ToArray();
-        choices = choices.OrderBy(t => Math.Abs((double)t.Position.X - player.X) +
+        // Rendering is a useful ordering hint, not a reachability test. A camera can
+        // include an inaccessible landing while a valid passage is offscreen.
+        choices = choices.OrderByDescending(t => t.Visible)
+            .ThenBy(t => Math.Abs((double)t.Position.X - player.X) +
             Math.Abs((double)t.Position.Y - player.Y)).ToArray();
         var nearest = choices.FirstOrDefault();
         if (nearest is null) return Note("story:" + key, label,

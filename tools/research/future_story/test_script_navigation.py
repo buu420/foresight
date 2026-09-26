@@ -7,6 +7,84 @@ from script_navigation import paths, compare, intervals, coordinate_locals, regi
 
 
 class ScriptNavigationTests(unittest.TestCase):
+    def test_completed_helper_can_run_again_after_its_gate_changes(self):
+        code = bytes.fromhex('5600100002020356011000020203001610010004ca010000')
+        actions, complete = paths(code, [[0] * 16, [15] * 16], 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[])], actions)
+
+    def test_active_recursive_request_remains_bounded(self):
+        code = bytes.fromhex('020003ca010000')
+        actions, complete = paths(code, [[0] * 16], 0, budget=100)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[])], actions)
+
+    def test_join_cannot_suppress_a_request_visited_by_another_branch(self):
+        # A shared code suffix is also an actor function. Earlier traversal of
+        # that suffix is not an active recursive call. Both current paths must
+        # still be able to request it after their branch histories rejoin.
+        code = bytes.fromhex('1602010009ca0100160201000116010100020002020300')
+        actions, complete = paths(code, [[0] * 16, [5] * 16], 0)
+        self.assertTrue(complete)
+        for first in (0, 1):
+            for second in (0, 1):
+                values = {1: first, 2: second}
+                gives = any(a['Kind'] == 'Item' and all(
+                    compare(values[g['Index']], g['Value'], g['Operation']) == g['Expected']
+                    for g in a['Guards']) for a in actions)
+                self.assertEqual(second == 1 or first != 1, gives)
+
+    def test_actor_gate_uses_controller_coordinate_alias_without_becoming_an_encounter(self):
+        # The controller continuously reads leader X into local06. Checking its
+        # side of an object is a goal-position condition, not a live quest flag.
+        code = bytes.fromhex('1206110204d8010000')
+        actions, complete = paths(code, [], 0, initial_coordinates={6: 'X'})
+        self.assertTrue(complete)
+        self.assertEqual([], actions)
+        code = bytes.fromhex('1206110204ca010000')
+        actions, complete = paths(code, [], 0, initial_coordinates={6: 'X'})
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[guard('X', 6, 2, 17)])], actions)
+
+    def test_delegated_menu_only_handler_is_an_interaction(self):
+        code = bytes.fromhex('02020300c80000')
+        actors = [[0] * 16, [4] * 16]
+        actions, complete = paths(code, actors, 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Menu', Guards=[])], actions)
+
+    def test_unread_writes_do_not_multiply_equivalent_interaction_states(self):
+        # Blackbird restoration writes many save cells that no remaining gate
+        # reads. Their possible combinations cannot change the final pickup.
+        code = b''.join(bytes([0x16, i, 1, 0, 5, 0x56, 1, 100 + i, 0]) for i in range(12))
+        code += bytes.fromhex('ca010000')
+        actions, complete = paths(code, [], 0, budget=3000)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[])], actions)
+
+    def test_a_write_read_by_a_delegated_condition_is_not_discarded(self):
+        code = bytes.fromhex('56011000020203001610010005ca010000')
+        actions, complete = paths(code, [[0] * 16, [8] * 16], 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[])], actions)
+
+    def test_rejoined_unrelated_flags_do_not_exhaust_interaction_budget(self):
+        # Twelve independent flag checks all rejoin before a pickup. The game
+        # reaches it for every input; enumerating all 4,096 histories loses it.
+        code = b''.join(bytes([0x16, index, 1, 0, 3, 0xe8, 0]) for index in range(12))
+        code += bytes.fromhex('ca010000')
+        actions, complete = paths(code, [], 0, budget=3000)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[])], actions)
+
+    def test_join_keeps_branches_separate_when_their_local_effects_differ(self):
+        # If global10 == 1, local06 becomes 1; otherwise it becomes 0.
+        # Only the first path passes the local test and reaches the item.
+        code = bytes.fromhex('16100100064f010610044f00061206010005ca010000')
+        actions, complete = paths(code, [], 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Item', Guards=[guard('Global', 0x10, 0, 1)])], actions)
+
     def test_simplification_is_reproducible_across_hash_seeds(self):
         probe = '''import json
 from script_navigation import guard, simplify
@@ -100,10 +178,11 @@ print(json.dumps(simplify(rows), sort_keys=True))'''
         actions, complete = paths(bytes.fromhex('2200040621020406' + suffix), [], 0, {4: 'X', 6: 'Y'})
         self.assertTrue(complete)
         self.assertEqual([], next(a for a in actions if a['Kind'] == 'Warp')['Guards'])
-        # Touch handlers execute the read during interaction, not in the old frame.
+        # A fresh leader read in a talk/contact handler restricts the approach
+        # position too; it is not an old-frame scratch-cell availability test.
         actions, complete = paths(bytes.fromhex('22000406' + suffix), [], 0)
         self.assertTrue(complete)
-        self.assertEqual([], next(a for a in actions if a['Kind'] == 'Warp')['Guards'])
+        self.assertEqual('X', next(a for a in actions if a['Kind'] == 'Warp')['Guards'][0]['Source'])
 
     def test_a_room_controller_can_supply_a_pillars_coordinate_cells(self):
         code = bytes.fromhex('2200040600b2001204080008dd240001010100')

@@ -5,6 +5,8 @@ Only immediate comparisons audited in the PC handlers become availability gates.
 Input choices are possible user actions, never fabricated current input values.
 """
 from decode_verified import actor_ops, instruction, walk, CONDITIONAL
+import heapq
+import itertools
 
 
 def compare(value, rhs, op):
@@ -24,6 +26,34 @@ def intervals(values):
         else:
             result.append([value, value])
     return result
+
+
+def joined_guards(clauses, requirements):
+    """Admit a new path at an identical program state, merging proven joins.
+
+    A weaker clause covers a stronger one. Two clauses differing only in one
+    predicate's truth value cover their shared requirements. The caller keys
+    this set by PC, return stack and substitutions, so paths with different
+    effects or callers cannot be merged. No unrelated conditions are dropped.
+    """
+    clause = frozenset(tuple(g.values()) for g in requirements)
+    while True:
+        if any(prior <= clause for prior in clauses):
+            return None
+        merged = False
+        for prior in sorted(clauses, key=lambda c: sorted(c)):
+            left, right = clause - prior, prior - clause
+            if len(left) == len(right) == 1:
+                a, b = next(iter(left)), next(iter(right))
+                if a[:-1] == b[:-1] and a[-1] != b[-1]:
+                    clause &= prior
+                    merged = True
+                    break
+        if not merged:
+            break
+    clauses.difference_update(prior for prior in tuple(clauses) if clause < prior)
+    clauses.add(clause)
+    return tuple(guard(*g) for g in sorted(clause))
 
 
 def simplify(records):
@@ -86,13 +116,55 @@ def coordinate_locals(code, actors):
     return {key: next(iter(axes)) for key, axes in candidates.items() if len(axes) == 1 and key not in overwritten}
 
 
-def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnostic=None):
-    # Stack entries: pc, returns, visited locations, requirements, substitutions.
-    initial = {('Local', key): axis for key, axis in (coordinate_variables or {}).items()}
-    pending = [(start, (), frozenset(), (), initial)]
+def condition_variables(code, actors, start):
+    """Cells which can affect a gate, including every ordinary actor request.
+
+    Stores to other cells remain real game effects; they cannot affect this
+    compiler's emitted conditions. Excluding them from its abstract state avoids
+    enumerating combinations of equipment/restoration writes with no gate reads.
+    This is deliberately conservative across loops, overwrites and return paths.
+    """
+    pending, seen, variables = [start], set(), set()
+    while pending:
+        entry = pending.pop()
+        if entry in seen:
+            continue
+        seen.add(entry)
+        for op, a in walk(code, [entry]).values():
+            if a is None:
+                continue
+            if op in (2, 3, 4) and a[0] // 2 < len(actors):
+                pending.append(actors[a[0] // 2][a[1] & 15])
+            if op == 0x18:
+                variables.add(('Global', 0))
+            elif op in (0x12, 0x16, 0x6e):
+                source = 'Local' if op == 0x12 else 'Global' if op == 0x16 else 'Extra'
+                variables.add((source, a[0] + (256 if op == 0x16 and a[2] & 128 else 0)))
+            elif op == 0xc9:
+                variables.add(('ItemsChanged', 0))
+            elif op == 0xcc:
+                variables.add(('Gold', 0))
+            elif op in (0xcf, 0xd2):
+                variables.add(('PartyChanged', 0))
+    return variables
+
+
+def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnostic=None, initial_coordinates=None):
+    # Work entries: pc, active call frames, requirements, substitutions.
+    # Each frame is (resume PC, callee entry); a completed visit is not recursion.
+    initial = {('Local', key): axis for key, axis in (coordinate_variables or initial_coordinates or {}).items()}
+    read_variables = condition_variables(code, actors, start)
+    # Process earlier branch destinations before pushing their common suffix
+    # through the rest of the script. A depth-first stack exhausts every suffix
+    # for each stronger history before their common join can absorb them.
+    pending = []
+    sequence = itertools.count()
+    def enqueue(item):
+        heapq.heappush(pending, (item[0], len(item[2]), next(sequence), item))
+    enqueue((start, (), (), initial))
     output = []
     work = 0
-    seen = set()
+    seen = {}
     spatial = coordinate_variables is not None
     effects = {}
     def effectful(entry, visiting=frozenset()):
@@ -102,7 +174,7 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
             return True
         ops = walk(code, [entry])
         relevant = {0x3a, 0x45, 0x46, 0x56, 0x5a, 0x65, 0x66, 0xbb, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4,
-                    0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xd0, 0xd1, 0xd3, 0xd4, 0xd6, 0xd8, 0xe4, 0xe5, *range(0xdc, 0xe2)}
+                    0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xd0, 0xd1, 0xd3, 0xd4, 0xd6, 0xd8, 0xe4, 0xe5, *range(0xdc, 0xe2)}
         value = any(a is None or op in relevant for op, a in ops.values())
         if not value:
             value = any(effectful(actors[a[0] // 2][a[1] & 15], visiting | {entry})
@@ -110,20 +182,25 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
         effects[entry] = value
         return value
     while pending:
-        pc, returns, visited, guards, values = pending.pop()
+        pc, returns, guards, values = heapq.heappop(pending)[3]
         while 0 <= pc < len(code):
-            state = (pc, returns, tuple(sorted(tuple(g.values()) for g in guards)), tuple(sorted(values.items())))
-            if state in seen:
+            values = {key: value for key, value in values.items() if key in read_variables}
+            state = (pc, returns, tuple(sorted(values.items())))
+            joined = joined_guards(seen.setdefault(state, set()), guards)
+            if joined is None:
                 break
-            seen.add(state)
+            guards = joined
             work += 1
             if work > budget:
                 # An incomplete expansion must never masquerade as audited data.
                 if diagnostic is not None:
-                    diagnostic.append(dict(Reason='budget', Work=work, Pc=pc))
+                    from collections import Counter
+                    common = Counter(key[0] for key in seen).most_common(5)
+                    diagnostic.append(dict(Reason='budget', Work=work, Pc=pc,
+                        ProgramStates=len(seen), CommonLocations=common,
+                        StateSamples=[dict(Pc=k[0], Returns=k[1], Values=k[2], Clauses=len(v))
+                                      for k, v in seen.items() if k[0] == common[0][0]][:8]))
                 return [], False
-            key = (pc, returns)
-            visited = visited | {key}
             op, a = instruction(code, pc)
             if a is None:
                 if diagnostic is not None:
@@ -135,7 +212,8 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                     # Actor requests are scheduled concurrently. Completion may
                     # change shared locals through another actor's callback.
                     values = {k: None if k[0] == 'Local' else v for k, v in values.items()}
-                    pc, returns = returns[-1], returns[:-1]
+                    pc = returns[-1][0]
+                    returns = returns[:-1]
                     continue
                 break
             if op in (0x10, 0x11):
@@ -144,8 +222,8 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
             if op in (2, 3, 4) and a[0] // 2 < len(actors) and len(returns) < 4:
                 # These entry points may animate or perform the actual activation.
                 target = actors[a[0] // 2][a[1] & 15]
-                if effectful(target) and (target, returns) not in visited:
-                    returns += (next_pc,)
+                if effectful(target) and target != start and all(frame[1] != target for frame in returns):
+                    returns += ((next_pc, target),)
                     pc = target
                     continue
             if 2 <= op <= 7:
@@ -194,8 +272,9 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                                 if domain is not None and not any(all(compare(v, g['Value'], g['Operation']) == g['Expected']
                                                                       for g in related) for v in domain):
                                     continue
-                    branches.append((destination, returns, visited, new_guards, values.copy()))
-                pending.extend(branches)
+                    branches.append((destination, returns, new_guards, values.copy()))
+                for branch in branches:
+                    enqueue(branch)
                 break
             kind = None
             if op in (0xc7, 0xca, 0xcd):
@@ -260,8 +339,8 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
             elif op in (0x21, 0x22):
                 # Coordinate provenance is local to this path. Another actor's
                 # position or an overwritten scratch cell is not the player.
-                values[('Local', a[1])] = 'X' if spatial and op == 0x22 and a[0] == 0 else None
-                values[('Local', a[2])] = 'Y' if spatial and op == 0x22 and a[0] == 0 else None
+                values[('Local', a[1])] = 'X' if op == 0x22 and a[0] == 0 else None
+                values[('Local', a[2])] = 'Y' if op == 0x22 and a[0] == 0 else None
             elif op in (0xc7, 0xca, 0xcb):
                 values[('ItemsChanged', 0)] = True
             elif op in (0xcd, 0xce):

@@ -57,17 +57,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
             var description = FieldVisualLabels.Describe(actor);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
-            // Scene 131's PWHERE loop stores the player's X in local 6. The
-            // organ's local6 <= 17 guard describes its interaction side, not
-            // story progress. Evaluate that guard at a valid approach instead
-            // of removing the destination while the player is across the room.
-            var actionState = IsCathedralOrgan(actor) && story is not null
-                ? story with { Locals = new Dictionary<int, int>(story.Locals) { [6] = 17 } }
-                : story;
             var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
-                scriptInfo?.Actions.Any(a => a.Available(actionState)) == true;
+                scriptInfo?.Actions.Any(a => a.Available(story)) == true;
             var scriptedContact = scriptedAction &&
-                scriptInfo?.Actions.Any(a => a.Touch && a.Available(actionState) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
+                scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
             // These pickups have an initialization-time gate in addition to the
             // contact handler. Preserve the audited gate when the sprite lingers.
             if ((field.SceneId, actor.Index) is (8, 11) or (439, 15))
@@ -87,14 +80,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // same spot under a name that tells the player nothing.
             if (label is null && field.SceneIdCoherent && FieldActorProxies.IsProxy(field.SceneId, actor.Index) &&
                 field.Actors.Any(owner => InteractionProxy(owner)?.Index == actor.Index)) continue;
-            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(actionState)) != true &&
+            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
-            if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(actionState)) == true)
+            if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
+            approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
             if (touchOnly) touchGoals.Add((actor.Index, approaches));
-            if (IsCathedralOrgan(actor))
-                approaches = approaches.Where(p => p.X + NavigationUnits.LocalStep / 8 < 18 * 256).ToArray();
             Add(id, label ?? description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
                 guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction));
         }
@@ -133,6 +125,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
+            approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
             if (touch && actor.ScriptCallsEnabled) touchGoals.Add((actor.Index, approaches));
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
@@ -352,6 +345,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         /// <summary>One step away may be on the inaccessible side of a counter.
         /// Add in-range standing positions for actors; chests keep their separate rule.</summary>
+        IReadOnlyList<NavigationPoint> InteractionPositions(IReadOnlyList<NavigationPoint> points,
+            IReadOnlyList<GameNavigationCatalog.Action> actions, bool touch)
+        {
+            var current = actions.Where(a => a.Touch == touch && a.Available(story)).ToArray();
+            if (!current.Any(a => a.Guards.Any(g => g.Source is "X" or "Y"))) return points;
+            return points.Where(p => current.Any(a => a.AcceptsPosition(p.X, p.Y, NavigationUnits.LocalStep / 8))).ToArray();
+        }
+
         IReadOnlyList<NavigationPoint> ActorApproach(FieldActorSnapshot actor, NavigationPoint p)
         {
             var direct = Approach(p);
@@ -395,6 +396,34 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
         {
+            if (field.SceneId == 465 && actor.Index is >= 16 and <= 20)
+            {
+                // The clockwise lesson markers are native touch contacts, not
+                // tile-centre goals. In particular the west marker is in a wall.
+                // These standing points plus FutureStoryTargets' final directions
+                // satisfy 178980's scene465 radius224, including arrival tolerance.
+                var sx = (actor.FineX + 32) / 64 * 64;
+                var sy = (actor.FineY + 32) / 64 * 64;
+                if (actor.Index == 17) { sx += 256; sy -= 128; }
+                if (actor.Index == 18) sy += 64;
+                var dx = actor.Index == 17 ? -1 : actor.Index == 19 ? 1 : 0;
+                var dy = actor.Index == 20 ? 1 : dx == 0 ? -1 : 0;
+                // Check the live center/offset, strict native bounds and every
+                // corner of the arrival box. Do not inherit a static offset if
+                // the captured actor no longer satisfies the audited contact.
+                foreach (var ox in new[] { -32, 32 })
+                foreach (var oy in new[] { -32, 32 })
+                foreach (var step in new[] { 0, 32 })
+                {
+                    var px = sx + ox + dx * (step + 112);
+                    var py = sy + oy + dy * step - (dx != 0 ? 64 : dy < 0 ? 112 : 0);
+                    var carry = field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0;
+                    if (Math.Abs((long)actor.FineX - px - actor.CollisionOffsetX * 16 - 1) >= field.ActorCollisionRadius ||
+                        Math.Abs((long)actor.FineY - py - carry) >= (actor.ActivationEnabled == 0 ? field.ActorCollisionRadius : 224))
+                        return [];
+                }
+                return At(sx, sy).Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+            }
             // Scene 8's left pod marker sits at the bottom of a blocked map tile.
             // Its native contact reaches the floor below it. Aim eight pixels
             // below the live marker, aligned to the four-pixel routing lattice.

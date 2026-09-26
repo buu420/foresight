@@ -306,7 +306,10 @@ public sealed class BonusStoryObjectivesTests
         var door = GameNavigationCatalog.ForScene(618)!.Actors.Single(a => a.Id == 13);
         Assert.True(door.Marker && door.Touch);
         Assert.Contains(door.Actions, a => a.Touch && a.Available(State((0x2A, 1))));
-        Assert.DoesNotContain(door.Actions, a => a.Available(State((0x2A, 0))));
+        // The full compiler now retains the door animation before E2A&01.
+        // That terrain copy is legal without the lockdown dialogue/transfer.
+        Assert.Contains(door.Actions, a => a.Kind == "Terrain" && a.Available(State((0x2A, 0))));
+        Assert.DoesNotContain(door.Actions, a => a.Kind is "Talk" or "Warp" && a.Available(State((0x2A, 0))));
         var console = GameNavigationCatalog.ForScene(622)!.Actors.Single(a => a.Id == 8);
         Assert.Contains(console.Actions, a => !a.Touch && a.Kind == "Switch" && a.Available(State((0x2A, 0x12))));
         Assert.DoesNotContain(console.Actions, a => a.Available(State((0x2A, 0x1A))));

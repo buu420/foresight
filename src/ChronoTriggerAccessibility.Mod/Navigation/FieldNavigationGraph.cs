@@ -10,7 +10,7 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     IReadOnlyList<NavigationPoint>? selectedGoals = null) : INavigationGraph
 {
     private readonly HashSet<int> contactDestinations = selectedGoals is { Count: > 0 } && touchGoals is not null
-        ? touchGoals.Where(t => selectedGoals.All(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
+        ? touchGoals.Where(t => selectedGoals.Any(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
 
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         touchGoals is { Count: > 0 } ? new FieldNavigationGraph(map, actors, touchGoals, goals) : this;

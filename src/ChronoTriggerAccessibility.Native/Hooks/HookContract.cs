@@ -156,6 +156,25 @@ public enum HookId
     TimeGaugeSceneUpdate,
     ShopSceneUpdate,
     ShopSceneDestructor,
+    EndingResultDialogBuilder,
+    SaveEndingResultSceneDestructor,
+    EndingConfirmationBuilder,
+    EndingSavingNotice,
+    EndingSaveCompleteNotice,
+    SaveLoadNoticeWindow,
+    SteamSettingsRestartNotice,
+    GalleryHubDispatch,
+    GalleryMoviesDispatch,
+    GallerySoundBack,
+    GalleryIllustrationsBack,
+    ExtrasMoviesOnEnter,
+    ExtrasSoundOnEnter,
+    ExtrasIllustrationsOnEnter,
+    ExtrasMoviesCallback,
+    ExtrasSoundCallback,
+    ExtrasIllustrationsCallback,
+    ExtrasIllustrationViewerCallback,
+    ExtrasSoundIdle,
 }
 
 public enum X86CallingConvention
@@ -172,6 +191,57 @@ public delegate void ShopSceneUpdateDelegate(nint scene, float deltaSeconds);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint ShopSceneDestructorDelegate(nint scene, uint deletingFlags);
+
+// SaveEndingResultScene (scene 0x1B) message window at RVA 0x2B1390. Callers: the first-clear
+// message 0x2B0CF0, the ending result 0x2B0F30, the Dreamseeker message 0x2B1150 and the
+// "Save failed." path 0x2B1B40. ECX is the scene; [EBP+8] is the composed MSVC UTF-8 message,
+// which 0x2B06B0 splits on 0x5C into one label per line; [EBP+0xC] is the continuation
+// std::function the shared window factory 0x23D520 runs on confirm. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingResultDialogBuilderDelegate(nint scene, nint text, nint continuation);
+
+// SaveEndingResultScene deleting destructor, vtable slot 0 at RVA 0x2B09F0. It reinstalls the
+// class vtable (RVA 0x3B34D8) at 0x2B0A16, frees the 0x2D8-byte object when bit 0 is set, and
+// returns the scene. RET 4.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint SaveEndingResultSceneDestructorDelegate(nint scene, uint deletingFlags);
+
+// SaveEndingResultScene Yes/No window at RVA 0x2B2200, called by "Save game completion data?"
+// 0x2B1620, "Return to the title screen?" 0x2B19A0 and "Overwrite existing save data?" 0x2B1A70.
+// ECX is the scene (kept at [EBP-0x48]); [EBP+8] the container node scene + 0x29C; [EBP+0xC] the
+// localized prompt, rendered by 0x2B06B0; [EBP+0x10] the std::function<void(int)> that receives
+// the chosen key. Buttons come from 0x2B25C0 and focus key 1 is set by the call at 0x2B22E1. RET 0xC.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingConfirmationBuilderDelegate(nint scene, nint container, nint prompt, nint callback);
+
+// SaveEndingResultScene "Saving data." notice at RVA 0x2B1F10, reached through _Do_call 0x2B3160
+// (ADD ECX,4) of the lambda built by the save gate 0x2B1E20. ECX is that capture: +0 the gate
+// node, +4 the scene. The stack holds the gate window's nsInput::Manager and close function. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingSavingNoticeDelegate(nint capture, nint manager, nint close);
+
+// SaveEndingResultScene "Save complete." notice at RVA 0x2B2020, reached through _Do_call 0x2B31A0
+// (ADD ECX,4) half a second after 0x2B1F10. ECX is that capture: +0 the "Saving data." text node,
+// which it removes first, +4 the gate node, +8 the scene. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void EndingSaveCompleteNoticeDelegate(nint capture);
+
+// nsMenu::MenuNodeSaveLoadSteam notice window at RVA 0x21AA40. ECX is the node; [EBP+8] is the
+// MSVC UTF-8 text, split on 0x5C by 0x40FC80 into one font-0x0C label per line. The confirmation
+// builder 0x21A1D0 draws its prompt with it; 0x21AFC0, 0x21B5C0, 0x21B420, 0x21D4E0 and 0x21D880
+// draw the saving, loading, completion and bookmark notices. Returns the text pointer in EAX
+// (0x21AEDF). RET 4.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint SaveLoadNoticeWindowDelegate(nint node, nint text);
+
+// nsMenu::MenuNodeConfigSteam restart notice at RVA 0x1F52C0, called by the category callback
+// 0x1F0000 (0x1F00AF) and 0x1F0280 (0x1F0302) when the screen mode or size differs from the saved
+// one. ECX is the node (kept at [EBP-0x3C], window added to it at 0x1F545D); [EBP+8] is the
+// node's layer at +0x290 that receives the dimming backdrop. It resolves (0x3A, 1) from
+// msg/resolution.txt (0x1F5403), draws it through 0x2B06B0 (0x1F5410) and builds the shared
+// one-control window 0x23D520 (0x1F5455), whose callback 0x1FC240 calls Director::end. RET 4.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void SteamSettingsRestartNoticeDelegate(nint node, nint backdropParent);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate byte SaveSlotOpenDelegate(nint node, int mode, int showBack);
@@ -391,6 +461,70 @@ public delegate void ExtrasLogTransitionDelegate(nint payload);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate void ExtrasDetailTransitionDelegate(nint payload);
+
+// GalleryScene deferred Hub action at RVA 0x2A5650, reached one frame after the Hub callback
+// through 0x2A5590 → Sequence → _Do_call 0x2A73C0. ECX is the lambda capture {Hub key, scene}.
+// Key 0 switches to Movies (switchNode(1, 0) at 0x2A5699); keys 1, 2 and 3 construct
+// Illustrations (0x1D5090), Sound (0x1D8ED0) and the Ending Log (0x1D3820) directly and attach
+// them with 0x2A5270; key 4 calls NextScene(-1) (0x2A5981). RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void GalleryHubDispatchDelegate(nint payload);
+
+// GalleryScene deferred Movies action at RVA 0x2A5A80 (_Do_call 0x2A7330). ECX is {action,
+// scene}: 0 calls NextScene(0), which pushes PlayMovieScene 0x1C (0x29820B); 4 detaches the page
+// and attaches switchNode(0, 0) (0x2A5ABB). RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void GalleryMoviesDispatchDelegate(nint payload);
+
+// GalleryScene deferred Sound Back at RVA 0x2A5BD0 (_Do_call 0x2A72A0). ECX is {scene}. It
+// constructs the Hub directly with focus 2 (0x2A5C3E), titles it (0x41, 6) and attaches it. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void GallerySoundBackDelegate(nint payload);
+
+// GalleryScene deferred Illustrations Back at RVA 0x2A6D30 (_Do_call 0x2A7100). ECX is {scene}.
+// It constructs the Hub directly with focus 1 (0x2A6D9E), titles it (0x41, 6) and attaches it. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void GalleryIllustrationsBackDelegate(nint payload);
+
+// GalleryNodeMovieTop::onEnter, vtable slot 99 at RVA 0x1D7370: Node::onEnter, then the builder
+// 0x1D7390 with the row at node + 0x2C8. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasMoviesOnEnterDelegate(nint node);
+
+// GalleryNodeSoundTop::onEnter, vtable slot 99 at RVA 0x1D9050: Node::onEnter, then a tail jump to
+// the builder 0x1D9070.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasSoundOnEnterDelegate(nint node);
+
+// GalleryNodeIllustTop::onEnter, vtable slot 99 at RVA 0x1D5150: Node::onEnter, then the builder
+// 0x1D51A0. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasIllustrationsOnEnterDelegate(nint node);
+
+// Movies input handler at RVA 0x1D83C0 (_Do_call 0x1D8D50). ECX is {manager, node, controls};
+// [EBP+8] the nsInput event (0 decide, 1 focus, 2 cancel), [EBP+0xC] the manager key. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasMoviesCallbackDelegate(nint closure, int eventType, int action);
+
+// Sound input handler at RVA 0x1D9F70 (_Do_call 0x1DAE90). ECX is {manager, node, controls}. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasSoundCallbackDelegate(nint closure, int eventType, int action);
+
+// Illustrations list input handler at RVA 0x1D6160 (_Do_call 0x1D7130). ECX is {manager, node,
+// container, controls}. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasIllustrationsCallbackDelegate(nint closure, int eventType, int action);
+
+// Illustration viewer input handler at RVA 0x1D6890 (_Do_call 0x1D6F50). ECX is {image, node,
+// layout, viewer manager} as captured at 0x1D6778; decide or cancel closes the viewer. RET 8.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasIllustrationViewerCallbackDelegate(nint closure, int eventType, int action);
+
+// Sound idle state at RVA 0x1DA820: unschedules update, sets the StatusBar to (0x1A, 0x3D),
+// clears the Now Playing labels at +0x2DC/+0x2E0 and the playing byte +0x2E4. Called by the
+// builder, by Cancel while playing and by update 0x1DA9B0 when the track ends. RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void ExtrasSoundIdleDelegate(nint node);
 
 // nsMenu::MenuNodeSaveLoadSteam::openConfirm at RVA 0x21A1D0. The mode that selects the
 // prompt lives on the node at +0x2CC; the slot argument is the save file the confirmation

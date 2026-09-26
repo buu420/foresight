@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
 using System.Text;
 using ChronoTriggerAccessibility.Core.Events;
+using ChronoTriggerAccessibility.Core.Menus;
 using ChronoTriggerAccessibility.Core.State;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.Menus;
 using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -30,19 +32,25 @@ public sealed class SaveLoadConfirmationHookSetTests
     private const nuint SecondControl = 0x02210000;
     private const nuint FirstState = 0x02300000;
     private const nuint SecondState = 0x02310000;
+    private const nuint OtherNode = 0x02010000;
+    private const nuint LabelNode = 0x02400000;
+    private const nuint UnmappedText = 0x07F00000;
 
     private const string ResumePrompt = "Resume bookmarked game?";
     private const string Yes = "Yes";
     private const string No = "No";
+    private const string SavingNotice = "Notice saving.";
+    private const string CompleteNotice = "Notice complete.";
 
     private static readonly HookId[] ExpectedHookIds =
     [
         HookId.SaveLoadConfirmationBuilder,
         HookId.SaveLoadNodeDestructor,
+        HookId.SaveLoadNoticeWindow,
     ];
 
     [Fact]
-    public void PreparesBothAuditedAddressesInactiveThenActivatesThem()
+    public void PreparesEveryAuditedAddressInactiveThenActivatesThem()
     {
         var harness = Harness.Create();
 
@@ -51,7 +59,7 @@ public sealed class SaveLoadConfirmationHookSetTests
         Assert.Equal(ExpectedHookIds, harness.Set.RequiredHookIds);
         Assert.Equal(ExpectedHookIds, harness.Factory.Created.Select(created => created.Id));
         Assert.Equal(
-            new[] { ImageBase + 0x21A1D0, ImageBase + 0x218860 },
+            new[] { ImageBase + 0x21A1D0, ImageBase + 0x218860, ImageBase + 0x21AA40 },
             harness.Factory.Created.Select(created => created.Address));
         Assert.All(harness.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
 
@@ -308,6 +316,201 @@ public sealed class SaveLoadConfirmationHookSetTests
         Assert.Equal(1, confirmation.SelectedIndex);
     }
 
+    /// <summary>
+    /// After "Yes" the node draws "Saving data." then "Save complete." (0x21AFC0, 0x21D880) in
+    /// the same window, and nothing spoke them. Each is its own notice, owned by the node.
+    /// </summary>
+    [Fact]
+    public void NoticesDrawnAfterAConfirmationAreEachSpokenAsTheirOwnWindow()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        harness.OpenConfirmation(SaveLoadConfirmationHookSet.SaveMode, 0x14, "Save here?", focusKey: 1);
+        harness.Dispatcher.Events.Clear();
+
+        harness.ShowNotice(SavingNotice);
+        harness.ShowNotice(CompleteNotice);
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        var owner = new MenuOwner(SaveLoadConfirmationHookSet.NoticeOwnerSource, Node);
+        Assert.Collection(
+            harness.Dispatcher.Events,
+            saving => Assert.Equal((owner, SavingNotice), Unpack(saving)),
+            complete => Assert.Equal((owner, CompleteNotice), Unpack(complete)));
+    }
+
+    /// <summary>The bookmark result (0x21B420) is two lines and then waits for a key.</summary>
+    [Fact]
+    public void ATwoLineNoticeKeepsBothLinesInOrder()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+
+        harness.ShowNotice(SavingNotice + NativeTextLines.Separator + CompleteNotice);
+
+        var notice = Assert.IsType<MenuNoticePresented>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal([SavingNotice, CompleteNotice], notice.Lines!);
+    }
+
+    [Fact]
+    public void ThePromptTheConfirmationDrawsThroughTheNoticeWindowIsNotSpokenTwice()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+
+        harness.OpenConfirmation(SaveLoadConfirmationHookSet.ResumeMode, 0x2B, ResumePrompt, focusKey: 1,
+            drawPromptThroughNoticeWindow: true);
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(1, harness.NoticeDraws);
+        Assert.Collection(
+            harness.Dispatcher.Events,
+            item => Assert.Equal(new ScreenEntered(ScreenKind.SaveLoad), item),
+            item => Assert.IsType<ConfirmationOpened>(item));
+    }
+
+    [Fact]
+    public void TheNoticeWindowReturnsWhatTheGameReturned()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        var text = (nuint)0x03F00000;
+        harness.Memory.AddString(text, SavingNotice);
+
+        Assert.Equal((nint)text, harness.ShowNotice(SavingNotice, textAddress: text));
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void ANoticeOnAnotherClassFailsClosedButStillRunsTheGame()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        harness.Memory.AddPointer(OtherNode, ImageBase + 0x3A9818);
+
+        harness.ShowNotice(SavingNotice, node: OtherNode);
+
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Equal(1, harness.NoticeDraws);
+    }
+
+    public static TheoryData<string, string[]?, int, bool> BrokenNotices => new()
+    {
+        { SavingNotice, [CompleteNotice], SaveLoadConfirmationHookSet.NoticeLineFontSize, false },
+        { SavingNotice + NativeTextLines.Separator + CompleteNotice, [SavingNotice],
+            SaveLoadConfirmationHookSet.NoticeLineFontSize, false },
+        { SavingNotice, null, 0x10, false },
+        { SavingNotice, null, SaveLoadConfirmationHookSet.NoticeLineFontSize, true },
+        { " " + NativeTextLines.Separator + " ", null, SaveLoadConfirmationHookSet.NoticeLineFontSize, false },
+        { NativeTextLines.Separator.ToString(), null, SaveLoadConfirmationHookSet.NoticeLineFontSize, false },
+    };
+
+    [Theory]
+    [MemberData(nameof(BrokenNotices))]
+    public void ANoticeWhoseLabelsAreNotExactlyItsVisibleLinesFailsClosed(
+        string text,
+        string[]? rendered,
+        int fontSize,
+        bool unreadable)
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+
+        harness.ShowNotice(text, rendered, fontSize, textAddress: unreadable ? UnmappedText : null);
+
+        Assert.Single(harness.Dispatcher.Failures);
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Equal(1, harness.NoticeDraws);
+    }
+
+    [Fact]
+    public void LabelsOutsideTheNoticeWindowBelongToSomeoneElse()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+
+        harness.Label(SavingNotice);
+        harness.OpenConfirmation(SaveLoadConfirmationHookSet.ResumeMode, 0x2B, ResumePrompt, focusKey: 1);
+
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.DoesNotContain(harness.Dispatcher.Events, item => item is MenuNoticePresented);
+    }
+
+    [Fact]
+    public void DestroyingTheNodeEndsItsNoticeOnceAndOnlyForThatNode()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        harness.ShowNotice(SavingNotice);
+        harness.Dispatcher.Events.Clear();
+
+        harness.DestroyNode(OtherNode);
+        Assert.Empty(harness.Dispatcher.Events);
+
+        harness.DestroyNode();
+        harness.DestroyNode();
+
+        var exited = Assert.IsType<MenuExited>(Assert.Single(harness.Dispatcher.Events));
+        Assert.Equal(new MenuOwner(SaveLoadConfirmationHookSet.NoticeOwnerSource, Node), exited.Owner);
+        Assert.Empty(harness.Dispatcher.Failures);
+    }
+
+    [Fact]
+    public void LosingTheHookLifecycleWhileANoticeDrawsPublishesNothing()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+
+        harness.ShowNotice(SavingNotice, duringDraw: harness.Set.AfterHooksDisabled);
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(1, harness.NoticeDraws);
+    }
+
+    [Fact]
+    public void DisabledHooksLeaveTheNoticeWindowToTheGame()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        harness.Set.AfterHooksDisabled();
+
+        harness.ShowNotice(SavingNotice);
+
+        Assert.Empty(harness.Dispatcher.Events);
+        Assert.Empty(harness.Dispatcher.Failures);
+        Assert.Equal(1, harness.NoticeDraws);
+    }
+
+    /// <summary>What the player hears for one save: the question, the notices, then the file
+    /// list taking narration back once the node clears its confirmation flag.</summary>
+    [Fact]
+    public void ASaveIsNarratedFromQuestionToNoticesAndBackToTheList()
+    {
+        var harness = Harness.Create();
+        harness.PrepareAndActivate();
+        var state = new AccessibilityState();
+        var list = new MenuOwner("field-submenu", Node);
+
+        harness.OpenConfirmation(SaveLoadConfirmationHookSet.SaveMode, 0x14, "Save here?", focusKey: 1);
+        harness.ShowNotice(SavingNotice);
+        harness.ShowNotice(CompleteNotice);
+        var spoken = harness.Dispatcher.Events.SelectMany(state.Apply).Select(item => item.Text).ToList();
+        spoken.AddRange(state.Apply(new MenuContentPresented(list, "Save", "File 1 of 3.")).Select(item => item.Text));
+        spoken.AddRange(state.Apply(new MenuContentChanged(list, "File 2 of 3.")).Select(item => item.Text));
+
+        Assert.Equal(
+            ["Save here?", "No, 2 of 2", SavingNotice, CompleteNotice, "Save.", "File 1 of 3.", "File 2 of 3."],
+            spoken);
+    }
+
+    private static (MenuOwner, string) Unpack(AccessibilityEvent item)
+    {
+        var notice = Assert.IsType<MenuNoticePresented>(item);
+        return (notice.Owner, Assert.Single(notice.Lines!));
+    }
+
     /// <summary>The mode-to-prompt map is the whole guard against speaking a guessed label.</summary>
     [Theory]
     [InlineData(SaveLoadConfirmationHookSet.ResumeMode, 0x41, 0x2B, true)]
@@ -362,6 +565,7 @@ public sealed class SaveLoadConfirmationHookSetTests
         public UnmanagedBoundaryGuard Boundary { get; }
         public ReloadedHookInstaller Installer { get; }
         public int NodeDestructions { get; private set; }
+        public int NoticeDraws { get; private set; }
 
         private TextManagerGetMsgDelegate? sharedGetMsg;
 
@@ -405,7 +609,8 @@ public sealed class SaveLoadConfirmationHookSetTests
             int focusKey,
             int choiceCount = 2,
             int? committedFocusKey = null,
-            int promptBank = SaveLoadConfirmationHookSet.StartTextFileId)
+            int promptBank = SaveLoadConfirmationHookSet.StartTextFileId,
+            bool drawPromptThroughNoticeWindow = false)
         {
             Memory.AddInt32(Node + SaveLoadConfirmationHookSet.NodeModeOffset, mode);
             Factory.BuilderBody = (_, _) =>
@@ -417,6 +622,12 @@ public sealed class SaveLoadConfirmationHookSetTests
                     else
                     {
                         LocalizeOpe(promptBank, promptMessageId, prompt);
+                    }
+
+                    if (drawPromptThroughNoticeWindow)
+                    {
+                        // 0x21A1D0 draws its prompt with the node's notice window (0x21A2BF).
+                        ShowNotice(prompt);
                     }
 
                     var controls = new[] { FirstControl, SecondControl };
@@ -463,6 +674,47 @@ public sealed class SaveLoadConfirmationHookSetTests
                 0x1B9110);
             sharedGetMsg = passthrough.GetDetour<TextManagerGetMsgDelegate>(HookId.TextManagerGetMsg);
         }
+
+        /// <summary>
+        /// Replays MenuNodeSaveLoadSteam's notice window at RVA 0x21AA40: the text is split on
+        /// 0x5C (0x21AE40) and every line becomes one font-0x0C label (0x21AEB5). The window
+        /// returns its text pointer (0x21AEDF).
+        /// </summary>
+        public nint ShowNotice(
+            string text,
+            IReadOnlyList<string>? rendered = null,
+            int fontSize = SaveLoadConfirmationHookSet.NoticeLineFontSize,
+            nuint node = Node,
+            nuint? textAddress = null,
+            Action? duringDraw = null)
+        {
+            var address = textAddress ?? NextText(text);
+            var lines = rendered ?? NativeTextLines.Split(text);
+            var previousBody = Factory.NoticeBody;
+            Factory.NoticeBody = (_, textPointer) =>
+            {
+                NoticeDraws++;
+                foreach (var line in lines)
+                {
+                    Label(line, fontSize);
+                }
+
+                duringDraw?.Invoke();
+                return textPointer;
+            };
+            try
+            {
+                return Factory.GetDetour<SaveLoadNoticeWindowDelegate>(HookId.SaveLoadNoticeWindow)(
+                    (nint)node, (nint)address);
+            }
+            finally
+            {
+                Factory.NoticeBody = previousBody;
+            }
+        }
+
+        public void Label(string text, int fontSize = SaveLoadConfirmationHookSet.NoticeLineFontSize) =>
+            Set.AfterMenuTextLabelFactory(0x1234, (nint)NextText(text), 0x5678, fontSize, (nint)LabelNode);
 
         public void MoveFocus(int key)
         {
@@ -518,11 +770,14 @@ public sealed class SaveLoadConfirmationHookSetTests
                 (SaveLoadConfirmationBuilderDelegate)((node, slot) => BuilderBody?.Invoke(node, slot)),
             [HookId.SaveLoadNodeDestructor] =
                 (SaveLoadNodeDestructorDelegate)(node => DestructorBody?.Invoke(node)),
+            [HookId.SaveLoadNoticeWindow] =
+                (SaveLoadNoticeWindowDelegate)((node, text) => NoticeBody is { } body ? body(node, text) : text),
         };
 
         public List<(HookId Id, nuint Address)> Created { get; } = [];
         public Action<nint, int>? BuilderBody { get; set; }
         public Action<nint>? DestructorBody { get; set; }
+        public Func<nint, nint, nint>? NoticeBody { get; set; }
 
         public TDelegate GetDetour<TDelegate>(HookId id) where TDelegate : Delegate =>
             (TDelegate)detours[id];

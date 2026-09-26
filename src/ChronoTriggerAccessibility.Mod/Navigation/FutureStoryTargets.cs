@@ -196,7 +196,7 @@ public static class FutureStoryTargets
                 Bind("spekkio", "Speak with Spekkio", Enumerable.Range(224, 6).Select(v => $"actor:10:5:{v}").ToArray());
                 break;
             case 465 when p == 76:
-                Note("magic-lesson", "Spekkio's magic lesson", "Starting at the door, follow the walls clockwise three times, then speak with Spekkio again. The walking is manual.");
+                MagicLesson();
                 break;
             case 465 when p == 77:
                 Exit("leave-spekkio", "Return to the End of Time platform", 0);
@@ -206,6 +206,35 @@ public static class FutureStoryTargets
                 break;
         }
         return result;
+
+        void MagicLesson()
+        {
+            // Atel0284: actors16..20 contact handlers advance local09..0D in
+            // clockwise order. Actor16 records completed laps in0E; 0E=4 is
+            // an interrupted circuit, and speaking with Spekkio resets09..0D.
+            var counts = Enumerable.Range(9, 5).Select(state.Local).ToArray();
+            if (state.Local(14) is not { } laps || counts.Any(v => v is null or < 0 or > 3))
+            {
+                Note("magic-lesson", "Spekkio's magic lesson", "Walk clockwise around the walls three times. The current checkpoint state is unavailable.");
+                return;
+            }
+            if (laps == 3 || laps == 4 && counts.Any(v => v != 0))
+            {
+                Bind("magic-lesson-checkpoint", laps == 3 ? "Return to Spekkio" : "Speak with Spekkio to restart the walking lesson",
+                    Enumerable.Range(224, 6).Select(v => $"actor:10:5:{v}").ToArray());
+                return;
+            }
+            // A valid partial circuit is a prefix at n, followed by n-1. All
+            // equal means the next contact is the starting point by the door.
+            var next = Array.FindIndex(counts, v => v < counts[0]);
+            if (next < 0) next = 0;
+            string[] places = ["starting point by the door", "west wall", "north wall", "east wall", "south wall"];
+            Bind("magic-lesson-checkpoint", "Walk clockwise to the " + places[next], [$"landmark:{16 + next}"],
+                "The next checkpoint updates when the game registers this one.");
+            NavigationDirection[] contact = [NavigationDirection.North, NavigationDirection.West,
+                NavigationDirection.North, NavigationDirection.East, NavigationDirection.South];
+            if (!result[^1].IsStoryNote) result[^1] = result[^1] with { ContactDirection = contact[next] };
+        }
 
         void Bind(string id, string label, string[] ids, string? instruction = null) =>
             result.Add(StoryTarget.BindAny("future:" + id, label, available, ids, player, instruction));

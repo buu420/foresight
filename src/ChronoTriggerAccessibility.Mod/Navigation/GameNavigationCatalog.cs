@@ -13,6 +13,9 @@ public static class GameNavigationCatalog
     {
         public bool Allows(FieldStoryState? state, bool local = true)
         {
+            // Coordinate gates restrict where to interact, not whether the player
+            // may select a destination while standing elsewhere in the room.
+            if (Source is "X" or "Y") return true;
             // A route may lead to a room after changing the active party there.
             if (!local && Source is "Local" or "ActiveParty") return true;
             int? value = Source switch
@@ -23,6 +26,11 @@ public static class GameNavigationCatalog
                 "ActiveParty" => state?.PartyContains(Index, true), "Recruited" => state?.PartyContains(Index, false), _ => null,
             };
             if (value is not { } current) return false;
+            return MatchesValue(current);
+        }
+
+        public bool MatchesValue(int current)
+        {
             var result = Operation switch
             {
                 0 => current == Value, 1 => current != Value, 2 => current > Value,
@@ -37,6 +45,18 @@ public static class GameNavigationCatalog
         int ArrivalX = 0, int ArrivalY = 0, int Value = 0, TileCopy? Copy = null)
     {
         public bool Available(FieldStoryState? state, bool local = true) => Guards.All(g => g.Allows(state, local));
+
+        public bool AcceptsPosition(int fineX, int fineY, int margin = 0)
+        {
+            foreach (var guard in Guards)
+            {
+                if (guard.Source is not ("X" or "Y")) continue;
+                var coordinate = guard.Source == "X" ? fineX : fineY;
+                for (var tile = Math.Max(0, coordinate - margin) / 256; tile <= (coordinate + margin) / 256; tile++)
+                    if (!guard.MatchesValue(tile)) return false;
+            }
+            return true;
+        }
     }
     public sealed record Actor(int Id, Load[] Loads, bool Marker, bool Touch, string? Label,
         bool GivesItem, int[] Destinations, Action[] Actions)

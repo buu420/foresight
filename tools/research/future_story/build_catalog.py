@@ -14,7 +14,7 @@ import assets
 from connections import names, scene_info
 from decode_verified import actor_ops, packet, walk
 from audit import EXE_SHA256
-from script_navigation import paths, region_actions, simplify
+from script_navigation import paths, region_actions, simplify, coordinate_locals
 from bonus_regions import for_scene as audited_bonus_regions, actor_actions as audited_bonus_actions
 from palace_visits import refine as refine_palace_visits
 
@@ -43,6 +43,7 @@ def build(game):
             skipped.append(scene)
             output.append(entry)
             continue
+        coordinates = coordinate_locals(code, actors)
         for actor, functions in enumerate(actors):
             all_ops = actor_ops(code, functions)
             errors = [base+pc for pc,(op,a) in all_ops.items() if a is None]
@@ -65,7 +66,7 @@ def build(game):
             touch_action = any(op in meaningful for op,a in touch.values())
             actions = []
             for function in (1, 2):
-                found, complete = paths(code, actors, functions[function])
+                found, complete = paths(code, actors, functions[function], initial_coordinates=coordinates)
                 if not complete:
                     incomplete.append(dict(Scene=scene, Actor=actor, Function=function, Start=functions[function]))
                     continue

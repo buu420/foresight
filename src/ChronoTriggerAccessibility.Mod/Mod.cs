@@ -217,6 +217,8 @@ public sealed class Mod : ModBase
         topMenu.SubmenuOwnsSpeech = () => submenuSession.HasContext || shopHooks.HasContext;
         var saveLoad = new SaveLoadConfirmationHookSet(sharedFanout, memory, dispatcher,
             node => submenuSession.Close(node), submenuSession.Pause);
+        var endingResult = new EndingResultHookSet(sharedFanout, memory, dispatcher);
+        var restartNotice = new SteamSettingsRestartNoticeHookSet(sharedFanout, memory, dispatcher);
 
         var startupTitle = new StartupTitleHookSet(
             sharedFanout,
@@ -234,7 +236,8 @@ public sealed class Mod : ModBase
         // Root shared-hook owners are constructed only after the complete, ordered observer
         // list is frozen. Extras must observe the shared Touch destructor before TopMenu's root.
         sharedFanout.ConfigureObservers(
-            [startupTitle, newGame, extras, steamSettings, touchSettings, topMenu, saveLoad]);
+            [startupTitle, newGame, extras, steamSettings, touchSettings, topMenu, saveLoad, endingResult,
+                restartNotice]);
         var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
         var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder);
         var registrations = startupTitle.Registrations
@@ -244,6 +247,8 @@ public sealed class Mod : ModBase
             .Concat(touchSettings.Registrations)
             .Concat(topMenu.Registrations)
             .Concat(saveLoad.Registrations)
+            .Concat(endingResult.Registrations)
+            .Concat(restartNotice.Registrations)
             .Concat(dialogue.Registrations)
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
@@ -262,6 +267,8 @@ public sealed class Mod : ModBase
             touchSettings,
             topMenu,
             saveLoad,
+            endingResult,
+            restartNotice,
             dialogue,
             introTrace,
             navigationHooks,

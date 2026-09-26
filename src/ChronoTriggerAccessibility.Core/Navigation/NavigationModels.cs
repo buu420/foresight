@@ -40,6 +40,9 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     public bool IsStoryNote { get; init; }
     public string? Instruction { get; init; }
     public string? ArrivalInstruction { get; init; }
+    /// <summary>Audited contact from a reachable standing point. Arrival must
+    /// wait for the native objective to advance; proximity alone is insufficient.</summary>
+    public NavigationDirection ContactDirection { get; init; }
 }
 
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,

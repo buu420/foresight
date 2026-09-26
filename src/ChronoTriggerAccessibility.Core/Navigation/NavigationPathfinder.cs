@@ -4,7 +4,8 @@ public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Rout
 
 public static class NavigationPathfinder
 {
-    /// <summary>Ceiling on nodes examined for one search.</summary>
+    /// <summary>Ceiling on distinct positions admitted by one search. Each can
+    /// retain at most nine headings, including the initial zero heading.</summary>
     public const int DefaultMaximumVisited = 65536;
 
     private readonly record struct SearchNode(NavigationPoint Point, int XDirection, int YDirection);
@@ -24,6 +25,7 @@ public static class NavigationPathfinder
         var first = new SearchNode(start, 0, 0);
         var previous = new Dictionary<SearchNode, SearchNode> { [first] = first };
         var costs = new Dictionary<SearchNode, (double Distance, int Turns)> { [first] = (0, 0) };
+        var distances = new Dictionary<NavigationPoint, double> { [start] = 0 };
         var closed = new HashSet<SearchNode>();
         // Retain heading as part of search state so equal-length paths can prefer
         // fewer turns without discarding a better approach to a later junction.
@@ -33,6 +35,7 @@ public static class NavigationPathfinder
         while (queue.TryDequeue(out var current, out _))
         {
             if (!closed.Add(current)) continue;
+            if (costs[current].Distance > distances[current.Point]) continue;
             if (destinations.Contains(current.Point))
             {
                 var path = new List<NavigationPoint> { current.Point };
@@ -53,8 +56,13 @@ public static class NavigationPathfinder
                 if (closed.Contains(next)) continue;
                 var turn = current != first && (dx != current.XDirection || dy != current.YDirection) ? 1 : 0;
                 var cost = (Distance: costs[current].Distance + Distance(current.Point, point), Turns: costs[current].Turns + turn);
+                // Heading can improve the secondary turn count, but a longer
+                // arrival at the same position cannot improve any continuation.
+                // Charge the position budget once, rather than once per heading.
+                if (distances.TryGetValue(point, out var bestDistance) && cost.Distance > bestDistance) continue;
                 if (costs.TryGetValue(next, out var oldCost) && cost.CompareTo(oldCost) >= 0) continue;
-                if (!previous.ContainsKey(next) && previous.Count >= maximumVisited) return new(null, true);
+                if (!distances.ContainsKey(point) && distances.Count >= maximumVisited) return new(null, true);
+                distances[point] = cost.Distance;
                 previous[next] = current;
                 costs[next] = cost;
                 var estimate = Estimate(point);

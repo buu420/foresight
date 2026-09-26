@@ -106,7 +106,8 @@ public sealed class EarlyStoryTests
         var old = Target("exit:0") with { Visible = false, Position = new(64, 64, 1), ApproachPoints = [new(64, 64, 1)] };
         var current = Target("exit:1") with { Position = new(4096, 4096, 1), ApproachPoints = [new(4096, 4096, 1)] };
         var target = Assert.Single(EarlyStoryTargets.Build(468, State(15), [old, current], default));
-        Assert.Equal(current.ApproachPoints, target.ApproachPoints);
+        Assert.Equal(current.ApproachPoints[0], target.ApproachPoints[0]);
+        Assert.Contains(old.ApproachPoints[0], target.ApproachPoints);
         Assert.Equal(current.Position, target.Position);
     }
 
