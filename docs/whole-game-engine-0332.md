@@ -159,3 +159,24 @@ moving platform or collectible. The keyboard interface is the implemented menu
 surface; alternate touch-style submenu readers and audiovisual descriptions of
 movies remain separate coverage limits. This release does not label those as
 tested or complete.
+
+## Installed release
+
+Version 0.3.32 was packaged from implementation commit
+`97fa5348e447d2aed9f09fb33a762578e4d38f19` and deployed on September 26, 2026.
+The Release build completed without warnings or errors. All 25 deployment checks
+passed, including the existing Steam launch redirect. Exact file-set and hash
+comparisons pass for 28 mod files, 45 loader/shared-hook files and two native
+launcher files. The game executable retains its supported original hash.
+
+The previous installation is preserved under the game folder at
+`Accessibility/Backups/20260926-154443`. The source commit, installed hashes,
+test counts and deployment output are recorded in
+`artifacts/research/engine-0332/implementation/deployment-proof.json`.
+
+A normal Steam startup loaded all 170 hooks and selected Prism's NVDA backend.
+The live log records the Resume confirmation, loading/completion notices and
+field navigation entering Prison Towers, Skywalk. Codex initiated the launch;
+subsequent menu and movement input was not injected by this check. The retained
+`startup-live.log` and `startup-smoke-proof.json` establish this startup and
+resume observation, not a full-game playthrough or confirmation of heard speech.
