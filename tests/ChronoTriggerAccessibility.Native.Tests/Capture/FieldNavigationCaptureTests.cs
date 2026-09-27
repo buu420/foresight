@@ -440,6 +440,21 @@ public sealed class FieldNavigationCaptureTests
     }
 
     [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(1, 0, true)]
+    [InlineData(0, 128, false)]
+    [InlineData(1, 0x7F, true)]
+    public void ScriptProcessingFollowsOnlyTheOpcode0BGateAtPlus30Bit80(byte callsDisabled, byte processing, bool expected)
+    {
+        // 0B/0C (161C0B/161C61) toggle +30 bit 0x80 and stop or resume the actor's own loop;
+        // 08/09 toggle +E8, which only blocks confirm and touch calls into the actor.
+        var memory = CreateValidMemory();
+        memory.AddByte(Actors + 0xE8u, callsDisabled).AddByte(Actors + 0x30u, processing);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(expected, snapshot.Actors[0].ScriptProcessingEnabled);
+    }
+
+    [Theory]
     [InlineData(-3, 128)]
     [InlineData(4, 4)]
     public void CapturesTheSignedCollisionOffsetAndRawFinalPartySlot(int offset, int slot)

@@ -51,10 +51,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var scriptTerminals = new List<(string Id, int Left, int Top, int Right, int Bottom)>();
         var activeIds = new HashSet<string>();
         var guideActive = field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 };
+        // A save point's sparkle and checker are offered once, as the save point itself; the
+        // engine briefly makes the checker an activation candidate while the leader is on it.
+        var savePoints = FieldSavePoints.Find(field, story);
+        var savePointActors = savePoints.SelectMany(s => s.Actors).ToHashSet();
         foreach (var actor in field.Actors)
         {
             if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
-                (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0) continue;
+                (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             var description = FieldVisualLabels.Describe(actor);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
             var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
@@ -97,13 +101,22 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 Approach(position), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
                 guideAvailable: guideActive);
         }
+        foreach (var save in savePoints)
+        {
+            // Saving is enabled by standing in the checker's tile, so the goals are the lattice
+            // nodes that keep the controller's arrival box inside it.
+            Add($"save:{save.Checker}:{save.TileX}:{save.TileY}", FieldSavePoints.Label, NavigationCategory.Objects,
+                Position(save.TileX * 256 + 128, save.TileY * 256 + 128), SaveApproach(save.TileX, save.TileY),
+                TileVisible(save.TileX, save.TileY), guideAvailable: guideActive,
+                instruction: FieldSavePoints.Instruction, arrivalInstruction: FieldSavePoints.ArrivalInstruction);
+        }
         if (field.SceneIdCoherent)
         foreach (var actor in field.Actors)
         {
             // These exact script slots are interaction markers for scenery drawn in
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
-            if (!InsideMap(actor)) continue;
+            if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
             var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
@@ -122,7 +135,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var approaches = touch
                 ? TouchApproach(actor)
                 : ActorApproach(actor, position);
-            if (scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
+            if ((field.SceneId, actor.Index) != (28, 1) && scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
             approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
@@ -293,7 +306,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"actors={field.Actors.Count}; usable={field.Actors.Count(a => a.IsUsable)}; " +
                 $"drawn={field.Actors.Count(a => a.IsDrawn)}; activationCandidates={field.Actors.Count(a => a.IsActivationCandidate)}; " +
                 $"exitCells={exitCellCount}; visibleExitCells={visibleExitCellCount}; " +
-                $"renderedChests={treasures.Count(t => t.IsChest)}; guidePickups={treasures.Count(t => !t.IsChest)}; storyPoint={story?.Point.ToString() ?? "unknown"}; " +
+                $"renderedChests={treasures.Count(t => t.IsChest)}; guidePickups={treasures.Count(t => !t.IsChest)}; " +
+                $"savePoints={string.Join(",", savePoints.Select(s => $"{s.Checker}@{s.TileX}:{s.TileY}"))}; " +
+                $"storyPoint={story?.Point.ToString() ?? "unknown"}; " +
                 $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}; " +
                 $"storyFlags={string.Join(",", FieldStoryCapture.ObjectiveGlobalIndices.Select(index =>
                     $"{index:X}={story?.Global(index)?.ToString("X2") ?? "?"}"))}";
@@ -396,6 +411,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
         {
+            if (field.SceneId == 28 && actor.Index == 1)
+            {
+                // Atel0409's upper bridge contact shares confirm and touch code.
+                // The floor is the bottom pixel of this half-tile strip; the tile
+                // centre is not a reachable standing position. Keep the live foot
+                // coordinates at pixel precision, inside the native touch radius.
+                return At(actor.FineX / 16 * 16, actor.FineY / 16 * 16)
+                    .Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+            }
             if (field.SceneId == 465 && actor.Index is >= 16 and <= 20)
             {
                 // The clockwise lesson markers are native touch contacts, not
@@ -442,6 +466,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 if (!scriptTerminals.Contains(footprint)) scriptTerminals.Add(footprint);
             }
         }
+        /// <summary>Interior nodes of one tile: with the one-eighth-tile arrival box every
+        /// arrival still has the leader's native tile (FineX >> 8, FineY >> 8) equal to it.</summary>
+        IReadOnlyList<NavigationPoint> SaveApproach(int tileX, int tileY)
+        {
+            var goals = new List<NavigationPoint>();
+            for (var y = tileY * 256 + 64; y <= tileY * 256 + 192; y += 64)
+            for (var x = tileX * 256 + 64; x <= tileX * 256 + 192; x += 64)
+                goals.AddRange(At(x, y).Where(point => !graph.IsTerminal(point)));
+            return goals.Distinct().ToArray();
+        }
         IEnumerable<NavigationPoint> ExitApproach(NavigationPoint p)
         {
             // Every lattice node of the cell, its own boundary included. A one-tile
@@ -450,13 +484,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // and five of Manoria's six doors reported no route. Stopping short of the
             // cell is prevented by the arrival rule instead, which asks the graph
             // whether the player is actually in it.
-            for (var x = p.X / 256 * 256; x < p.X / 256 * 256 + 256; x += 64)
-            for (var y = p.Y / 256 * 256; y < p.Y / 256 * 256 + 256; y += 64)
-                foreach (var point in At(x, y)) yield return point;
+            // Half-tile corridors plus the native seven-pixel leading corners
+            // also leave standing rows/columns at offsets 112 and 240. Preserve
+            // those pixel boundaries alongside the ordinary four-pixel lattice.
+            foreach (var x in new[] { 0, 64, 112, 128, 192, 240 })
+            foreach (var y in new[] { 0, 64, 112, 128, 192, 240 })
+                foreach (var point in At(p.X / 256 * 256 + x, p.Y / 256 * 256 + y)) yield return point;
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
-            bool guideAvailable = false)
+            bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -465,7 +502,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (visible || guideAvailable)
             {
                 var target = new NavigationTarget(id, label, category, position, approaches, visible,
-                    visible || discovered.ContainsKey(id)) { GuideAvailable = guideAvailable };
+                    visible || discovered.ContainsKey(id))
+                {
+                    GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
+                };
                 if (visible) discovered[id] = target;
                 output.Add(target);
             }

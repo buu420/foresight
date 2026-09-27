@@ -227,7 +227,17 @@ public static class EarlyStoryTargets
                 Exit("prison-bridge", "Continue onto the upper bridge", [0]);
                 break;
             case 28 when p is >= 45 and < 48:
-                Exit("cross-prison", "Continue toward the castle stairs", [0, 2, 4, 6]);
+                // Atel0409 uses four disconnected bridge rows. Actor1's native
+                // contact first introduces the tank (G198:04), then starts its
+                // encounter (G199:04). The aftermath copies the broken bridge
+                // before returning control. Do not route past that sequence.
+                var bridge = Math.Clamp(player.Y / (16 * 256), 0, 3);
+                if (bridge != 0) Exit("cross-prison", "Continue toward the castle stairs", [new[] { 0, 2, 4, 6 }[bridge]]);
+                else if (state.Flag(0x199, 4) == true)
+                    Exit("cross-prison", "Continue toward the castle stairs", [0]);
+                else if (state.Flag(0x199, 4) == false && state.Flag(0x198, 4) is { } approached)
+                    Bind("upper-bridge", approached ? "Continue toward the tank" : "Continue across the upper bridge", ["landmark:1"]);
+                else Note("upper-bridge", "The upper bridge", "The bridge's current progress is unavailable.");
                 break;
             case 489 when p is >= 46 and < 48:
                 Exit("castle-downstairs", "Go downstairs to the castle's main hall", [3, 4, 5]);
@@ -263,6 +273,7 @@ public static class EarlyStoryTargets
         actor.ScriptCallsEnabled
         ? (scene, actor.Index, state.Point) switch
         {
+            (28, 1, >= 46 and < 48) when state.Flag(0x199, 4) == false => "Upper bridge contact",
             (8, 12, 10) when state.Flag(0x56, 1) == true => "Left Telepod",
             (120, 9 or 10, _) when state.Local(6) == 0 => "Stairway past the guards",
             (122, 8, >= 28 and < 33) when state.Flag(0xA1, 4) == false => "Passage into the queen's room",
@@ -280,7 +291,7 @@ public static class EarlyStoryTargets
         } : null;
 
     public static bool IsTouchLandmark(int scene, int actor) =>
-        (scene, actor) is (8, 12) or (120, 17) or (122, 8 or 25 or 26);
+        (scene, actor) is (8, 12) or (28, 1) or (120, 17) or (122, 8 or 25 or 26);
 
     // These two script pickups can be drawn while the native +152 activation
     // byte is zero. Atel_0074 actor 15 uses the dropped/collected bits; Atel_0028

@@ -78,7 +78,11 @@ public sealed class ActorCollisionNavigationTests
     public void LoggedCathedralCornerCanGoLeftButCannotWalkIntoTheOccupiedSpaceAbove()
     {
         var frame = CathedralFrame(new(9471, 2074, 1));
-        Assert.DoesNotContain(frame.Graph.Neighbours(frame.Player), p => p.Y < frame.Player.Y);
+        // Native 175E90 accepts the final ten units up to Y2064, but rejects
+        // a full pixel farther. Precision routing may retain that safe boundary.
+        Assert.Contains(new NavigationPoint(9471, 2064, 1), frame.Graph.Neighbours(frame.Player));
+        Assert.DoesNotContain(frame.Graph.Neighbours(frame.Player), p => p.Y < 2064);
+        Assert.DoesNotContain(frame.Graph.Neighbours(new(9471, 2064, 1)), p => p.Y < 2064);
         Assert.Contains(frame.Graph.Neighbours(frame.Player), p => p.X < frame.Player.X);
     }
 

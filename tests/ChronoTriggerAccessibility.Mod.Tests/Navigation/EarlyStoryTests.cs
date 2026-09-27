@@ -124,7 +124,8 @@ public sealed class EarlyStoryTests
     {
         var forward = Target($"exit:{onward}") with { Position = new(4096, 4096, 1), ApproachPoints = [new(4096, 4096, 1)] };
         var nearbyBack = Target($"exit:{back}");
-        var objective = Assert.Single(EarlyStoryTargets.Build(scene, State(46), [nearbyBack, forward], default));
+        var player = scene == 28 ? new NavigationPoint(4096, (onward / 2 * 16 + 9) * 256 + 255, 1) : default;
+        var objective = Assert.Single(EarlyStoryTargets.Build(scene, State(46, 0x199, 4), [nearbyBack, forward], player));
         Assert.Equal(forward.ApproachPoints, objective.ApproachPoints);
         Assert.Equal(forward.Position, objective.Position);
     }

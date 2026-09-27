@@ -3,17 +3,20 @@ using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-/// <summary>Cardinal four-pixel edges checked against native terrain and captured
-/// actor contacts. The normal game movement routine still performs movement.</summary>
+/// <summary>Cardinal edges checked against native terrain and captured actor
+/// contacts. Narrow passages retain pixel-sized boundary steps. The normal game
+/// movement routine still performs movement.</summary>
 public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisionRules? actors = null,
     IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null,
     IReadOnlyList<NavigationPoint>? selectedGoals = null) : INavigationGraph
 {
     private readonly HashSet<int> contactDestinations = selectedGoals is { Count: > 0 } && touchGoals is not null
-        ? touchGoals.Where(t => selectedGoals.Any(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
+        ? touchGoals.Where(t => selectedGoals!.Any(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
+    private readonly int[] goalXs = selectedGoals?.Select(g => g.X).Distinct().Order().ToArray() ?? [];
+    private readonly int[] goalYs = selectedGoals?.Select(g => g.Y).Distinct().Order().ToArray() ?? [];
 
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
-        touchGoals is { Count: > 0 } ? new FieldNavigationGraph(map, actors, touchGoals, goals) : this;
+        new FieldNavigationGraph(map, actors, touchGoals, goals);
 
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point)
     {
@@ -26,7 +29,49 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
             point with { X = point.X == 0 ? -1 : (point.X - 1) / 64 * 64 },
         };
         foreach (var candidate in candidates)
-            if (TryTraverse(point, candidate, out var next)) yield return next;
+        {
+            NavigationPoint? reached = null;
+            if (TryTraverse(point, candidate, out var next)) reached = next;
+            else
+            {
+                // A seven-pixel body in an eight-pixel corridor can occupy only
+                // the last pixel of its tile. A four-pixel grid has no node there.
+                // Stop at the last traversable pixel boundary instead of throwing
+                // away all progress toward a blocked coarse node. Keep coarse edges
+                // in open space so map size does not multiply the search budget.
+                var horizontal = candidate.X != point.X;
+                var origin = horizontal ? point.X : point.Y;
+                var end = horizontal ? candidate.X : candidate.Y;
+                var direction = Math.Sign(end - origin);
+                var pixel = direction < 0 ? (origin - 1) / 16 * 16 : (origin / 16 + 1) * 16;
+                for (; direction * (end - pixel) > 0; pixel += direction * 16)
+                {
+                    var partial = horizontal ? point with { X = pixel } : point with { Y = pixel };
+                    if (!TryTraverse(point, partial, out next)) break;
+                    reached = next;
+                }
+            }
+            if (reached is { } boundary) yield return boundary;
+
+            // Join precise native interaction/exit coordinates even when the
+            // whole coarse edge is clear. One nearest alignment per direction
+            // keeps the neighbour count bounded and retains further alignments.
+            var horizontalGoal = candidate.X != point.X;
+            var start = horizontalGoal ? point.X : point.Y;
+            var finish = horizontalGoal ? candidate.X : candidate.Y;
+            if (Alignment(start, finish, horizontalGoal ? goalXs : goalYs) is not { } alignment) continue;
+            var aligned = horizontalGoal ? point with { X = alignment } : point with { Y = alignment };
+            if (TryTraverse(point, aligned, out next) && next != reached) yield return next;
+        }
+    }
+
+    private static int? Alignment(int start, int finish, int[] coordinates)
+    {
+        var index = Array.BinarySearch(coordinates, start);
+        index = finish > start ? (index >= 0 ? index + 1 : ~index) : (index >= 0 ? index - 1 : ~index - 1);
+        if (index < 0 || index >= coordinates.Length) return null;
+        var value = coordinates[index];
+        return finish > start ? value < finish ? value : null : value > finish ? value : null;
     }
 
     public bool IsTerminal(NavigationPoint point) => ExitAt(point.X, point.Y) >= 0;

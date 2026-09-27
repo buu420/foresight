@@ -40,6 +40,11 @@ public sealed record FieldActorSnapshot(
     /// <summary>Persistent call gates at actor+E8 and actor+30 bit80, tested by
     /// native confirm/touch dispatch (17FA20 / 16EF30). Neither is camera culling.</summary>
     public bool ScriptCallsEnabled { get; init; } = true;
+    /// <summary>Actor+30 bit80 alone: opcode 0B sets it and 0C clears it (stubs 161C0B /
+    /// 161C61), and the script runner stops the actor's own loop while it is set. Unlike
+    /// <see cref="ScriptCallsEnabled"/> it ignores +E8 (opcodes 08/09), which blocks only
+    /// confirm and touch calls into the actor.</summary>
+    public bool ScriptProcessingEnabled { get; init; } = true;
     /// <summary>
     /// True when <see cref="ClassTag"/> names a real class in CTViewer's
     /// <c>SceneActorClass</c> space (0..6). 7 is Undefined, i.e. a slot no load path
@@ -535,6 +540,7 @@ public static class FieldNavigationCapture
             coordinatesCoherent, facingValid, drawModeKnown)
         {
             ScriptCallsEnabled = scriptDisabled == 0 && (callFlags & 0x80) == 0,
+            ScriptProcessingEnabled = (callFlags & 0x80) == 0,
             CollisionOffsetX = collisionOffsetX,
         };
         error = string.Empty;
