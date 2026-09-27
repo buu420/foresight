@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Core.Startup;
 using ChronoTriggerAccessibility.Mod.Dialogue;
 using ChronoTriggerAccessibility.Mod.Battle;
@@ -47,7 +48,9 @@ public sealed class Mod : ModBase
             nativeFactory,
             new CurrentProcessReadableMemory(),
             dispatcher,
-            new OpeningMovieTimeline());
+            new OpeningMovieTimeline(token => Task.Run(() =>
+                InstalledMovieDescriptions.HasOpeningNarrationAsync(
+                    Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, token), token)));
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;

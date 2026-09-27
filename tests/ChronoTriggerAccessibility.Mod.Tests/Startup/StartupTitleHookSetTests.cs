@@ -555,7 +555,7 @@ public sealed class StartupTitleHookSetTests
         Assert.Contains(dispatcher.Events, item => item ==
             new StartupSceneEntered(StartupSceneKind.OpeningMovie));
         Assert.Contains(dispatcher.Events, item => item is TimedDescription
-            { Text: "A silver pendant spins in sunlight above the ocean." });
+            { Text: "Sunlight shines in a blue sky." });
         Assert.Contains(dispatcher.Events, item => item ==
             new StartupSceneEntered(StartupSceneKind.Title));
         Assert.Empty(dispatcher.Failures);

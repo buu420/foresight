@@ -1,0 +1,274 @@
+{
+  "version": "ct-ad-20260926-reviewed-1",
+  "review": "ViddyScribe draft checked against extracted game frames; corrected identities, actions and timing. No human listening validation claimed.",
+  "attribution": "Descriptions generated with ViddyScribe; reviewed and edited for the accessibility mod. Narration synthesized locally from the user-provided voice.",
+  "films": [
+    {
+      "movie": "001",
+      "duration_seconds": 158.358208,
+      "source_sha256": "093467bacbfba99f348f98a749641f54fd3ed14d29016861b2481b2b288423b0",
+      "decoded_sha256": "70aff86a94feaf1b43cdfc4a5a3af131eb2274ea3621b628662d79081ab7b4e3",
+      "source_job": "824b161d-ddd8-4805-af2a-e167966d85f4",
+      "cues": [
+        {
+          "id": "ct-001-001",
+          "start": 1.0,
+          "end": 3.7,
+          "text": "Sunlight shines in a blue sky."
+        },
+        {
+          "id": "ct-001-002",
+          "start": 4,
+          "end": 8.7,
+          "text": "Birds fly over the sea as the view pulls back through a window."
+        },
+        {
+          "id": "ct-001-003",
+          "start": 9,
+          "end": 14.7,
+          "text": "A hand picks up a framed photograph beside a vase."
+        },
+        {
+          "id": "ct-001-004",
+          "start": 15,
+          "end": 24.7,
+          "text": "The adventurers pose together. Close-ups show the smiling faces of Marle, Frog, Lucca, Robo, Ayla, and Crono."
+        },
+        {
+          "id": "ct-001-005",
+          "start": 25,
+          "end": 28.8,
+          "text": "The title: Chrono Trigger."
+        },
+        {
+          "id": "ct-001-006",
+          "start": 33,
+          "end": 47.5,
+          "text": "A spiked red shape glows. Dates spin around a clock, across castles, floating islands, and futuristic domes."
+        },
+        {
+          "id": "ct-001-007",
+          "start": 48,
+          "end": 50.8,
+          "text": "A silver aircraft emerges."
+        },
+        {
+          "id": "ct-001-008",
+          "start": 51,
+          "end": 57.7,
+          "text": "Crono clashes swords with a green reptile, then a purple beast."
+        },
+        {
+          "id": "ct-001-009",
+          "start": 58,
+          "end": 65.7,
+          "text": "Ayla runs through a forest and leaps onto a flying pterodactyl."
+        },
+        {
+          "id": "ct-001-010",
+          "start": 66,
+          "end": 73.7,
+          "text": "Lucca fires at surrounding robots. Robo blasts them, and she smiles."
+        },
+        {
+          "id": "ct-001-011",
+          "start": 75,
+          "end": 80.7,
+          "text": "In a stone dungeon, Frog draws his sword."
+        },
+        {
+          "id": "ct-001-012",
+          "start": 81,
+          "end": 87.7,
+          "text": "Under a full moon, Crono practices with a wooden sword, then wipes his brow."
+        },
+        {
+          "id": "ct-001-013",
+          "start": 88,
+          "end": 94.7,
+          "text": "Lucca pauses her work, screwdriver between her teeth, then takes off her glasses."
+        },
+        {
+          "id": "ct-001-014",
+          "start": 95,
+          "end": 103.7,
+          "text": "Marle clutches her glowing pendant. Colorful light ripples around her."
+        },
+        {
+          "id": "ct-001-015",
+          "start": 104,
+          "end": 108.7,
+          "text": "Magus's cape billows against the full moon."
+        },
+        {
+          "id": "ct-001-016",
+          "start": 109,
+          "end": 118.7,
+          "text": "A huge green dinosaur smashes through a wall. Crono, Ayla, and Robo face it."
+        },
+        {
+          "id": "ct-001-017",
+          "start": 119,
+          "end": 123.7,
+          "text": "Crono charges. Robo launches his fist on a chain."
+        },
+        {
+          "id": "ct-001-018",
+          "start": 125,
+          "end": 135.5,
+          "text": "In driving rain, a giant skeleton looms over Crono, Frog and Lucca, electricity crackling around it. Lucca fires."
+        },
+        {
+          "id": "ct-001-019",
+          "start": 136,
+          "end": 142.7,
+          "text": "Crono leaps at a giant serpent. It bursts apart under sword strokes and fire."
+        },
+        {
+          "id": "ct-001-020",
+          "start": 143,
+          "end": 150.2,
+          "text": "The heroes speed through the clouds in their silver aircraft, its engines blazing."
+        },
+        {
+          "id": "ct-001-021",
+          "start": 151,
+          "end": 154.7,
+          "text": "The Chrono Trigger logo appears."
+        },
+        {
+          "id": "ct-001-022",
+          "start": 155,
+          "end": 158.35,
+          "text": "Descriptions by ViddyScribe."
+        }
+      ]
+    },
+    {
+      "movie": "002",
+      "duration_seconds": 39.105708,
+      "source_sha256": "6168d095e3acef92c333c478213ceab886942ca60f09c2245695ee25501dc447",
+      "decoded_sha256": "ba85684dc8586665c0a78b0aa7e8b704622eca0a4993076ad319dfe84fdb1254",
+      "source_job": "a747c7e1-63b0-4e76-ae64-e1b9bd0d834d",
+      "cues": [
+        {
+          "id": "ct-002-001",
+          "start": 0.5,
+          "end": 2.8,
+          "text": "A volcano erupts."
+        },
+        {
+          "id": "ct-002-002",
+          "start": 3,
+          "end": 9.7,
+          "text": "Green reptiles surround Crono among the rocks."
+        },
+        {
+          "id": "ct-002-003",
+          "start": 10,
+          "end": 16.7,
+          "text": "Ayla leaps from a rock, kicking one reptile as she lands."
+        },
+        {
+          "id": "ct-002-004",
+          "start": 17,
+          "end": 20,
+          "text": "She clubs another away."
+        },
+        {
+          "id": "ct-002-005",
+          "start": 20.2,
+          "end": 24.8,
+          "text": "Ayla ducks a lunge and punches the attacker away."
+        },
+        {
+          "id": "ct-002-006",
+          "start": 25,
+          "end": 31.8,
+          "text": "She grins, then sweeps a group of reptiles off their feet with her club."
+        },
+        {
+          "id": "ct-002-007",
+          "start": 32,
+          "end": 34.5,
+          "text": "Crono stares, wide-eyed."
+        },
+        {
+          "id": "ct-002-008",
+          "start": 35,
+          "end": 39.1,
+          "text": "Descriptions by ViddyScribe."
+        }
+      ]
+    },
+    {
+      "movie": "003",
+      "duration_seconds": 65.498708,
+      "source_sha256": "de0634c9428cc83338a9f1a2f2767442615da38dfddf4746f4fbaff0a79b6236",
+      "decoded_sha256": "8f0fb77315d033d9b4c48831d4be89cd64aa2a935d540e967810ca8be32a58af",
+      "source_job": "00a87e06-0463-4316-b8fe-42b945c106a1",
+      "cues": [
+        {
+          "id": "ct-003-001",
+          "start": 0,
+          "end": 3.8,
+          "text": "Cliffs rise under dark clouds."
+        },
+        {
+          "id": "ct-003-002",
+          "start": 4,
+          "end": 15.7,
+          "text": "Beside Crono, Frog draws a broad sword, closes his eyes, and raises the blade."
+        },
+        {
+          "id": "ct-003-003",
+          "start": 16,
+          "end": 22.7,
+          "text": "Blue light streams from its tip. Wind whips around Frog."
+        },
+        {
+          "id": "ct-003-004",
+          "start": 23,
+          "end": 26.7,
+          "text": "Golden sparks flicker along the blade."
+        },
+        {
+          "id": "ct-003-005",
+          "start": 27,
+          "end": 33.7,
+          "text": "A beam shoots skyward, opening a swirling gap in the clouds."
+        },
+        {
+          "id": "ct-003-006",
+          "start": 34,
+          "end": 40.7,
+          "text": "Frog brings his shining sword down toward the mountain."
+        },
+        {
+          "id": "ct-003-007",
+          "start": 41,
+          "end": 48.7,
+          "text": "Frog swings toward the mountain as Crono watches."
+        },
+        {
+          "id": "ct-003-008",
+          "start": 49,
+          "end": 57.7,
+          "text": "Rocks fall as a deep cleft opens through the mountain."
+        },
+        {
+          "id": "ct-003-009",
+          "start": 58,
+          "end": 61.7,
+          "text": "Frog puts his sword away."
+        },
+        {
+          "id": "ct-003-010",
+          "start": 62,
+          "end": 65.49,
+          "text": "Crono smiles. Descriptions by ViddyScribe."
+        }
+      ]
+    }
+  ]
+}

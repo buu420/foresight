@@ -7,21 +7,54 @@ namespace ChronoTriggerAccessibility.Core.Tests.Startup;
 public sealed class OpeningMovieTimelineTests
 {
     [Fact]
-    public void EntriesMatchTheReviewedVisualTimeline()
+    public async Task VerifiedNarratedMovieDoesNotAlsoSpeakScreenReaderTimeline()
     {
-        Assert.Equal(
-        [
-            (TimeSpan.Zero, "A silver pendant spins in sunlight above the ocean."),
-            (TimeSpan.FromSeconds(10), "A framed group portrait gives way to close-ups of a knight-like frog and several young adventurers."),
-            (TimeSpan.FromSeconds(25), "A clock races across different eras, from ancient prehistory to medieval kingdoms."),
-            (TimeSpan.FromSeconds(45), "A red-haired swordsman battles through forests as a huge dinosaur and a metal robot appear."),
-            (TimeSpan.FromSeconds(65), "An inventor with purple hair smiles; a dark, caped sorcerer turns beneath the moon."),
-            (TimeSpan.FromSeconds(85), "A princess in white appears as shadowy monsters gather."),
-            (TimeSpan.FromSeconds(105), "The heroes charge across a bridge, battling with lightning and fire."),
-            (TimeSpan.FromSeconds(135), "A glowing circular time gate opens, then a machine flares with light."),
-            (TimeSpan.FromSeconds(150), "The Chrono Trigger title appears."),
-        ],
-        OpeningMovieTimeline.Entries.Select(entry => (entry.Offset, entry.Text)));
+        var events = new List<TimedDescription>();
+        var timeline = new OpeningMovieTimeline(new ControlledDelay(), _ => Task.FromResult(true));
+        await timeline.RunAsync(3, () => true, events.Add, CancellationToken.None);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task SkippingDuringMovieVerificationCannotReleaseAStaleDescription()
+    {
+        var verification = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var events = new List<TimedDescription>();
+        var timeline = new OpeningMovieTimeline(new ControlledDelay(), _ => verification.Task);
+        using var cancellation = new CancellationTokenSource();
+        var run = timeline.RunAsync(3, () => true, events.Add, cancellation.Token);
+        cancellation.Cancel();
+        verification.SetResult(false);
+        await run;
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task SlowVerificationResumesAtCurrentMovieTimeWithoutBurstingOldCues()
+    {
+        var clock = new ManualClock();
+        var delay = new RecordingDelay();
+        var verification = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var events = new List<TimedDescription>();
+        var timeline = new OpeningMovieTimeline(delay, _ => verification.Task, clock);
+        using var cancellation = new CancellationTokenSource();
+        var run = timeline.RunAsync(3, () => true, events.Add, cancellation.Token);
+        clock.Ticks = TimeSpan.FromSeconds(12).Ticks;
+        verification.SetResult(false);
+        await delay.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(OpeningMovieTimeline.Entries[2].Text, Assert.Single(events).Text);
+        Assert.Equal(TimeSpan.FromSeconds(3), delay.Requested);
+        cancellation.Cancel();
+        await run;
+    }
+
+    [Fact]
+    public void ReviewedCuesStayOrderedWithinTheVerifiedMovieDuration()
+    {
+        var offsets = OpeningMovieTimeline.Entries.Select(entry => entry.Offset.TotalSeconds).ToArray();
+        Assert.Equal(offsets.Order(), offsets);
+        Assert.Equal(offsets.Length, offsets.Distinct().Count());
+        Assert.All(offsets, offset => Assert.InRange(offset, 0, 158.358208));
     }
 
     [Fact]
@@ -33,7 +66,7 @@ public sealed class OpeningMovieTimelineTests
         using var cancellation = new CancellationTokenSource();
 
         var run = timeline.RunAsync(7, () => true, events.Add, cancellation.Token);
-        Assert.Equal("A silver pendant spins in sunlight above the ocean.", Assert.Single(events).Text);
+        Assert.Equal("Sunlight shines in a blue sky.", Assert.Single(events).Text);
 
         cancellation.Cancel();
         await run;
@@ -84,5 +117,24 @@ public sealed class OpeningMovieTimelineTests
         public void Release() => completion.TrySetResult();
         public ValueTask WaitAsync(TimeSpan delay, CancellationToken cancellationToken) =>
             new(completion.Task.WaitAsync(cancellationToken));
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public long Ticks { get; set; }
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => Ticks;
+    }
+
+    private sealed class RecordingDelay : IOpeningMovieDelay
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TimeSpan Requested { get; private set; }
+        public async ValueTask WaitAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            Requested = delay;
+            Entered.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
     }
 }
