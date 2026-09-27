@@ -44,6 +44,51 @@ public sealed class InstalledMovieDescriptionsTests : IDisposable
     }
 
     private string ManifestPath => Path.Combine(root, "Accessibility", "AudioDescriptions", "installed-movies.json");
+
+    [Fact]
+    public async Task SeparateAudioNeedsVerifiedPlaybackSupportBeforeSilencingFallback()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
+        await File.WriteAllBytesAsync(Path.Combine(root, "001.dat"), [1, 2, 3]);
+        await File.WriteAllTextAsync(ManifestPath, JsonSerializer.Serialize(new
+        {
+            version = 2, playback = "simultaneous-separate-tracks",
+            movies = new[] { new { fileName = "001.dat", narration = true,
+                sha256 = Convert.ToHexString(SHA256.HashData([1, 2, 3])),
+                decodedSha256 = new string('A', 64), originalAudioVerified = true,
+                videoVerified = true, audioTrackCount = 2 } }
+        }));
+        Assert.False(await InstalledMovieDescriptions.HasOpeningNarrationAsync(root));
+        Assert.True(await InstalledMovieDescriptions.HasOpeningNarrationAsync(root,
+            separateTrackPlaybackAvailable: true));
+        await File.WriteAllBytesAsync(Path.Combine(root, "001.dat"), [1, 2, 4]);
+        Assert.False(await InstalledMovieDescriptions.HasOpeningNarrationAsync(root,
+            separateTrackPlaybackAvailable: true));
+    }
+
+    [Fact]
+    public void SeparateTrackSelectionRequiresExactDecodedMovieAndRejectsAmbiguousRows()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
+        var decoded = Path.Combine(root, "tmp.mp4");
+        File.WriteAllBytes(decoded, [7, 8, 9]);
+        var row = new { fileName = "002.dat", narration = true,
+            decodedSha256 = Convert.ToHexString(SHA256.HashData([7, 8, 9])),
+            originalAudioVerified = true, videoVerified = true, audioTrackCount = 2 };
+        void Write(int copies) => File.WriteAllText(ManifestPath, JsonSerializer.Serialize(new
+        {
+            version = 2, playback = "simultaneous-separate-tracks", movies = Enumerable.Repeat(row, copies)
+        }));
+        Write(1);
+        Assert.Equal("002.dat", InstalledMovieDescriptions.MatchSeparateMovie(root, decoded));
+        Write(2);
+        Assert.Null(InstalledMovieDescriptions.MatchSeparateMovie(root, decoded));
+        Write(1);
+        File.WriteAllBytes(decoded, [7, 8, 10]);
+        Assert.Null(InstalledMovieDescriptions.MatchSeparateMovie(root, decoded));
+        File.WriteAllText(ManifestPath, "null");
+        Assert.Null(InstalledMovieDescriptions.MatchSeparateMovie(root, decoded));
+    }
     private void WriteManifest(string hash, string name = "001.dat")
     {
         Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);

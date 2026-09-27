@@ -91,6 +91,59 @@ class MoviePackTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 movies.validate_cues(cues, 4)
 
+    def test_separate_pack_requires_both_original_streams_verified_and_decoded_hash(self):
+        manifest = {"version": 2, "playback": "simultaneous-separate-tracks", "movies": [
+            self.rows[0] | {"decodedSha256": "a" * 64, "originalAudioVerified": True,
+                            "videoVerified": True, "audioTrackCount": 2}]}
+        self.assertEqual(len(movies.checked_rows(manifest)), 1)
+        for change in ({"originalAudioVerified": False}, {"decodedSha256": "bad"},
+                       {"audioTrackCount": 1}, {"videoVerified": False}):
+            with self.assertRaises(ValueError):
+                movies.checked_rows(manifest | {"movies": [manifest["movies"][0] | change]})
+
+    def test_render_preserves_original_audio_packets_and_adds_a_separate_voice_track(self):
+        import numpy as np
+        import soundfile as sf
+        source, output = self.root / "source.mp4", self.root / "output.mp4"
+        movies.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=s=32x32:r=24:d=4",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+                    "-map", "1:a", "-map", "0:v", "-c:v", "libx264", "-c:a", "aac", "-movie_timescale", "10000", source])
+        wave = self.pack / "test-voice.wav"
+        sf.write(wave, .1 * np.sin(np.arange(12000) * 2 * np.pi * 660 / 24000), 24000, subtype="PCM_24")
+        movies.write_json(wave.with_suffix(".json"), {"text": "Test narration.", "wave_sha256": movies.sha(wave),
+                                                    "checks": {"failures": []}})
+        film = {"duration_seconds": 4, "decoded_sha256": movies.sha(source),
+                "cues": [{"id": "test-voice", "text": "Test narration.", "start": 1, "end": 2}]}
+        movies.mix_film(film, source, self.pack, output, {})
+        streams = movies.probe(output)["streams"]
+        self.assertEqual(sum(s["codec_type"] == "audio" for s in streams), 2)
+        def packet_hash(path):
+            return movies.run(["ffmpeg", "-v", "error", "-i", path, "-map", "0:a:0", "-c", "copy",
+                               "-f", "hash", "-hash", "sha256", "-"], text=True).stdout
+        self.assertEqual(packet_hash(source), packet_hash(output))
+        voice, rate = sf.read(output.with_suffix(".wav"))
+        self.assertEqual(rate, 48000)
+        self.assertTrue(np.all(voice[:48000] == 0))
+        self.assertGreater(np.max(np.abs(voice[48000:72000])), .01)
+        self.assertTrue(np.all(voice[72000:] == 0))
+
+    def test_separate_pack_requires_compatible_installed_mod_before_any_movie_replacement(self):
+        for row in self.rows:
+            row.update(decodedSha256="a" * 64, originalAudioVerified=True, videoVerified=True, audioTrackCount=2)
+        movies.write_json(self.pack / "pack.json", {"version": 2, "playback": "simultaneous-separate-tracks", "movies": self.rows})
+        with self.assertRaisesRegex(ValueError, "0.3.37"):
+            movies.install(self.pack, self.game)
+        manifest = self.game / "Reloaded-II/Mods/chrono.trigger.accessibility/ModConfig.json"
+        manifest.parent.mkdir(parents=True)
+        movies.write_json(manifest, {"ModVersion": "0.3.36"})
+        with self.assertRaisesRegex(ValueError, "0.3.37"):
+            movies.install(self.pack, self.game)
+        self.assertEqual(movies.sha(self.game / "001.dat"), self.rows[0]["sourceSha256"])
+        movies.write_json(manifest, {"ModVersion": "0.3.37"})
+        movies.install(self.pack, self.game)
+        movies.restore(self.game)
+        self.assertEqual(movies.sha(self.game / "001.dat"), self.rows[0]["sourceSha256"])
+
     def test_steam_restored_originals_can_be_restored_and_reinstalled(self):
         for restored_count in (1, 2):
             manifest = movies.install(self.pack, self.game)

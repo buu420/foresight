@@ -1,4 +1,4 @@
-"""Build and reversibly install narrated Chrono Trigger movies from reviewed local cues.
+"""Build and reversibly install separate-track Chrono Trigger narration from reviewed cues.
 
 No uploads, paid jobs, voice generation, or changes to the game executable. Build needs
 ffmpeg/ffprobe, numpy and soundfile. Install/restore need only Python's standard library.
@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import struct
 import uuid
 
 NAMES = {f"{n:03}.dat" for n in range(1, 9)} | {"007-en.dat"}
@@ -71,6 +72,57 @@ def video_packet_times(path):
                            "-show_entries", "packet=pts,dts,duration", "-of", "json", path]).stdout)["packets"]
 
 
+def audio_hash(path):
+    return run(["ffmpeg", "-v", "error", "-i", path, "-map", "0:a:0", "-c:a", "copy",
+                "-f", "hash", "-hash", "sha256", "-"], text=True).stdout.strip()
+
+
+def audio_packet_times(path):
+    return json.loads(run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_packets",
+                           "-show_entries", "packet=pts,dts,duration", "-of", "json", path]).stdout)["packets"]
+
+
+def retain_original_audio_edit(source, destination):
+    """Retain the original AAC end trim, which FFmpeg stream-copy can round out
+    to a complete AAC frame. Fixed-size atom edits never move media/chunk offsets.
+    Both containers use the original 10000-unit movie timescale.
+    """
+    def boxes(data, start, end):
+        while start < end:
+            size, kind = struct.unpack_from(">I4s", data, start)
+            if size < 8 or start + size > end:
+                raise ValueError("unexpected MP4 atom layout")
+            yield kind, start, start + size
+            start += size
+
+    def child(data, parent, kind):
+        return next(b for b in boxes(data, parent[1] + 8, parent[2]) if b[0] == kind)
+
+    def edits(data):
+        root = (b"root", -8, len(data))
+        moov = child(data, root, b"moov")
+        mvhd = child(data, moov, b"mvhd")
+        if data[mvhd[1] + 8] != 0:
+            raise ValueError("unsupported MP4 movie header version")
+        timescale = struct.unpack_from(">I", data, mvhd[1] + 20)[0]
+        for track in (b for b in boxes(data, moov[1] + 8, moov[2]) if b[0] == b"trak"):
+            mdia = child(data, track, b"mdia")
+            handler = child(data, mdia, b"hdlr")
+            if data[handler[1] + 16:handler[1] + 20] == b"soun":
+                edit = child(data, child(data, track, b"edts"), b"elst")
+                return timescale, edit
+        raise ValueError("original audio edit list is missing")
+
+    original, rendered = source.read_bytes(), destination.read_bytes()
+    original_scale, old = edits(original)
+    rendered_scale, new = edits(rendered)
+    if original_scale != rendered_scale or old[2] - old[1] != new[2] - new[1]:
+        raise ValueError("incompatible original audio edit list")
+    with destination.open("r+b") as stream:
+        stream.seek(new[1])
+        stream.write(original[old[1]:old[2]])
+
+
 def validate_cues(cues, duration):
     if not cues or not math.isfinite(duration) or duration <= 0:
         raise ValueError("empty script or invalid movie duration")
@@ -97,13 +149,7 @@ def mix_film(film, source, voices, destination, approvals):
     duration = float(before["format"]["duration"])
     if abs(duration - film["duration_seconds"]) > .025 or sha(source) != film["decoded_sha256"]:
         raise ValueError(f"{source.name}: source movie does not match reviewed script")
-    raw = run(["ffmpeg", "-v", "error", "-i", source, "-map", "0:a:0", "-f", "f32le",
-               "-acodec", "pcm_f32le", "-ar", RATE, "-ac", 2, "-"]).stdout
     frames = round(duration * RATE)
-    original = np.frombuffer(raw, dtype="<f4").reshape(-1, 2)
-    music = np.zeros((frames, 2), dtype=np.float32)
-    music[:min(frames, len(original))] = original[:frames]
-    duck = np.ones(frames, dtype=np.float32)
     speech = np.zeros(frames, dtype=np.float32)
     report = []
     for cue in film["cues"]:
@@ -131,37 +177,22 @@ def mix_film(film, source, voices, destination, approvals):
         rms = float(np.sqrt(np.mean(active ** 2)))
         gain = min(10 ** (-18 / 20) / rms, 10 ** (-3 / 20) / float(np.max(np.abs(audio))))
         speech[start:stop] += audio * gain
-        # Preserve music/effects but leave at least a 12 dB RMS narration margin.
-        # A fixed reduction was insufficient under the movies' loud action effects.
-        edge = round(.10 * RATE)
-        lo, hi = max(0, start - edge), min(frames, stop + 2 * edge)
-        voice_rms = float(np.sqrt(np.mean((audio * gain) ** 2)))
-        bed_rms = float(np.sqrt(np.mean(music[start:stop] ** 2)))
-        floor = min(10 ** (-12 / 20), voice_rms / max(bed_rms, .000001) * 10 ** (-12 / 20))
-        envelope = np.full(hi - lo, floor, dtype=np.float32)
-        if start > lo:
-            envelope[:start-lo] = np.linspace(1, floor, start-lo)
-        if hi > stop:
-            envelope[stop-lo:] = np.linspace(floor, 1, hi-stop)
-        duck[lo:hi] = np.minimum(duck[lo:hi], envelope)
         report.append({"id": cue["id"], "waveSha256": wave_hash, "start": cue["start"],
                        "duration": len(audio) / RATE, "gainDb": round(20 * math.log10(gain), 3),
-                       "soundtrackDuckDb": round(20 * math.log10(floor), 3),
                        "voiceChecks": failures, "review": approval or None})
-    mixed = music * duck[:, None] + speech[:, None]
-    peak = float(np.max(np.abs(mixed)))
-    # Global gain only if required for 1 dB headroom; no clipping or pumping limiter.
-    master = min(1, 10 ** (-1 / 20) / max(peak, .000001))
-    mixed *= master
     wav_path = destination.with_suffix(".wav")
-    sf.write(str(wav_path), mixed, RATE, subtype="PCM_24")
-    # Keep original stream order (AAC then H.264), video packets and video timescale.
+    sf.write(str(wav_path), speech, RATE, subtype="PCM_24")
+    # Original AAC and H.264 are packet copies. Only the independent voice track
+    # is encoded. No original-audio decode, gain, ducking, remix or master filter.
     video = next(s for s in before["streams"] if s["codec_type"] == "video")
     timescale = video["time_base"].split("/")[-1]
     run(["ffmpeg", "-v", "error", "-y", "-i", source, "-i", wav_path,
-         "-map", "1:a:0", "-map", "0:v:0", "-map_metadata", "0", "-c:v", "copy",
-         "-video_track_timescale", timescale, "-movie_timescale", "10000", "-c:a", "aac", "-b:a", "256k",
+         "-map", "0:a:0", "-map", "0:v:0", "-map", "1:a:0", "-map_metadata", "0", "-c", "copy",
+         "-video_track_timescale", timescale, "-movie_timescale", "10000", "-c:a:1", "aac", "-b:a:1", "192k",
+         "-disposition:a:0", "default", "-disposition:a:1", "0",
+         "-metadata:s:a:1", "title=Own voice audio descriptions", "-metadata:s:a:1", "language=eng",
          "-t", f"{duration:.9f}", "-movflags", "+faststart", destination])
+    retain_original_audio_edit(source, destination)
     after = probe(destination)
     after_video = next(s for s in after["streams"] if s["codec_type"] == "video")
     unchanged = video_hash(source) == video_hash(destination)
@@ -171,12 +202,16 @@ def mix_film(film, source, voices, destination, approvals):
     # MP4 track summaries round edited durations differently. Compare every actual
     # video packet's PTS, DTS and duration, and bound container rounding to 1 ms.
     duration_delta = float(after["format"]["duration"]) - duration
-    if not unchanged or not stable or abs(duration_delta) > .001:
-        raise ValueError(f"{source.name}: output changed video or movie duration")
+    original_audio_unchanged = audio_hash(source) == audio_hash(destination)
+    original_audio_timing = audio_packet_times(source) == audio_packet_times(destination)
+    if (not unchanged or not stable or abs(duration_delta) > .001 or not original_audio_unchanged or
+            not original_audio_timing or sum(s["codec_type"] == "audio" for s in after["streams"]) != 2):
+        raise ValueError(f"{source.name}: output changed original audio/video or duration, or lacks separate narration")
     return {"videoPacketsUnchanged": unchanged, "videoTimingUnchanged": stable, "duration": duration,
+            "originalAudioPacketsUnchanged": original_audio_unchanged, "originalAudioTimingUnchanged": original_audio_timing,
             "containerDurationDeltaSeconds": round(duration_delta, 9),
-            "masterGainDb": round(20 * math.log10(master), 3), "preEncodePeak": float(np.max(np.abs(mixed))),
-            "minimumNarrationMarginDb": 12, "cues": report}
+            "soundtrackGainDb": 0, "soundtrackDucking": False, "audioTrackCount": 2,
+            "narrationPeak": float(np.max(np.abs(speech))), "cues": report}
 
 
 def build(script, sources, voices, output, approvals_path=None):
@@ -185,7 +220,8 @@ def build(script, sources, voices, output, approvals_path=None):
     document = read_json(script)
     approvals = read_json(approvals_path) if approvals_path else {}
     output.mkdir(parents=True, exist_ok=True)
-    pack = {"version": 1, "credit": CREDIT, "scriptSha256": sha(script), "movies": []}
+    pack = {"version": 2, "playback": "simultaneous-separate-tracks", "minimumModVersion": "0.3.37",
+            "credit": CREDIT, "scriptSha256": sha(script), "movies": []}
     for film in document["films"]:
         name = film["movie"] + ".dat"
         if name not in NAMES:
@@ -204,7 +240,8 @@ def build(script, sources, voices, output, approvals_path=None):
         write_json(output / (film["movie"] + "-verification.json"), report)
         pack["movies"].append({"fileName": name, "sourceSha256": film["source_sha256"],
                                "sha256": sha(encoded), "narration": True, "jobId": film["source_job"],
-                               "cueCount": len(film["cues"]), "videoVerified": True})
+                               "cueCount": len(film["cues"]), "videoVerified": True,
+                               "decodedSha256": sha(described), "originalAudioVerified": True, "audioTrackCount": 2})
         print(json.dumps({"movie": name, "cues": len(film["cues"]), "verified": True}), flush=True)
     shutil.copyfile(script, output / "reviewed-script.json")
     (output / "ATTRIBUTION.txt").write_text(CREDIT + "\nhttps://viddyscribe.com\n", encoding="utf-8")
@@ -213,8 +250,11 @@ def build(script, sources, voices, output, approvals_path=None):
 
 
 def checked_rows(manifest):
-    if manifest.get("version") != 1 or not manifest.get("movies"):
+    if manifest.get("version") not in (1, 2) or not manifest.get("movies"):
         raise ValueError("invalid pack manifest")
+    separate = manifest["version"] == 2
+    if separate and manifest.get("playback") != "simultaneous-separate-tracks":
+        raise ValueError("invalid separate-track pack")
     names = set()
     for row in manifest["movies"]:
         name = row.get("fileName")
@@ -223,6 +263,10 @@ def checked_rows(manifest):
         names.add(name)
         if any(not re.fullmatch(r"[a-fA-F0-9]{64}", row.get(key, "")) for key in ("sha256", "sourceSha256")):
             raise ValueError("invalid pack hash")
+        if separate and (not re.fullmatch(r"[a-fA-F0-9]{64}", row.get("decodedSha256", "")) or
+                         row.get("originalAudioVerified") is not True or row.get("videoVerified") is not True or
+                         row.get("audioTrackCount") != 2):
+            raise ValueError("invalid separate-track verification")
     return manifest["movies"]
 
 
@@ -248,6 +292,11 @@ def install(pack_dir, game):
     pack_dir, game = pack_dir.resolve(), game.resolve()
     manifest = read_json(pack_dir / "pack.json")
     rows = checked_rows(manifest)
+    if manifest["version"] == 2:
+        config = child(game, "Reloaded-II/Mods/chrono.trigger.accessibility/ModConfig.json")
+        version = read_json(config).get("ModVersion", "") if config.is_file() else ""
+        if not re.fullmatch(r"\d+\.\d+\.\d+", version) or tuple(map(int, version.split("."))) < (0, 3, 37):
+            raise ValueError("install mod version 0.3.37 or newer before installing separate audio tracks")
     state = child(game, "Accessibility/AudioDescriptions")
     installed = state / "installed-movies.json"
     if installed.exists():

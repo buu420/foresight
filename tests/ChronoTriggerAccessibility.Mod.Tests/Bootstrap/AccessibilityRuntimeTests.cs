@@ -2,6 +2,7 @@ using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Native.Hooks;
+using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Bootstrap;
@@ -46,6 +47,38 @@ public sealed class AccessibilityRuntimeTests
         Assert.All(scenario.Hooks, hook => Assert.True(hook.IsActive));
         Assert.Contains(scenario.Log.Infos, message => message.Contains("Test backend", StringComparison.Ordinal));
         Assert.Equal(AccessibilityRuntimeState.Active, scenario.Runtime.State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OptionalMovieHookDoesNotChangeExactRequiredHookValidation(bool omitRequiredHook)
+    {
+        var registrations = TestHookCatalog.Take(omitRequiredHook ? 1 : 2)
+            .Select(contract => (IHookRegistration)new TestRegistration(contract.Symbol)).ToList();
+        registrations.Add(new MovieAudioTracksHook(null!, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()),
+            _ => { }, _ => { }));
+        var installer = new ReloadedHookInstaller(registrations);
+        var log = new RecordingLog();
+        var fatal = new RecordingFatalError();
+        var runtime = new AccessibilityRuntime(new SuccessfulVerifier(), new ImmediateWindowWaiter(),
+            new ImmediatePrismFactory(), installer, log, fatal, 1234, requiredHookContracts: TestHookCatalog);
+        runtime.Initialize();
+        Assert.Equal(omitRequiredHook ? AccessibilityRuntimeState.Faulted : AccessibilityRuntimeState.Active, runtime.State);
+        if (!omitRequiredHook) Assert.Empty(fatal.Messages);
+        runtime.Shutdown();
+        Assert.All(installer.PreparedHooks, hook => Assert.False(hook.IsActive));
+    }
+
+    private sealed class TestRegistration(string name) : IHookRegistration
+    {
+        public string Name => name;
+        public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary)
+        {
+            var hook = new FakePreparedHook(name);
+            hook.Prepare();
+            return hook;
+        }
     }
 
     [Fact]

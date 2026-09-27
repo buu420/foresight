@@ -42,6 +42,9 @@ public sealed class Mod : ModBase
         var dispatcher = new SemanticEventDispatcher(log, fatalError);
         var nativeFactory = new ReloadedNativeHookFactory(hooks ?? throw new InvalidOperationException(
             "Reloaded shared hooks controller is unavailable."));
+        var gameRoot = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+        var movieAudio = new MovieAudioTracksHook(hooks, gameRoot, dispatcher.RecordDiagnostic,
+            text => dispatcher.Publish(new NavigationAnnouncement(text)));
         var composition = CreateCompleteAccessibilityComposition(
             nativeFactory,
             nativeFactory,
@@ -50,7 +53,7 @@ public sealed class Mod : ModBase
             dispatcher,
             new OpeningMovieTimeline(token => Task.Run(() =>
                 InstalledMovieDescriptions.HasOpeningNarrationAsync(
-                    Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, token), token)));
+                    gameRoot, token, movieAudio.OpeningReady), token)), movieAudio);
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
@@ -118,7 +121,8 @@ public sealed class Mod : ModBase
         IRuntimeNativeFunctionWrapperFactory wrapperFactory,
         IReadableMemory memory,
         ISemanticEventDispatcher dispatcher,
-        OpeningMovieTimeline movieTimeline)
+        OpeningMovieTimeline movieTimeline,
+        IHookRegistration? movieAudio = null)
     {
         ArgumentNullException.ThrowIfNull(hookFactory);
         ArgumentNullException.ThrowIfNull(asmHookFactory);
@@ -263,6 +267,7 @@ public sealed class Mod : ModBase
             .Concat(battleKeyboardHooks.Registrations)
             .Concat(submenuHooks.Registrations)
             .Concat(shopHooks.Registrations)
+            .Concat(movieAudio is null ? [] : new[] { movieAudio })
             .ToArray();
         var participants = new IHookActivationObserver[]
         {

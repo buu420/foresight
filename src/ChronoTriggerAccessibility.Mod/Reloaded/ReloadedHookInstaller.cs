@@ -20,6 +20,10 @@ public interface IPreparedHook
     void Disable();
 }
 
+/// <summary>Separately verified feature hooks, outside the required EXE catalog.
+/// These remain part of activation, lifetime rooting and shutdown/rollback.</summary>
+public interface IOptionalPreparedHook : IPreparedHook { }
+
 public interface IHookActivationObserver
 {
     void AfterHooksActivated();

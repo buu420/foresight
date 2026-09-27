@@ -276,16 +276,17 @@ public sealed class AccessibilityRuntime
             return;
         }
 
-        if (hookInstaller.PreparedHooks.Count != resolvedHooks.Count)
+        var requiredPreparedHooks = hookInstaller.PreparedHooks.Where(hook => hook is not IOptionalPreparedHook).ToArray();
+        if (requiredPreparedHooks.Length != resolvedHooks.Count)
         {
             throw new InvalidOperationException(
-                $"Hook installer exposed {hookInstaller.PreparedHooks.Count} prepared hooks; " +
+                $"Hook installer exposed {requiredPreparedHooks.Length} prepared required hooks; " +
                 $"expected {resolvedHooks.Count}.");
         }
 
         foreach (var resolvedHook in resolvedHooks)
         {
-            var matches = hookInstaller.PreparedHooks
+            var matches = requiredPreparedHooks
                 .Where(hook => string.Equals(
                     hook.Name,
                     resolvedHook.Contract.Symbol,

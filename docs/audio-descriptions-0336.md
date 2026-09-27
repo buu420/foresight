@@ -1,5 +1,7 @@
 # Audio descriptions, 0.3.36
 
+This is the historical first-pack report. Version [0.3.37](audio-descriptions-0337.md) replaces its ducked premixes with separate simultaneous narration and unchanged original soundtrack tracks, as requested by the user. The scripts and voice takes remain the same.
+
 The first movie pack uses the user's own voice for 40 short descriptions across three game movies. ViddyScribe produced text only. Narration was generated locally using the authorised OneDrive recordings; no voice recording was uploaded.
 
 | Movie | Coverage | ViddyScribe job |
