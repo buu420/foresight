@@ -149,11 +149,13 @@ def condition_variables(code, actors, start):
     return variables
 
 
-def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnostic=None, initial_coordinates=None):
+def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnostic=None, initial_coordinates=None,
+          signal_encounters=()):
     # Work entries: pc, active call frames, requirements, substitutions.
     # Each frame is (resume PC, callee entry); a completed visit is not recursion.
     initial = {('Local', key): axis for key, axis in (coordinate_variables or initial_coordinates or {}).items()}
     read_variables = condition_variables(code, actors, start)
+    read_variables.update((g['Source'], g['Index']) for action in signal_encounters for g in action['Guards'])
     # Process earlier branch destinations before pushing their common suffix
     # through the rest of the script. A depth-first stack exhausts every suffix
     # for each stronger history before their common join can absorb them.
@@ -165,8 +167,28 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
     output = []
     work = 0
     seen = {}
-    spatial = coordinate_variables is not None
     effects = {}
+    writes = {}
+    def local_writes(entry, visiting=frozenset()):
+        if entry in writes:
+            return writes[entry]
+        if entry in visiting:
+            return {key for key in read_variables if key[0] == 'Local'}
+        found = set()
+        for op, a in walk(code, [entry]).values():
+            if a is None or 5 <= op <= 7:
+                found.update(key for key in read_variables if key[0] == 'Local')
+            elif op in (2, 3, 4) and a[0] // 2 < len(actors):
+                found.update(local_writes(actors[a[0] // 2][a[1] & 15], visiting | {entry}))
+            elif op in (0x21, 0x22):
+                found.update(('Local', index) for index in a[1:3])
+            elif op in (0x75, 0x76, 0x77, 0x20, 0x55, 0x71, 0x72, 0x73):
+                found.add(('Local', a[0]))
+            elif op in (0x4f, 0x50, 0x48, 0x49, 0x51, 0x52, 0x53, 0x54, 0x3e, 0x74, 0x70,
+                        0x5b, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x63, 0x64, 0x67, 0x69, 0x6b):
+                found.add(('Local', a[-1]))
+        writes[entry] = found
+        return found
     def effectful(entry, visiting=frozenset()):
         if entry in effects:
             return effects[entry]
@@ -175,6 +197,8 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
         ops = walk(code, [entry])
         relevant = {0x3a, 0x45, 0x46, 0x56, 0x5a, 0x65, 0x66, 0xbb, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4,
                     0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xd0, 0xd1, 0xd3, 0xd4, 0xd6, 0xd8, 0xe4, 0xe5, *range(0xdc, 0xe2)}
+        if signal_encounters:
+            relevant.update((0x4f, 0x50, 0x75, 0x76, 0x77))
         value = any(a is None or op in relevant for op, a in ops.values())
         if not value:
             value = any(effectful(actors[a[0] // 2][a[1] & 15], visiting | {entry})
@@ -228,6 +252,11 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                     continue
             if 2 <= op <= 7:
                 values = {k: None if k[0] == 'Local' else v for k, v in values.items()}
+                changed = local_writes(actors[a[0] // 2][a[1] & 15]) if op in (2, 3, 4) and a[0] // 2 < len(actors) else \
+                    {key for key in read_variables if key[0] == 'Local'}
+                # A callback can change a previously guarded cell that has no
+                # substitution yet. Its later wait is not a pre-activation gate.
+                values.update((key, None) for key in changed)
             condition = None
             if op == 0x18:
                 condition = ('Global', 0, 3, a[0])
@@ -291,7 +320,7 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                 kind = 'Progress'
             elif op in (0x3a, 0x45, 0x46, 0x65, 0x66):
                 kind = 'Switch'
-            elif op == 0xd8 and spatial:
+            elif op == 0xd8:
                 kind = 'Encounter'
             if kind:
                 record = dict(Kind=kind, Guards=list(guards))
@@ -315,6 +344,48 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
                 # branch after it and losing the trigger to the state budget.
                 if kind in ('Warp', 'Encounter'):
                     break
+            # A contact handler may notify a separately scheduled room controller
+            # instead of calling D8 itself. Link only a proven immediate local
+            # write to a controller predicate that the written value satisfies.
+            # All other native predicates still gate the resulting destination.
+            write = (a[-1], int.from_bytes(a[:-1], 'little') & 255) if op in (0x4f, 0x50) else \
+                (a[0], 0 if op == 0x77 else 1) if op in (0x75, 0x76, 0x77) else None
+            if write is not None:
+                index, written = write
+                for encounter in signal_encounters:
+                    signal_guards = [g for g in encounter['Guards'] if g['Source'] == 'Local' and g['Index'] == index]
+                    # Require an exact event signal, not a negated bypass/history
+                    # condition inherited from an earlier branch of a room loop.
+                    domain = {v for v in range(256) if all(compare(v, g['Value'], g['Operation']) == g['Expected'] for g in signal_guards)}
+                    if not signal_guards or domain != {written}:
+                        continue
+                    remaining = list(guards)
+                    valid = True
+                    for g in encounter['Guards']:
+                        if g in signal_guards:
+                            continue
+                        variable = (g['Source'], g['Index'])
+                        if variable in values:
+                            current = values[variable]
+                            # Do not guess a callback's unknown intermediate value.
+                            if not isinstance(current, int) or compare(current, g['Value'], g['Operation']) != g['Expected']:
+                                valid = False
+                                break
+                        elif g not in remaining:
+                            remaining.append(g)
+                    if valid:
+                        remaining.append(guard('Local', index, 1, written))
+                        # Reject contradictory producer/consumer predicates.
+                        for source, cell in {(g['Source'], g['Index']) for g in remaining}:
+                            if source not in ('Global', 'Local', 'X', 'Y'):
+                                continue
+                            related = [g for g in remaining if (g['Source'], g['Index']) == (source, cell)]
+                            if not any(all(compare(v, g['Value'], g['Operation']) == g['Expected'] for g in related) for v in range(256)):
+                                valid = False
+                                break
+                    if valid:
+                        output.append(dict(Kind='Encounter', Value=encounter['Value'],
+                            Controller=encounter['Controller'], Guards=remaining))
             if op in (0x4f, 0x50):
                 values[('Local', a[-1])] = int.from_bytes(a[:-1], 'little') & 255
             elif op in (0x75, 0x76, 0x77):
@@ -351,7 +422,7 @@ def paths(code, actors, start, coordinate_variables=None, budget=120000, diagnos
     return simplify(output), True
 
 
-def region_actions(code, actors, incomplete=None):
+def startup_actions(code, actors, incomplete=None):
     coords = coordinate_locals(code, actors)
     output = []
     for actor, entries in enumerate(actors):
@@ -364,25 +435,34 @@ def region_actions(code, actors, incomplete=None):
             if incomplete is not None:
                 incomplete.append(dict(Actor=actor, Function='Startup', Start=min(returns) + 1))
             continue
-        for action in actions:
-            if action['Kind'] not in ('Warp', 'Progress', 'Switch', 'Encounter', 'Terrain'):
-                continue
-            x, y = set(range(256)), set(range(256))
-            for g in action['Guards']:
-                if g['Source'] in ('X', 'Y'):
-                    axis = x if g['Source'] == 'X' else y
-                    axis.intersection_update(v for v in range(256)
-                                             if compare(v, g['Value'], g['Operation']) == g['Expected'])
-            if not x or not y or len(x) == len(y) == 256:
-                continue
-            guards = [g for g in action['Guards'] if g['Source'] not in ('X', 'Y')]
-            for left, right in intervals(x):
-                for top, bottom in intervals(y):
-                    record = dict(Actor=actor, Kind=action['Kind'], Destination=action.get('Destination', -1),
-                                  Value=action.get('Value', 0), Left=left, Top=top,
-                                  Right=right, Bottom=bottom, Guards=guards)
-                    if action['Kind'] == 'Switch':
-                        record.update(Source=action['Source'], Index=action['Index'], Set=action['Set'])
-                    if record not in output:
-                        output.append(record)
+        output.extend(dict(action, Actor=actor) for action in actions)
+    return output
+
+
+def region_actions(code, actors, incomplete=None, startup=None):
+    output = []
+    if startup is None:
+        startup = startup_actions(code, actors, incomplete)
+    for action in startup:
+        actor = action['Actor']
+        if action['Kind'] not in ('Warp', 'Progress', 'Switch', 'Encounter', 'Terrain'):
+            continue
+        x, y = set(range(256)), set(range(256))
+        for g in action['Guards']:
+            if g['Source'] in ('X', 'Y'):
+                axis = x if g['Source'] == 'X' else y
+                axis.intersection_update(v for v in range(256)
+                                         if compare(v, g['Value'], g['Operation']) == g['Expected'])
+        if not x or not y or len(x) == len(y) == 256:
+            continue
+        guards = [g for g in action['Guards'] if g['Source'] not in ('X', 'Y')]
+        for left, right in intervals(x):
+            for top, bottom in intervals(y):
+                record = dict(Actor=actor, Kind=action['Kind'], Destination=action.get('Destination', -1),
+                              Value=action.get('Value', 0), Left=left, Top=top,
+                              Right=right, Bottom=bottom, Guards=guards)
+                if action['Kind'] == 'Switch':
+                    record.update(Source=action['Source'], Index=action['Index'], Set=action['Set'])
+                if record not in output:
+                    output.append(record)
     return simplify(output)

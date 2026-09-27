@@ -32,6 +32,6 @@ The executable's last failed function, RVA `16E7A0`, was recovered by annotating
 
 Field actor entry flows decode 472,159 of 474,893 code bytes. The remaining 2,734 bytes are printed as uninterpreted hex in their listings and retained in the raw files. The three actor-table stubs are `Atel_0320.dat`, `Atel_0321.dat`, and `Atel_0322.dat`. World opcode `53` was corrected to two operand bytes from native dispatch and handler code, resolving a community decoder mismatch in the seventh world file.
 
-`verification.json` reports export consistency: module identities, file membership, counts, resource hashes, and script coverage. It does not certify full game accessibility or runtime correctness. The installed mod remains version 0.3.31; this decompilation pass itself requires no game-file deployment or restart.
+`verification.json` reports export consistency: module identities, file membership, counts, resource hashes, and script coverage. It does not certify full game accessibility or runtime correctness. The decompilation pass itself did not change the installed mod. See the [current release documentation](../README.md) and [encounter coverage audit](encounter-navigation-0335.md) for subsequent implementation and validation.
 
 Claude Opus 5.5 at maximum effort also examined engine UI ownership in this session. Its menu audit and proposed hook work are separate from the decompilation corpus and are not represented here as installed or verified runtime support.

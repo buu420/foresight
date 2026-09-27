@@ -70,7 +70,30 @@ def for_scene(scene):
 
 
 def actor_actions(scene, actor):
-    """Two bounded pre-cinematic paths lost to later party-branch expansion."""
+    """Audited paths lost to bounded expansion or non-singleton signal waits."""
+    if (scene, actor) == (173, 11):
+        # Relative Atel offsets: actor11 init1C1..1D8 shows the first Flea
+        # only before57&04, afterA3&02, and beforeA3&08. Confirm1DA sets0A=1.
+        # Controller12 waits for0A!=0 at233/238 only beforeDF&01; the other
+        # branch warps to460 at22D. It then calls D8 C092 at253. This producer is
+        # audited separately from the conservative singleton signal rule.
+        return [dict(Kind='Encounter', Touch=False, Controller=12, Value=0xc092,
+                     Guards=[guard('Global', 0x57, 6, 4, False),
+                             guard('Global', 0xa3, 6, 2),
+                             guard('Global', 0xa3, 6, 8, False),
+                             guard('Global', 0xdf, 6, 1, False), local(0x0a)])]
+    if (scene, actor) == (465, 10):
+        # Atel0284: 0993 requires point>=4D; 09EE calls actor8 fn3.
+        # 04EC..0549 redirects Marle/Lucca/Frog without magic to teaching;
+        # local18==1 also takes that branch. 056E tests E1&02 (introduction
+        # already heard), then the player's choice at0577 can call actor0 fn3
+        # at0587 and D8 E080 at02CD. No choice is made by this metadata.
+        from itertools import product
+        gates = [guard('Global', 0, 4, 0x4d), guard('Global', 0xe1, 6, 2),
+                 guard('Local', 0x18, 0, 1, False)]
+        return [dict(Kind='Encounter', Touch=False, Value=0xe080, Guards=gates + list(party))
+                for party in product(*[(guard('ActiveParty', member, 0, 1, False),
+                                        guard('Global', 0x1e0, 6, 1 << member)) for member in (1, 2, 4)])]
     if (scene, actor) == (618, 13):
         # The local78 branch only animates the door; both paths join at0635.
         # E2A&01 is the sole gate to063F..067D (lockdown announcements).

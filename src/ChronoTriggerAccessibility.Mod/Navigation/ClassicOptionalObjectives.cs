@@ -192,8 +192,8 @@ public static class ClassicOptionalObjectives
         Actor("revival:spawn-three", "Defeat the final Lavos Spawn on Death Peak", 495, 8),
         Actor("revival:shell", "Push the empty shell beneath the ladder", 495, 9,
             "Use the shell as a step to reach the upper ledge."),
-        Arrival("revival:summit", "Reach Death Peak's summit with the Time Egg and doppelganger", 265,
-            "The summit starts the revival scene automatically."),
+        Actor("revival:summit", "Reach Death Peak's summit with the Time Egg and doppelganger", 265, 0,
+            "Walk to the summit to start the revival scene."),
 
         Actor("omen:entrance", "Open the Black Omen's entrance", 449, 8,
             "It can be cleared in 1000 AD, then 600 AD, then 12000 BC. A clear removes it from that era and all later eras. The future entrance does not open."),

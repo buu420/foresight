@@ -5,6 +5,27 @@ namespace ChronoTriggerAccessibility.Core.Tests.Navigation;
 
 public sealed class ContactFinishTests
 {
+    [Theory]
+    [InlineData(543, 320, NavigationDirection.West)]
+    [InlineData(225, 320, NavigationDirection.East)]
+    [InlineData(384, 415, NavigationDirection.North)]
+    [InlineData(384, 161, NavigationDirection.South)]
+    [InlineData(384, 256, NavigationDirection.North)]
+    [InlineData(416, 288, NavigationDirection.North)]
+    public void NearbyEncounterNeedsNativeContactBeforeWalkingStops(int x, int y, NavigationDirection direction)
+    {
+        var player = new NavigationPoint(x, y, 1);
+        var target = new NavigationTarget("battle", "Encounter", NavigationCategory.People,
+            new(384, 256, 1), [player], true, true) { ContactPosition = new(384, 256, 1) };
+        var frame = new NavigationFrame("forest", true, player, [target], new Line(), 256);
+        var controller = new NavigationController();
+        var start = controller.Handle(NavigationCommand.ToggleWalk, frame, 0);
+        Assert.True(start.AutoWalking);
+        Assert.Equal(direction, start.Direction);
+        Assert.DoesNotContain(start.Speech, s => s.StartsWith("Arrived"));
+        Assert.False(controller.Update(frame with { CanNavigate = false }, 100).AutoWalking);
+    }
+
     [Fact]
     public void AutomaticContactWaitsForNativeAdvanceAndStopsIfItDoesNotHappen()
     {

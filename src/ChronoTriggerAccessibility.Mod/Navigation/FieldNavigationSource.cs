@@ -50,6 +50,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var storyCandidates = new List<NavigationTarget>();
         var scriptTerminals = new List<(string Id, int Left, int Top, int Right, int Bottom)>();
         var activeIds = new HashSet<string>();
+        // Rows named only by their appearance, and the counters standing in for a keeper.
+        var genericIds = new HashSet<string>();
+        var standInsOf = new List<(string Owner, string StandIn)>();
         var guideActive = field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 };
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
@@ -79,20 +82,38 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 (IsCathedralOrgan(actor) ? "Organ" : null) : null;
-            // A stand-in with no name of its own is the same destination twice over: the
-            // actor whose script it runs is already offered, and this would arrive at the
-            // same spot under a name that tells the player nothing.
-            if (label is null && field.SceneIdCoherent && FieldActorProxies.IsProxy(field.SceneId, actor.Index) &&
-                field.Actors.Any(owner => InteractionProxy(owner)?.Index == actor.Index)) continue;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
             approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
+            var battles = FieldEncounters.Available(field, actor, story, scriptInfo);
+            // A trap drawn as an ordinary object keeps its appearance. Its outcome is
+            // learned by interacting, not announced by putting it in Enemies in advance.
+            var appearanceBattle = description.Category == NavigationCategory.Objects && battles.Length != 0 &&
+                (battles.Any(a => !a.Touch) || !scriptInfo!.Actions.Any(a => !a.Touch && a.Available(story)));
+            var battleTouch = false;
+            if (appearanceBattle) approaches = EncounterApproaches(actor, battles, out battleTouch);
+            touchOnly |= battleTouch;
             if (touchOnly) touchGoals.Add((actor.Index, approaches));
-            Add(id, label ?? description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
-                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction));
+            // A creature with a proven battle activation belongs in Enemies.
+            // Retain its original identity for existing story bindings while
+            // omitting the duplicate row. Named challengers and service keepers keep both.
+            var encounterOnly = label is null && description.Label == "Creature" &&
+                FieldContentFacts.Service(field.SceneId, actor.Index) is null && battles.Length != 0 &&
+                EncounterApproaches(actor, battles, out _).Count != 0;
+            Add(id, label ?? (field.SceneIdCoherent ? FieldContentFacts.ActorLabel(field.SceneId, actor, description.Category) : null) ??
+                description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
+                storyOnly: encounterOnly,
+                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction),
+                arrivalInstruction: appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
+                contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
+                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null);
+            if (label is null) genericIds.Add(id);
+            foreach (var (standIn, same) in InteractionProxies(actor))
+                if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
+                    : $"actor:{standIn.Index}:{standIn.ClassTag}:{standIn.VisualIndex}"));
         }
         foreach (var chest in treasures)
         {
@@ -125,11 +146,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => a.Available(story)).ToArray() : [];
+            if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
+                !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
+            var generic = label is null;
             if (label is null && scripted.Length != 0)
-                label = scripted.Any(a => a.Kind == "Item") ? "Item pickup" :
+                label = FieldContentFacts.Service(field.SceneId, actor.Index) ??
+                    (scripted.Any(a => a.Kind == "Item") ? "Item pickup" :
                     scripted.FirstOrDefault(a => a.Kind == "Warp") is { } warp
-                        ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery";
+                        ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery");
             if (label is null) continue;
+            if (generic) genericIds.Add($"landmark:{actor.Index}");
             var position = Position(actor.FineX, actor.FineY);
             var touch = knownTouch || metadata is { Touch: true };
             var approaches = touch
@@ -146,6 +172,50 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add($"landmark:{actor.Index}", label, scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0));
+        }
+        // A counter that only runs its keeper's script is the keeper's destination, already
+        // offered under the keeper's name with the counter's reach. A visible character that
+        // happens to stand in (the Truce ferry office cat) keeps its own row. Repeated markers
+        // of one map feature (a two-tile sign) are one row with every marker's standing room.
+        targets.RemoveAll(t => t.Category != NavigationCategory.People && genericIds.Contains(t.Id) &&
+            standInsOf.Any(s => s.StandIn == t.Id && targets.Any(owner => owner.Id == s.Owner)));
+        if (field.SceneIdCoherent)
+        foreach (var group in FieldContentFacts.MarkerGroups(field.SceneId))
+        {
+            var members = targets.Where(t => genericIds.Contains(t.Id) && group.Any(index => t.Id == $"landmark:{index}")).ToList();
+            if (members.Count < 2) continue;
+            var first = members[0];
+            members = members.Where(m => m.Label == first.Label && m.Category == first.Category).ToList();
+            if (members.Count < 2) continue;
+            var merged = first with
+            {
+                ApproachPoints = members.SelectMany(m => m.ApproachPoints).Distinct()
+                    .OrderBy(p => Math.Abs((long)p.X - first.Position.X) + Math.Abs((long)p.Y - first.Position.Y)).Take(64).ToArray(),
+                Visible = members.Any(m => m.Visible), Discovered = members.Any(m => m.Discovered),
+                GuideAvailable = members.Any(m => m.GuideAvailable),
+            };
+            targets[targets.IndexOf(first)] = merged;
+            targets.RemoveAll(t => members.Skip(1).Contains(t));
+        }
+        if (field.SceneIdCoherent)
+        foreach (var actor in field.Actors)
+        {
+            if (!InsideMap(actor)) continue;
+            var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
+            if (metadata is not { Marker: true } && FieldVisualLabels.Describe(actor).Category == NavigationCategory.Objects) continue;
+            var encounters = FieldEncounters.Available(field, actor, story, metadata);
+            if (encounters.Length == 0) continue;
+            var position = Position(actor.FineX, actor.FineY);
+            var approaches = EncounterApproaches(actor, encounters, out var touch);
+            if (approaches.Count == 0) continue;
+            if (touch) touchGoals.Add((actor.Index, approaches));
+            Add($"actor-encounter:{actor.Index}", "Encounter", NavigationCategory.Enemies,
+                position, approaches, actor.IsDrawn && viewport.Contains(position.X, position.Y) ||
+                    metadata is { Marker: true } && TileVisible(actor.TileX, actor.TileY),
+                guideAvailable: guideActive, storyCandidate: false,
+                arrivalInstruction: touch ? null : "Press Confirm to interact.",
+                contactPosition: touch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
+                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null);
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => r.Available(story) &&
@@ -347,16 +417,22 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             for (var layer = 1; layer <= 3; layer++)
                 if (graph.TryPosition(x, y, layer, out var point)) yield return point;
         }
-        /// <summary>Resolve an audited forwarding actor only while both native actors
-        /// match their identities and permit their scripts to run.</summary>
-        FieldActorSnapshot? InteractionProxy(FieldActorSnapshot actor)
+        /// <summary>Resolve the audited and script-proven actors that receive Confirm for this
+        /// one, only while both native actors match their identities and permit their scripts
+        /// to run. A generated stand-in may be an interaction marker, which is never drawn.</summary>
+        IReadOnlyList<(FieldActorSnapshot Actor, bool SameDestination)> InteractionProxies(FieldActorSnapshot actor)
         {
-            if (!field.SceneIdCoherent || FieldActorProxies.ProxyFor(field.SceneId, actor.Index) is not { } id ||
-                !actor.IsUsable || !actor.IsDrawn || !InsideMap(actor) || actor.IsPartyMember || !actor.ScriptCallsEnabled ||
-                GameNavigationCatalog.ActorInfo(field.SceneId, actor) is null) return null;
-            return field.Actors.FirstOrDefault(a => a.Index == id && a.IsUsable && a.IsDrawn && InsideMap(a) &&
-                !a.IsPartyMember && a.ScriptCallsEnabled && (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
-                GameNavigationCatalog.ActorInfo(field.SceneId, a)?.Id == id);
+            if (!field.SceneIdCoherent || !actor.IsUsable || !actor.IsDrawn || !InsideMap(actor) || actor.IsPartyMember ||
+                !actor.ScriptCallsEnabled || GameNavigationCatalog.ActorInfo(field.SceneId, actor) is null) return [];
+            var bindings = FieldContentFacts.StandInsFor(field.SceneId, actor.Index, story).Select(s => (s.Actor, s.SameDestination, AllowMarker: true));
+            if (FieldActorProxies.ProxyFor(field.SceneId, actor.Index) is { } audited) bindings = bindings.Append((audited, true, false));
+            var result = new List<(FieldActorSnapshot, bool)>();
+            foreach (var (id, same, allowMarker) in bindings)
+                if (field.Actors.FirstOrDefault(a => a.Index == id && a.IsUsable && (a.IsDrawn || allowMarker && a.ClassTag == 7) &&
+                    InsideMap(a) && !a.IsPartyMember && a.ScriptCallsEnabled && (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
+                    GameNavigationCatalog.ActorInfo(field.SceneId, a)?.Id == id) is { } proxy && result.All(r => r.Item1 != proxy))
+                    result.Add((proxy, same));
+            return result;
         }
         /// <summary>One step away may be on the inaccessible side of a counter.
         /// Add in-range standing positions for actors; chests keep their separate rule.</summary>
@@ -368,22 +444,47 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             return points.Where(p => current.Any(a => a.AcceptsPosition(p.X, p.Y, NavigationUnits.LocalStep / 8))).ToArray();
         }
 
+        IReadOnlyList<NavigationPoint> EncounterApproaches(FieldActorSnapshot actor, GameNavigationCatalog.Action[] encounters, out bool touch)
+        {
+            touch = encounters.Any(a => a.Touch);
+            // 8B places feet at fraction FF. Keep the exact foot row, plus
+            // native contact positions around it when the object occupies wall
+            // terrain (Guardia Forest's trap sparkle does). Only this selected
+            // actor is allowed to be bumped by the route's collision graph.
+            var approaches = touch
+                ? At((actor.FineX - actor.CollisionOffsetX * 16 - 1) / 16 * 16, actor.FineY / 16 * 16)
+                    .Concat(FieldTerrainGraph.Contacts(actor, player.Layer)
+                        .SelectMany(p => At(p.X - actor.CollisionOffsetX * 16, p.Y)))
+                    .Where(p => !graph.IsTerminal(p)).Distinct().ToArray()
+                : ActorApproach(actor, Position(actor.FineX, actor.FineY));
+            approaches = InteractionPositions(approaches, encounters, touch);
+            if (approaches.Count == 0 && touch && encounters.Any(a => !a.Touch))
+            {
+                touch = false;
+                approaches = InteractionPositions(ActorApproach(actor, Position(actor.FineX, actor.FineY)), encounters, false);
+            }
+            return approaches;
+        }
+
         IReadOnlyList<NavigationPoint> ActorApproach(FieldActorSnapshot actor, NavigationPoint p)
         {
             var direct = Approach(p);
             // The sprite the player recognises is not always the one the game lets them
             // act on. Where another actor exists only to run this one's script, its own
             // standing room counts too, so long as it is really there and really itself.
-            var proxy = InteractionProxy(actor);
+            var proxies = InteractionProxies(actor);
             // A nearby goal can be blocked by a counter, hedge, or the actor's
             // own body. Widen to everywhere the confirm handler would still
             // accept, and let the search pick whichever of them it can actually walk
             // to. An actor with all four steps open and no stand-in pays nothing.
-            if (direct.Count == 4 && proxy is null && (actor.LoadedFlag & 1) == 0) return direct;
+            if (direct.Count == 4 && proxies.Count == 0 && (actor.LoadedFlag & 1) == 0) return direct;
             var widened = direct.Concat(ConfirmApproach(actor.FineX, actor.FineY));
-            if (proxy is not null) widened = widened.Concat(ConfirmApproach(proxy.FineX, proxy.FineY));
+            foreach (var (proxy, _) in proxies) widened = widened.Concat(ConfirmApproach(proxy.FineX, proxy.FineY));
+            // Rank by the nearest place the game accepts Confirm, so a keeper's own floor
+            // behind the counter cannot crowd out every customer-side goal.
+            var sources = proxies.Select(s => (X: s.Actor.FineX, Y: s.Actor.FineY)).Prepend((X: p.X, Y: p.Y)).ToArray();
             return widened.Distinct()
-                .OrderBy(point => Math.Abs(point.X - p.X) + Math.Abs(point.Y - p.Y)).Take(64).ToArray();
+                .OrderBy(point => sources.Min(s => Math.Abs(point.X - s.X) + Math.Abs(point.Y - s.Y))).Take(64).ToArray();
         }
         IReadOnlyList<NavigationPoint> Approach(NavigationPoint p)
         {
@@ -493,7 +594,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
-            bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null)
+            bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
+            NavigationPoint? contactPosition = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -505,6 +607,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
+                    ContactPosition = contactPosition,
                 };
                 if (visible) discovered[id] = target;
                 output.Add(target);

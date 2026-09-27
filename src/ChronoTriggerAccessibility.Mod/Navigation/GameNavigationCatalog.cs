@@ -42,7 +42,7 @@ public static class GameNavigationCatalog
     }
     public sealed record TileCopy(int Left, int Top, int Right, int Bottom, int X, int Y, int Flags);
     public sealed record Action(string Kind, Requirement[] Guards, bool Touch, int Destination = -1,
-        int ArrivalX = 0, int ArrivalY = 0, int Value = 0, TileCopy? Copy = null)
+        int ArrivalX = 0, int ArrivalY = 0, int Value = 0, TileCopy? Copy = null, int Controller = -1)
     {
         public bool Available(FieldStoryState? state, bool local = true) => Guards.All(g => g.Allows(state, local));
 

@@ -1,0 +1,631 @@
+{
+ "ExecutableSha256": "8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7",
+ "Source": "tools/research/future_story/build_field_content.py",
+ "StandIns": [
+  {
+   "Scene": 12,
+   "StandIn": 13,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 17,
+   "StandIn": 11,
+   "Target": 8,
+   "Kind": "Forward",
+   "Guards": [
+    {
+     "Source": "Global",
+     "Index": 0,
+     "Operation": 3,
+     "Value": 39,
+     "Expected": false
+    },
+    {
+     "Source": "Local",
+     "Index": 6,
+     "Operation": 0,
+     "Value": 0,
+     "Expected": true
+    }
+   ]
+  },
+  {
+   "Scene": 17,
+   "StandIn": 11,
+   "Target": 9,
+   "Kind": "Forward",
+   "Guards": [
+    {
+     "Source": "Global",
+     "Index": 0,
+     "Operation": 3,
+     "Value": 39,
+     "Expected": false
+    },
+    {
+     "Source": "Local",
+     "Index": 6,
+     "Operation": 0,
+     "Value": 0,
+     "Expected": false
+    },
+    {
+     "Source": "Global",
+     "Index": 322,
+     "Operation": 6,
+     "Value": 16,
+     "Expected": true
+    }
+   ]
+  },
+  {
+   "Scene": 18,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 35,
+   "StandIn": 8,
+   "Target": 9,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 39,
+   "StandIn": 8,
+   "Target": 9,
+   "Kind": "Forward",
+   "Guards": [
+    {
+     "Source": "Global",
+     "Index": 417,
+     "Operation": 6,
+     "Value": 128,
+     "Expected": false
+    },
+    {
+     "Source": "Global",
+     "Index": 418,
+     "Operation": 6,
+     "Value": 16,
+     "Expected": false
+    }
+   ]
+  },
+  {
+   "Scene": 54,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Twin",
+   "Guards": []
+  },
+  {
+   "Scene": 55,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Twin",
+   "Guards": []
+  },
+  {
+   "Scene": 62,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 62,
+   "StandIn": 10,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 116,
+   "StandIn": 11,
+   "Target": 10,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 118,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 157,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Twin",
+   "Guards": []
+  },
+  {
+   "Scene": 188,
+   "StandIn": 9,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 188,
+   "StandIn": 10,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 188,
+   "StandIn": 11,
+   "Target": 8,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 282,
+   "StandIn": 20,
+   "Target": 19,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 335,
+   "StandIn": 20,
+   "Target": 19,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 355,
+   "StandIn": 20,
+   "Target": 19,
+   "Kind": "Call",
+   "Guards": []
+  },
+  {
+   "Scene": 439,
+   "StandIn": 32,
+   "Target": 15,
+   "Kind": "Call",
+   "Guards": []
+  }
+ ],
+ "Services": [
+  {
+   "Scene": 5,
+   "Actor": 14,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 5,
+   "Actor": 16,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 5,
+   "Actor": 24,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 12,
+   "Actor": 8,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 12,
+   "Actor": 13,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 17,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 17,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 17,
+   "Actor": 11,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 35,
+   "Actor": 8,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 35,
+   "Actor": 9,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 39,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 40,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 54,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 54,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 55,
+   "Actor": 8,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 55,
+   "Actor": 9,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 57,
+   "Actor": 11,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 62,
+   "Actor": 12,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 62,
+   "Actor": 17,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 116,
+   "Actor": 10,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 116,
+   "Actor": 11,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 118,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 118,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 138,
+   "Actor": 22,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 139,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 156,
+   "Actor": 9,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 157,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 157,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 189,
+   "Actor": 9,
+   "Kind": "Inn"
+  },
+  {
+   "Scene": 190,
+   "Actor": 9,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 210,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 214,
+   "Actor": 11,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 277,
+   "Actor": 10,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 315,
+   "Actor": 10,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 335,
+   "Actor": 19,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 335,
+   "Actor": 20,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 355,
+   "Actor": 19,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 355,
+   "Actor": 20,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 357,
+   "Actor": 10,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 384,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 426,
+   "Actor": 8,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 583,
+   "Actor": 11,
+   "Kind": "Shop"
+  },
+  {
+   "Scene": 585,
+   "Actor": 24,
+   "Kind": "Shop"
+  }
+ ],
+ "MarkerGroups": [
+  {
+   "Scene": 19,
+   "Actors": [
+    33,
+    34
+   ]
+  },
+  {
+   "Scene": 19,
+   "Actors": [
+    35,
+    36
+   ]
+  },
+  {
+   "Scene": 56,
+   "Actors": [
+    10,
+    11
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    14,
+    15
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    20,
+    21
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    25,
+    26
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    30,
+    31
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    45,
+    46
+   ]
+  },
+  {
+   "Scene": 119,
+   "Actors": [
+    50,
+    51
+   ]
+  },
+  {
+   "Scene": 147,
+   "Actors": [
+    12,
+    13
+   ]
+  },
+  {
+   "Scene": 150,
+   "Actors": [
+    23,
+    24,
+    25
+   ]
+  },
+  {
+   "Scene": 188,
+   "Actors": [
+    9,
+    10,
+    11
+   ]
+  },
+  {
+   "Scene": 241,
+   "Actors": [
+    12,
+    13
+   ]
+  },
+  {
+   "Scene": 242,
+   "Actors": [
+    14,
+    15
+   ]
+  },
+  {
+   "Scene": 243,
+   "Actors": [
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "Scene": 243,
+   "Actors": [
+    11,
+    12
+   ]
+  },
+  {
+   "Scene": 301,
+   "Actors": [
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+   ]
+  },
+  {
+   "Scene": 304,
+   "Actors": [
+    9,
+    10
+   ]
+  },
+  {
+   "Scene": 305,
+   "Actors": [
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "Scene": 305,
+   "Actors": [
+    14,
+    15,
+    16
+   ]
+  },
+  {
+   "Scene": 305,
+   "Actors": [
+    25,
+    26
+   ]
+  },
+  {
+   "Scene": 305,
+   "Actors": [
+    27,
+    28
+   ]
+  },
+  {
+   "Scene": 314,
+   "Actors": [
+    24,
+    25
+   ]
+  },
+  {
+   "Scene": 314,
+   "Actors": [
+    35,
+    36
+   ]
+  },
+  {
+   "Scene": 323,
+   "Actors": [
+    9,
+    10
+   ]
+  },
+  {
+   "Scene": 632,
+   "Actors": [
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "Scene": 632,
+   "Actors": [
+    14,
+    15,
+    16
+   ]
+  },
+  {
+   "Scene": 632,
+   "Actors": [
+    25,
+    26
+   ]
+  },
+  {
+   "Scene": 632,
+   "Actors": [
+    27,
+    28
+   ]
+  }
+ ]
+}

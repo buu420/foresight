@@ -294,7 +294,7 @@ public sealed class NavigationController
             lastProgress = now;
             lastPosition = frame.Player;
         }
-        if (contactStarted is not null || destination.ContactDirection != NavigationDirection.None &&
+        if (contactStarted is not null || (destination.ContactDirection != NavigationDirection.None || destination.ContactPosition is not null) &&
             Arrived(frame.Graph, frame.Player, route[^1]))
         {
             nextPoint = route.Count;
@@ -302,7 +302,8 @@ public sealed class NavigationController
             {
                 contactStarted = now;
                 contactOrigin = frame.Player;
-                contactDirection = destination.ContactDirection;
+                contactDirection = destination.ContactPosition is { } center
+                    ? ContactBearing(frame.Player, center) : destination.ContactDirection;
                 speech.Add(ContactInstruction());
             }
             else if (frame.Player.Layer != contactOrigin.Layer ||
@@ -356,7 +357,7 @@ public sealed class NavigationController
             }
             if (route!.Count == 1)
             {
-                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None) return;
+                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None || destination.ContactPosition is not null) return;
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;
@@ -490,7 +491,17 @@ public sealed class NavigationController
     {
         NavigationDirection.North => "up", NavigationDirection.South => "down",
         NavigationDirection.West => "left", NavigationDirection.East => "right", _ => "toward the checkpoint",
-    }) + " until the checkpoint registers.";
+    }) + (destination?.Category == NavigationCategory.Enemies ? " to engage the encounter." : " until the checkpoint registers.");
+
+    private static NavigationDirection ContactBearing(NavigationPoint from, NavigationPoint center)
+    {
+        var dx = (long)center.X - from.X;
+        var dy = (long)center.Y - from.Y;
+        if (Math.Abs(dx) > Math.Abs(dy)) return dx < 0 ? NavigationDirection.West : NavigationDirection.East;
+        // At the exact centre, a north probe still makes the native contact;
+        // None would leave the player stationary without activating the script.
+        return dy > 0 ? NavigationDirection.South : NavigationDirection.North;
+    }
 
     private bool Near(NavigationPoint a, NavigationPoint b) =>
         a.Layer == b.Layer && Math.Abs((long)a.X - b.X) <= Math.Max(1, unitsPerTile / 16) &&

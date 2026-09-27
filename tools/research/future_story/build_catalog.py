@@ -14,7 +14,7 @@ import assets
 from connections import names, scene_info
 from decode_verified import actor_ops, packet, walk
 from audit import EXE_SHA256
-from script_navigation import paths, region_actions, simplify, coordinate_locals
+from script_navigation import paths, region_actions, startup_actions, simplify, coordinate_locals
 from bonus_regions import for_scene as audited_bonus_regions, actor_actions as audited_bonus_actions
 from palace_visits import refine as refine_palace_visits
 
@@ -44,6 +44,10 @@ def build(game):
             output.append(entry)
             continue
         coordinates = coordinate_locals(code, actors)
+        region_incomplete = []
+        startup = startup_actions(code, actors, region_incomplete)
+        consumers = [dict(action, Controller=action['Actor']) for action in startup
+                     if action['Kind'] == 'Encounter' and any(g['Source'] == 'Local' for g in action['Guards'])]
         for actor, functions in enumerate(actors):
             all_ops = actor_ops(code, functions)
             errors = [base+pc for pc,(op,a) in all_ops.items() if a is None]
@@ -61,12 +65,13 @@ def build(game):
                 # Party/control scripts are expanded when called or when their
                 # startup contains a spatial trigger, not as selectable actors.
                 continue
-            meaningful = {0x3a,0x45,0x46,0x65,0x66,0xbb,0xc0,0xc1,0xc2,0xc3,0xc4,0xc7,0xc8,0xca,0xcd,0xe4,0xe5,*range(0xdc,0xe2)}
+            meaningful = {0x3a,0x45,0x46,0x65,0x66,0xbb,0xc0,0xc1,0xc2,0xc3,0xc4,0xc7,0xc8,0xca,0xcd,0xd8,0xe4,0xe5,*range(0xdc,0xe2)}
             talk_action = any(op in meaningful for op,a in talk.values())
             touch_action = any(op in meaningful for op,a in touch.values())
             actions = []
             for function in (1, 2):
-                found, complete = paths(code, actors, functions[function], initial_coordinates=coordinates)
+                found, complete = paths(code, actors, functions[function], initial_coordinates=coordinates,
+                                        signal_encounters=consumers)
                 if not complete:
                     incomplete.append(dict(Scene=scene, Actor=actor, Function=function, Start=functions[function]))
                     continue
@@ -90,8 +95,7 @@ def build(game):
             entry['Actors'].append(dict(Id=actor, Loads=[dict(Class=c, Visual=v) for c,v in loads],
                                         Marker=marker, Touch=marker and not talk_action and touch_action,
                                         Label=label, GivesItem=gives, Destinations=transitions, Actions=actions))
-        region_incomplete = []
-        entry['Regions'] = simplify(region_actions(code, actors, region_incomplete) + audited_bonus_regions(scene))
+        entry['Regions'] = simplify(region_actions(code, actors, startup=startup) + audited_bonus_regions(scene))
         refine_palace_visits(entry)
         incomplete.extend(dict(Scene=scene, **issue) for issue in region_incomplete)
         output.append(entry)

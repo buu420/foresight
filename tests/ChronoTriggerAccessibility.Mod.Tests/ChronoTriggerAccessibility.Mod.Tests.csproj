@@ -22,6 +22,16 @@
     <EmbeddedResource Include="Navigation\spekkio-initial-map-0332.json" />
     <EmbeddedResource Include="Navigation\prison-skywalk-live-0334.json" />
     <EmbeddedResource Include="Navigation\prison-save-point-live-0334.json" />
+    <EmbeddedResource Include="Navigation\field-content-coverage-0335.json" />
+    <EmbeddedResource Include="Navigation\field-content-maps-0335.json" />
+    <EmbeddedResource Include="Navigation\field-treasures-0335.json" />
+    <EmbeddedResource Include="Navigation\guardia-forest-19-map.json" />
+    <EmbeddedResource Include="Navigation\guardia-forest-119-map.json" />
+    <EmbeddedResource Include="Navigation\denadoro-146-map.json" />
+    <EmbeddedResource Include="Navigation\tyranno-301-map.json" />
+    <EmbeddedResource Include="Navigation\death-peak-265-map.json" />
+    <EmbeddedResource Include="Navigation\mammon-415-map.json" />
+    <EmbeddedResource Include="Navigation\flea-173-map.json" />
     <EmbeddedResource Include="..\ChronoTriggerAccessibility.Native.Tests\Capture\tech-native-0328.json" LogicalName="TechFrames" />
   </ItemGroup>
 </Project>

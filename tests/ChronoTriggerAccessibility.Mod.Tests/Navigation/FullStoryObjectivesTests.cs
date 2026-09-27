@@ -54,8 +54,7 @@ public sealed class FullStoryObjectivesTests
     /// </summary>
     private static readonly HashSet<int> ArrivalCompletes =
     [
-        36, 113, 163, 165, 169, 173, 279, 301, 307, 351, 371, 415, 425, 430, 493,
-        265,   // Death Peak, Summit: startup sets global 0x057 bit 5, the revival flag
+        36, 113, 163, 165, 169, 173, 279, 307, 351, 371, 415, 425, 430, 493,
         197,   // Giant's Claw bottom: startup sets global 0x0A9 bit 7, that chain's flag
         320,   // Black Omen middle warp: startup sets global 0x1A6 bit 7
         161,   // Sunken Desert boss room: its own startup begins the encounter

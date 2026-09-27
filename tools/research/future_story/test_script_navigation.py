@@ -34,17 +34,121 @@ class ScriptNavigationTests(unittest.TestCase):
                     for g in a['Guards']) for a in actions)
                 self.assertEqual(second == 1 or first != 1, gives)
 
-    def test_actor_gate_uses_controller_coordinate_alias_without_becoming_an_encounter(self):
+    def test_actor_battle_keeps_controller_coordinate_approach_condition(self):
         # The controller continuously reads leader X into local06. Checking its
         # side of an object is a goal-position condition, not a live quest flag.
         code = bytes.fromhex('1206110204d8010000')
         actions, complete = paths(code, [], 0, initial_coordinates={6: 'X'})
         self.assertTrue(complete)
-        self.assertEqual([], actions)
+        self.assertEqual([dict(Kind='Encounter', Value=1, Guards=[guard('X', 6, 2, 17)])], actions)
         code = bytes.fromhex('1206110204ca010000')
         actions, complete = paths(code, [], 0, initial_coordinates={6: 'X'})
         self.assertTrue(complete)
         self.assertEqual([dict(Kind='Item', Guards=[guard('X', 6, 2, 17)])], actions)
+
+    def test_contact_battle_does_not_offer_automatic_post_battle_rewards(self):
+        actions, complete = paths(bytes.fromhex('120901000200d80200ca010000'), [], 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Encounter', Value=2,
+            Guards=[guard('Local', 9, 0, 1, False)])], actions)
+
+    def test_contact_signal_connects_to_room_battle_with_remaining_guards(self):
+        consumers = [dict(Kind='Encounter', Value=2, Controller=1,
+            Guards=[guard('Global', 0, 5, 81), guard('Local', 10, 0, 1)])]
+        actions, complete = paths(bytes.fromhex('750a00'), [], 0, signal_encounters=consumers)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Encounter', Value=2, Controller=1,
+            Guards=[guard('Global', 0, 5, 81), guard('Local', 10, 1, 1)])], actions)
+
+    def test_unrelated_or_wrong_value_signal_is_not_a_battle(self):
+        consumers = [dict(Kind='Encounter', Value=2, Controller=1,
+            Guards=[guard('Local', 10, 0, 1)])]
+        for script in ('750b00', '770a00'):
+            actions, complete = paths(bytes.fromhex(script), [], 0, signal_encounters=consumers)
+            self.assertTrue(complete)
+            self.assertEqual([], actions)
+
+    def test_resetting_a_bypass_latch_does_not_claim_a_remote_battle(self):
+        # Prison Passage71 resets local0B after a cutscene. The battle is
+        # started by walking to another tile, not by resetting that latch.
+        for guards in ([guard('Local', 11, 0, 1, False)],
+                       [guard('Local', 11, 0, 1, False), guard('X', 7, 0, 14)]):
+            consumers = [dict(Kind='Encounter', Value=2, Controller=1, Guards=guards)]
+            actions, complete = paths(bytes.fromhex('770b750b00'), [], 0, signal_encounters=consumers)
+            self.assertTrue(complete)
+            self.assertEqual([], actions)
+
+    def test_signal_keeps_coordinate_bypass_conditions_from_room_loop(self):
+        # Scene146 actor12 at(7,21) sets08. Earlier controller branches for
+        # other floor battles are bypassed before it reads08 and starts D8.
+        consumers = [dict(Kind='Encounter', Value=0, Controller=0,
+            Guards=[guard('Local', 8, 0, 1), guard('X', 7, 0, 23, False)])]
+        actions, complete = paths(bytes.fromhex('750800'), [], 0, signal_encounters=consumers)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Encounter', Value=0, Controller=0,
+            Guards=[guard('Local', 8, 1, 1), guard('X', 7, 0, 23, False)])], actions)
+
+    def test_delegated_contact_signal_reaches_controller_battle(self):
+        consumers = [dict(Kind='Encounter', Value=0, Controller=1,
+            Guards=[guard('Local', 10, 0, 1)])]
+        code = bytes.fromhex('04022300750a00')
+        actions, complete = paths(code, [[0] * 16, [4] * 16], 0, signal_encounters=consumers)
+        self.assertTrue(complete)
+        self.assertTrue(any(a['Kind'] == 'Encounter' and a['Controller'] == 1 for a in actions))
+
+    def test_async_callback_wait_does_not_retest_pre_contact_local_value(self):
+        # Scene602 actors19..22 gate a battle request on local18==0. The
+        # controller schedules callbacks that set its bits, then waits for15.
+        # The later comparison is not another condition on the untouched frame.
+        code = bytes.fromhex('12180000040202230002040312180f0404d800000063031800')
+        actions, complete = paths(code, [[0] * 16, [9] * 16, [21] * 16], 0)
+        self.assertTrue(complete)
+        self.assertEqual([dict(Kind='Encounter', Value=0,
+            Guards=[guard('Local', 24, 0, 0)])], actions)
+
+    def test_word_callback_write_does_not_change_the_next_local_operand(self):
+        # PC locals are pairs at +118B0+index*8. Opcode76 writes that pair;
+        # its high byte is not the next opcode12 operand's first byte.
+        code = bytes.fromhex('120600000c0202231206010004d8000000760500')
+        actions, complete = paths(code, [[0] * 16, [17] * 16], 0)
+        self.assertTrue(complete)
+        self.assertEqual([], actions)
+
+    def test_spekkio_challenge_requires_completed_lesson_and_current_party_magic(self):
+        from bonus_regions import actor_actions
+        actions = actor_actions(465, 10)
+        def offered(point, introduced=2, marle=False, magic=0):
+            def value(g):
+                return point if (g['Source'],g['Index']) == ('Global',0) else \
+                    introduced if (g['Source'],g['Index']) == ('Global',0xe1) else \
+                    magic if (g['Source'],g['Index']) == ('Global',0x1e0) else \
+                    int(marle) if (g['Source'],g['Index']) == ('ActiveParty',1) else 0
+            return any(a['Kind']=='Encounter' and all(compare(value(g),g['Value'],g['Operation'])==g['Expected']
+                       for g in a['Guards']) for a in actions)
+        self.assertTrue(offered(77))
+        self.assertFalse(offered(76))
+        self.assertFalse(offered(77, introduced=0))
+        self.assertFalse(offered(77, marle=True))
+        self.assertTrue(offered(77, marle=True, magic=2))
+
+    def test_flea_confirm_signal_requires_the_visible_unfinished_phase(self):
+        from bonus_regions import actor_actions
+        actions = actor_actions(173, 11)
+        self.assertEqual(1, len(actions))
+        action = actions[0]
+        self.assertEqual(('Encounter', False, 12, 0xc092),
+                         (action['Kind'], action['Touch'], action['Controller'], action['Value']))
+        def offered(keep=0x76, transformed=0, signal=0, ending=0):
+            values = {('Global', 0xa3): keep, ('Global', 0x57): transformed, ('Local', 0xa): signal,
+                      ('Global', 0xdf): ending}
+            return all(compare(values[(g['Source'], g['Index'])], g['Value'], g['Operation']) == g['Expected']
+                       for g in action['Guards'])
+        self.assertTrue(offered())
+        self.assertFalse(offered(keep=0x74))
+        self.assertFalse(offered(keep=0x7e))
+        self.assertFalse(offered(transformed=4))
+        self.assertFalse(offered(signal=1))
+        self.assertFalse(offered(ending=1))
 
     def test_delegated_menu_only_handler_is_an_interaction(self):
         code = bytes.fromhex('02020300c80000')

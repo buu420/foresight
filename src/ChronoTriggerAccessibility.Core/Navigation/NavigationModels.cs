@@ -43,6 +43,9 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>Audited contact from a reachable standing point. Arrival must
     /// wait for the native objective to advance; proximity alone is insufficient.</summary>
     public NavigationDirection ContactDirection { get; init; }
+    /// <summary>For contacts approachable from several sides, finish toward
+    /// this live native contact centre instead of reporting proximity as arrival.</summary>
+    public NavigationPoint? ContactPosition { get; init; }
 }
 
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,

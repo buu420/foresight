@@ -181,7 +181,7 @@ public static class FullStoryObjectives
             Sub("keep-entrance", "Return to the light in the keep's entrance hall", [With(166, 10)], Flag(0xA3, 0x02)),
             Sub("keep-slash-guards", "Approach the figure in the west wing", [With(169, 9)], Flag(0xA3, 0x40)),
             Sub("keep-slash", "Face Slash in the west wing", [With(169, 11)], Flag(0xA3, 0x04)),
-            Sub("keep-flea", "Face Flea in the east wing", [With(173, 12)], Flag(0xA3, 0x08)),
+            Sub("keep-flea", "Face Flea in the east wing", [With(173, 11)], Flag(0xA3, 0x08)),
             Tail("keep-ozzie", "Follow the entrance-hall warp and pursue Ozzie", [With(174, 10)],
                 "Both lieutenants must be defeated before the entrance-hall light leads farther into the keep.")),
 
@@ -203,7 +203,10 @@ public static class FullStoryObjectives
 
         Upto(0x98, Tail("fossil-head", "Follow Kino to the fossil head", [At(430)])),
 
-        Upto(0x99, Tail("black-tyranno", "Face the Black Tyranno at the top of the lair", [At(301)])),
+        // Scene301 has no startup coordinate region: the six markers across
+        // row10 share the native Confirm/Touch entry that starts the encounter.
+        Upto(0x99, Tail("black-tyranno", "Face the Black Tyranno at the top of the lair",
+            [With(301, 15, 16, 17, 18, 19, 20)], "Use Confirm at the approach to begin the encounter.")),
 
         Upto(0x9F, Tail("to-antiquity", "Take the new gate to 12000 BC",
             [Pillar(PillarAntiquity), At(351)])),
@@ -248,7 +251,7 @@ public static class FullStoryObjectives
             Tail("golem-twins", "Cross the bridge and face the Golem Twins", [At(414)])),
 
         Upto(0xCB, Tail("ocean-palace-lavos", "Face what rises in the Ocean Palace",
-            [At(419), At(420), At(421), At(423)],
+            [With(415, 11), At(419), At(420), At(421), At(423)],
             "Continue to the Mammon Machine. When you regain movement, walk toward Lavos.")),
 
         Upto(0xCC, Tail("ocean-palace-end", "Follow the collapse of the Ocean Palace",
