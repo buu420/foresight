@@ -114,7 +114,7 @@ class MoviePackTests(unittest.TestCase):
                                                     "checks": {"failures": []}})
         film = {"duration_seconds": 4, "decoded_sha256": movies.sha(source),
                 "cues": [{"id": "test-voice", "text": "Test narration.", "start": 1, "end": 2}]}
-        movies.mix_film(film, source, self.pack, output, {})
+        report = movies.mix_film(film, source, self.pack, output, {})
         streams = movies.probe(output)["streams"]
         self.assertEqual(sum(s["codec_type"] == "audio" for s in streams), 2)
         def packet_hash(path):
@@ -126,6 +126,23 @@ class MoviePackTests(unittest.TestCase):
         self.assertTrue(np.all(voice[:48000] == 0))
         self.assertGreater(np.max(np.abs(voice[48000:72000])), .01)
         self.assertTrue(np.all(voice[72000:] == 0))
+        self.assertFalse(report["narrationMastering"]["soundtrackProcessed"])
+        self.assertEqual(report["narrationMastering"]["framesBefore"], len(voice))
+        self.assertEqual(report["narrationMastering"]["framesAfter"], len(voice))
+
+    def test_narration_mastering_raises_quiet_speech_without_clipping_or_changing_duration(self):
+        import numpy as np
+        rate = movies.RATE
+        t = np.arange(rate * 6) / rate
+        # Quiet voiced audio with a varying envelope and a louder brief consonant.
+        original = (.025 + .01 * np.sin(2 * np.pi * 2 * t)) * np.sin(2 * np.pi * 220 * t)
+        original[rate * 2:rate * 2 + 240] += .4 * np.sin(2 * np.pi * 1800 * t[:240])
+        output, report = movies.master_narration(original, -14, -2)
+        self.assertEqual(len(output), len(original))
+        self.assertTrue(np.all(np.isfinite(output)))
+        self.assertLess(np.max(np.abs(output)), .82)
+        self.assertGreater(np.sqrt(np.mean(output ** 2)), 2 * np.sqrt(np.mean(original ** 2)))
+        self.assertLess(abs(float(report["output_i"]) + 14), 1)
 
     def test_separate_pack_requires_compatible_installed_mod_before_any_movie_replacement(self):
         for row in self.rows:

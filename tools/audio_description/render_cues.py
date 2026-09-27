@@ -12,9 +12,10 @@ Script input (--script) is recognised by content:
   * SubRip (.srt) or WebVTT (.vtt): each block is one cue
 Voice profile (--profile): JSON with reference_wav and reference_text (see prepare_reference.py).
 
-Per cue, in --out: <id>.wav (mono 24 kHz PCM_24, the model's own take: never time-stretched,
-pitch-shifted, cropped or compressed) and <id>.json (text/render hashes, seed, fingerprint,
-reference hashes, model, parameters, checks). The run writes manifest.json and check-report.json.
+Per cue, in --out: <id>.wav (mono 24 kHz PCM_24) and <id>.json (text/render hashes, seed,
+fingerprint, reference hashes, model, parameters, checks). By default the waveform is the
+model's unmodified take. Optional gain and final-word pitch editing are explicitly recorded;
+there is no time stretching or cropping. The run writes manifest.json and check-report.json.
 
 Checks (--asr): the take's transcript against the cue text (normalised word error rate and the
 differing words), audible span (2 % of peak), lead/tail silence, peak, words and syllables per
@@ -197,12 +198,13 @@ def load_profile(path: Path) -> dict[str, Any]:
     return profile
 
 
-def fingerprint(profile: dict[str, Any]) -> str:
+def fingerprint(profile: dict[str, Any], x_vector_only: bool = False) -> str:
+    """Render identity. The default (ICL) keeps the same hash as before --x-vector-only existed."""
     return sha_text(json.dumps({
         "model": MODEL_SNAPSHOT.name, "reference_sha256": profile["reference_sha256"],
         "reference_text_sha256": sha_text(profile["reference_text"]), "params": PARAMS,
         "sample_rate": SAMPLE_RATE, "subtype": SUBTYPE, "script_version": SCRIPT_VERSION,
-        "x_vector_only_mode": False, "dtype": "bfloat16", "attn": "sdpa"}, sort_keys=True))
+        "x_vector_only_mode": bool(x_vector_only), "dtype": "bfloat16", "attn": "sdpa"}, sort_keys=True))
 
 
 def cue_seed(seed_base: int, render_text: str, take: int) -> int:
@@ -367,10 +369,58 @@ def rate_windows(words: list[dict[str, Any]], syllables: Syllables) -> dict[str,
             "internal_rate_ratio": round(max(windows) / max(0.1, min(windows)), 2)}
 
 
+def terminal_contour(audio, rate: int, words: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Pitch at the end of the last word, in semitones against the take's own median.
+
+    A settled statement ending falls and stays low (often into creak, which has no measurable
+    pitch). The fault the user heard is a late upturn: a fall to the floor, then a rise of several
+    semitones over the last ~150 ms of voicing. terminal_rise_st is the last voiced frame minus the
+    lowest frame of the final 0.25 s of voicing; the 40 Hz floor follows this voice down into fry.
+    A take is hooked when that rise is at least TERMINAL_RISE_LIMIT and ends above
+    TERMINAL_FLOOR_ST; jitter deep in creak (e.g. +2.1 st at -11 st) is still a settled end.
+    Calibrated on the user's own Recording.m4a / Recording (3).m4a sentence ends: their statements
+    rise 0-1.4 st; the one rising statement (the "Hey, this is my conversation voice." greeting)
+    rises 7.8 st to +8.4 st. On A (rec3-natural, model-default sampling) about 60% of seeds hook."""
+    import numpy as np
+    if not words:
+        return None
+    try:
+        import parselmouth
+    except ImportError:
+        return None
+    final = words[-1]
+    pitch = parselmouth.Sound(audio.astype("float64"), rate).to_pitch_ac(time_step=0.01, pitch_floor=40,
+                                                                         pitch_ceiling=300)
+    times, f0 = pitch.xs(), pitch.selected_array["frequency"]
+    voiced = f0 > 0
+    if voiced.sum() < 10:
+        return None
+    median = float(np.median(f0[voiced]))
+    stop = min(len(audio) / rate, final["end"] + 0.35)
+    mask = voiced & (times >= final["start"]) & (times <= stop)
+    result: dict[str, Any] = {"word": final["word"], "start": round(final["start"], 3), "end": round(final["end"], 3),
+                              "voiced_frames": int(mask.sum())}
+    if mask.sum() < 5:
+        result.update(settled=True, note="final word has too little measurable pitch (creak or unvoiced)")
+        return result
+    t, st = times[mask], 12 * np.log2(f0[mask] / median)
+    late = t >= t[-1] - 0.25
+    rise = float(st[-1] - st[late].min())
+    result.update(min_st=round(float(st.min()), 2), last_st=round(float(st[-1]), 2),
+                  terminal_rise_st=round(rise, 2), voiced_end=round(float(t[-1]), 3),
+                  settled=not (rise >= TERMINAL_RISE_LIMIT and st[-1] > TERMINAL_FLOOR_ST))
+    return result
+
+
+TERMINAL_RISE_LIMIT = 2.0
+TERMINAL_FLOOR_ST = -8.0
+
+
 # ----------------------------------------------------------------------------- rendering
 
 class Renderer:
-    def __init__(self, profile: dict[str, Any], asr_name: str, asr_device: str, glossary: str | None) -> None:
+    def __init__(self, profile: dict[str, Any], asr_name: str, asr_device: str, glossary: str | None,
+                 x_vector_only: bool = False) -> None:
         os.environ.update(HF_HOME=str(VOICE_ROOT / "hf"), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
                           HF_HUB_DISABLE_PROGRESS_BARS="1")
         import numpy as np
@@ -381,8 +431,11 @@ class Renderer:
         started = time.time()
         self.model = Qwen3TTSModel.from_pretrained(str(MODEL_SNAPSHOT), device_map="cuda:0", dtype=torch.bfloat16,
                                                    attn_implementation="sdpa", local_files_only=True)
+        # x_vector_only: speaker embedding only; the reference audio/text is not a prosodic prefix.
+        self.x_vector_only = bool(x_vector_only)
         self.prompt = self.model.create_voice_clone_prompt(ref_audio=profile["reference_wav"],
-                                                           ref_text=profile["reference_text"], x_vector_only_mode=False)
+                                                           ref_text=profile["reference_text"],
+                                                           x_vector_only_mode=self.x_vector_only)
         self.load_seconds = round(time.time() - started, 1)
         self.reference_embedding = self.embedding_of_file(profile["reference_wav"])
         self.anchor_embeddings = [self.embedding_of_file(path) for path in profile.get("identity_anchors", [])]
@@ -425,7 +478,8 @@ class Renderer:
             raise RuntimeError("model produced empty or non-finite audio")
         return audio
 
-    def check(self, audio, text: str, window: float | None, rate_band) -> dict[str, Any]:
+    def check(self, audio, text: str, window: float | None, rate_band,
+              settled_endings: bool = False) -> dict[str, Any]:
         import soxr
         result = audio_checks(audio, SAMPLE_RATE, text, self.syllables)
         embedding = self.embedding(audio)
@@ -444,12 +498,19 @@ class Renderer:
             expected = normalise(text)
             errors, changes = word_diff(expected, normalise(heard))
             result.update(asr_text=heard, word_errors=errors, word_error_rate=round(errors / max(1, len(expected)), 3),
-                          word_changes=changes, exact=errors == 0)
+                          word_changes=changes, exact=errors == 0,
+                          asr_words=[{"word": w["word"], "start": round(float(w["start"]), 3),
+                                      "end": round(float(w["end"]), 3)} for w in words])
             windows = rate_windows(words, self.syllables)
             if windows:
                 result["rate_windows"] = windows
+            terminal = terminal_contour(audio, SAMPLE_RATE, words)
+            if terminal is not None:
+                result["terminal"] = terminal
             if errors:
                 failures.append("words")
+            if settled_endings and terminal is not None and not terminal["settled"]:
+                failures.append("ending")
         if window is not None:
             result["fits_window"] = result["duration_seconds"] <= window + 1e-6
             if not result["fits_window"]:
@@ -463,8 +524,54 @@ class Renderer:
 
 
 def score(checks: dict[str, Any]) -> tuple:
-    """Lower is better: fewest failures, then fewest word errors, then the closest speaker match."""
-    return (len(checks["failures"]), checks.get("word_errors", 0), -checks["speaker_cosine_to_reference"])
+    """Lower is better: fewest failures, then fewest word errors, then (when every take hooks) the
+    smallest final upturn, then the closest speaker match."""
+    rise = (checks.get("terminal") or {}).get("terminal_rise_st") if "ending" in checks["failures"] else 0.0
+    return (len(checks["failures"]), checks.get("word_errors", 0), rise or 0.0,
+            -checks["speaker_cosine_to_reference"])
+
+
+def settle_ending(audio, rate: int, word: dict[str, Any]):
+    """Fallback for a take whose every seed hooked: hold the final word's pitch at its low point.
+
+    Praat PSOLA (overlap-add) changes pitch only (formants, timing and length stay). Only the
+    pitch points after the final word's lowest point in its last 0.25 s of voicing change; the
+    whole file is resynthesised but only the final word from its start (15 ms equal-power
+    crossfade) replaces the original, so everything before it stays sample-identical. No fade-out,
+    trimming or tempo change."""
+    import numpy as np
+    import parselmouth
+    from parselmouth.praat import call
+    sound = parselmouth.Sound(audio.astype("float64"), rate)
+    manipulation = call(sound, "To Manipulation", 0.01, 40, 300)
+    tier = call(manipulation, "Extract pitch tier")
+    points = [(call(tier, "Get time from index", i), call(tier, "Get value at index", i))
+              for i in range(1, int(call(tier, "Get number of points")) + 1)]
+    stop = min(len(audio) / rate, word["end"] + 0.35)
+    final = [(t, f) for t, f in points if word["start"] <= t <= stop]
+    if len(final) < 5:
+        return None, {"edited": False, "reason": "too few pitch points on the final word"}
+    t_low, f_low = min([p for p in final if p[0] >= final[-1][0] - 0.25], key=lambda p: p[1])
+    changed = [(t, f) for t, f in final if t > t_low]
+    if not changed:
+        return None, {"edited": False, "reason": "no upturn after the low point"}
+    call(tier, "Remove points between", t_low + 1e-4, stop + 0.01)
+    for t, _ in changed:
+        call(tier, "Add point", t, f_low)
+    call([tier, manipulation], "Replace pitch tier")
+    resynth = call(manipulation, "Get resynthesis (overlap-add)").values[0].astype("float32")
+    resynth = resynth[: len(audio)] if len(resynth) >= len(audio) else np.pad(resynth, (0, len(audio) - len(resynth)))
+    fade = int(0.015 * rate)
+    start = max(0, int(word["start"] * rate) - fade)
+    ramp = (np.sin(np.linspace(0, np.pi / 2, fade)) ** 2).astype("float32")
+    out = audio.copy()
+    out[start:start + fade] = audio[start:start + fade] * (1 - ramp) + resynth[start:start + fade] * ramp
+    out[start + fade:] = resynth[start + fade:]
+    return out, {"edited": True, "method": "Praat PSOLA overlap-add, final word only, pitch held at its low point",
+                 "word": word["word"], "hold_from_seconds": round(t_low, 3), "held_hz": round(f_low, 1),
+                 "removed_rise_st": round(float(12 * np.log2(max(f for _, f in changed) / f_low)), 2),
+                 "pitch_points_changed": len(changed), "original_until_seconds": round(start / rate, 3),
+                 "crossfade_ms": 15, "length_unchanged": len(out) == len(audio)}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -476,7 +583,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--render-plan", type=Path, help="pronunciation hints: {id: {render_text, reason}}")
     parser.add_argument("--only", nargs="*", default=[])
     parser.add_argument("--seed-base", type=int, default=417)
+    parser.add_argument("--sampling", choices=["approved", "model-default"], default="approved",
+                        help="approved: temperature 0.68, top_p 0.9 (earlier FFVII/Borderlands setting); model-default: "
+                             "the snapshot's generation_config.json (temperature 0.9, top_p 1.0, top_k 50, same for the "
+                             "sub-talker); explicit flags below override either")
+    for name, kind in (("temperature", float), ("top-p", float), ("top-k", int), ("subtalker-temperature", float),
+                       ("subtalker-top-p", float), ("subtalker-top-k", int)):
+        parser.add_argument(f"--{name}", type=kind)
     parser.add_argument("--retakes", type=int, default=2, help="extra seeds tried when a take fails a check")
+    parser.add_argument("--settled-endings", action="store_true",
+                        help="count a late pitch upturn on the last word (terminal_contour) as a failed take, so a "
+                             "new seed is tried; the fix for endings that sound like more is coming")
+    parser.add_argument("--ending-fallback", choices=["none", "edit"], default="none",
+                        help="edit: if every take is word-exact and fits but still hooks, hold the final word's pitch "
+                             "at its low point on the least-hooked take (settle_ending; PSOLA, final word only); the "
+                             "raw take stays in candidates/ and the record says pitch_manipulation")
+    parser.add_argument("--x-vector-only", action="store_true",
+                        help="clone from the reference's speaker embedding only (create_voice_clone_prompt "
+                             "x_vector_only_mode); the reference audio/text is not used as a prosodic prefix. "
+                             "Off by default (ICL). Recorded in metadata and the fingerprint")
     parser.add_argument("--rate-band", type=float, nargs=2, metavar=("MIN", "MAX"),
                         help="syllables per audible second; outside it counts as a failure (e.g. 3.5 5.5)")
     parser.add_argument("--asr", choices=["small.en", "medium.en", "none"], default="medium.en")
@@ -493,8 +618,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="re-render even when a checkpoint matches")
     parser.add_argument("--dry-run", action="store_true", help="validate inputs and report the plan only")
     args = parser.parse_args(argv)
-    if not 0 <= args.retakes <= 8:
-        parser.error("--retakes must be between 0 and 8")
+    if args.sampling == "model-default":
+        PARAMS.update(temperature=0.9, top_p=1.0, top_k=50, subtalker_temperature=0.9, subtalker_top_p=1.0,
+                      subtalker_top_k=50)
+    for name in ("temperature", "top_p", "top_k", "subtalker_temperature", "subtalker_top_p", "subtalker_top_k"):
+        if getattr(args, name) is not None:
+            PARAMS[name] = getattr(args, name)
+    if not 0 <= args.retakes <= 16:
+        parser.error("--retakes must be between 0 and 16")
+    if args.ending_fallback != "none" and not args.settled_endings:
+        parser.error("--ending-fallback needs --settled-endings")
 
     try:
         cues = load_script(args.script, args.id_prefix)
@@ -512,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         cue["render_note"] = hint.get("reason")
     if args.only:
         cues = [cue for cue in cues if any(cue["id"].startswith(prefix) for prefix in args.only)]
-    stamp = fingerprint(profile)
+    stamp = fingerprint(profile, args.x_vector_only)
     out = args.out.resolve()
     pending = []
     for cue in cues:
@@ -524,6 +657,9 @@ def main(argv: list[str] | None = None) -> int:
                 current = (record.get("fingerprint") == stamp and record.get("text_sha256") == cue["text_sha256"]
                            and record.get("render_text") == cue["render_text"]
                            and (record.get("level") or {}).get("target_speech_dbfs") == args.target_speech_dbfs
+                           and record.get("settled_endings", False) == args.settled_endings
+                           and record.get("ending_fallback", "none") == args.ending_fallback
+                           and bool(record.get("x_vector_only_mode", False)) == args.x_vector_only
                            and record.get("wave_sha256") == sha_bytes(out / f"{cue['id']}.wav"))
             except (OSError, ValueError):
                 current = False
@@ -532,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
     preflight = gpu_preflight(args.min_free_gib, args.max_gpu_utilization)
     plan = {"script": str(args.script), "profile": str(args.profile), "out": str(out), "fingerprint": stamp,
             "reference_sha256": profile["reference_sha256"], "cues": len(cues), "pending": [c["id"] for c in pending],
-            "gpu_preflight": preflight, "dry_run": args.dry_run}
+            "x_vector_only_mode": args.x_vector_only, "gpu_preflight": preflight, "dry_run": args.dry_run}
     print(json.dumps(plan), flush=True)
     if args.dry_run or not pending:
         return 0
@@ -546,7 +682,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import numpy as np
     import soundfile as sf
-    renderer = Renderer(profile, args.asr, args.asr_device, args.asr_glossary)
+    renderer = Renderer(profile, args.asr, args.asr_device, args.asr_glossary, args.x_vector_only)
     out.mkdir(parents=True, exist_ok=True)
     (out / "candidates").mkdir(exist_ok=True)
     print(json.dumps({"stage": "models loaded", "seconds": renderer.load_seconds}), flush=True)
@@ -559,7 +695,7 @@ def main(argv: list[str] | None = None) -> int:
             begun = time.time()
             audio = renderer.generate(cue["render_text"], seed)
             elapsed = time.time() - begun
-            checks = renderer.check(audio, cue["text"], cue["window_seconds"], args.rate_band)
+            checks = renderer.check(audio, cue["text"], cue["window_seconds"], args.rate_band, args.settled_endings)
             candidate = out / "candidates" / f"{cue['id']}.take{take}.wav"
             sf.write(str(candidate), audio, SAMPLE_RATE, subtype=SUBTYPE)
             takes.append({"take": take, "seed": seed, "wave": candidate.name, "wave_sha256": sha_bytes(candidate),
@@ -572,6 +708,25 @@ def main(argv: list[str] | None = None) -> int:
         best = min(takes, key=lambda t: score(t["checks"]))
         destination = out / f"{cue['id']}.wav"
         raw, _ = sf.read(str(out / "candidates" / best["wave"]), dtype="float32")
+        take_audio = raw
+        ending_edit = None
+        if args.ending_fallback == "edit" and best["checks"]["failures"] == ["ending"]:
+            edited, ending_edit = settle_ending(raw, SAMPLE_RATE, best["checks"]["terminal"])
+            if edited is not None:
+                after = renderer.check(edited, cue["text"], cue["window_seconds"], args.rate_band, True)
+                ending_edit["checks_after"] = after
+                if not after["failures"]:
+                    edited_path = out / "candidates" / f"{cue['id']}.take{best['take']}.settled.wav"
+                    sf.write(str(edited_path), edited, SAMPLE_RATE, subtype=SUBTYPE)
+                    ending_edit.update(wave=edited_path.name, raw_wave=best["wave"])
+                    best = {**best, "checks": after}
+                    raw = edited
+                else:
+                    ending_edit["edited"] = False
+                    ending_edit["reason"] = f"edited take failed {after['failures']}; raw take kept"
+            print(json.dumps({"id": cue["id"], "ending_edit": {k: v for k, v in ending_edit.items()
+                                                               if k != "checks_after"}}), flush=True)
+        edited_used = bool(ending_edit and ending_edit.get("edited"))
         level = None
         if args.target_speech_dbfs is not None and best["checks"].get("speech_rms_dbfs") is not None:
             wanted = float(args.target_speech_dbfs - best["checks"]["speech_rms_dbfs"])
@@ -582,12 +737,14 @@ def main(argv: list[str] | None = None) -> int:
                      "peak_limited": gain_db < wanted,
                      "speech_rms_dbfs_after": round(best["checks"]["speech_rms_dbfs"] + gain_db, 2),
                      "peak_after": round(best["checks"]["peak"] * 10 ** (gain_db / 20), 4)}
+        elif edited_used:
+            sf.write(str(destination), raw, SAMPLE_RATE, subtype=SUBTYPE)
         else:
             destination.write_bytes((out / "candidates" / best["wave"]).read_bytes())
         repeat = None
         if args.repeat_check:
             again = renderer.generate(cue["render_text"], best["seed"])
-            original = raw
+            original = take_audio
             same_length = len(again) == len(original)
             repeat = {"same_length": same_length,
                       "max_abs_difference": round(float(np.max(np.abs(again - original))), 6) if same_length else None,
@@ -600,8 +757,10 @@ def main(argv: list[str] | None = None) -> int:
             "repeat_check": repeat, "level": level, "fingerprint": stamp, "model_snapshot": MODEL_SNAPSHOT.name,
             "reference_wav": profile["reference_wav"], "reference_sha256": profile["reference_sha256"],
             "reference_text_sha256": sha_text(profile["reference_text"]), "params": PARAMS,
-            "dtype": "bfloat16", "attn": "sdpa", "x_vector_only_mode": False, "sample_rate": SAMPLE_RATE,
-            "subtype": SUBTYPE, "tempo_factor": 1.0, "pitch_manipulation": False, "cropped": False,
+            "dtype": "bfloat16", "attn": "sdpa", "x_vector_only_mode": args.x_vector_only, "sample_rate": SAMPLE_RATE,
+            "subtype": SUBTYPE, "tempo_factor": 1.0, "pitch_manipulation": edited_used, "cropped": False,
+            "settled_endings": args.settled_endings, "ending_fallback": args.ending_fallback,
+            "ending_edit": ending_edit,
             "voice_local_only": True, "script_version": SCRIPT_VERSION,
             "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "wave_sha256": sha_bytes(destination),

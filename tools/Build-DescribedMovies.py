@@ -141,7 +141,43 @@ def validate_cues(cues, duration):
         ids.add(cue["id"])
 
 
-def mix_film(film, source, voices, destination, approvals):
+def master_narration(audio, target_lufs, peak_dbtp):
+    """Two-pass loudness/peak control on narration only, with unchanged timing."""
+    import numpy as np
+    if not math.isfinite(target_lufs) or not -24 <= target_lufs <= -12:
+        raise ValueError("narration loudness must be between -24 and -12 LUFS")
+    if not math.isfinite(peak_dbtp) or not -6 <= peak_dbtp <= -1:
+        raise ValueError("narration true-peak ceiling must be between -6 and -1 dBTP")
+    source = np.asarray(audio, dtype="<f4").tobytes()
+    command = ["ffmpeg", "-hide_banner", "-nostats", "-f", "f32le", "-ar", RATE,
+               "-ac", 1, "-i", "pipe:0"]
+    base = f"loudnorm=I={target_lufs}:TP={peak_dbtp}:LRA=11:print_format=json"
+
+    def statistics(result):
+        log = result.stderr.decode("utf-8", errors="replace")
+        stats = json.JSONDecoder().raw_decode(log[log.rfind("{"):])[0]
+        for key in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset"):
+            if not math.isfinite(float(stats[key])):
+                raise ValueError("narration loudness could not be measured")
+        return stats
+
+    measured = statistics(run(command + ["-af", base, "-f", "null", "-"], input=source))
+    settings = (base + f":measured_I={measured['input_i']}:measured_TP={measured['input_tp']}"
+                f":measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}"
+                f":offset={measured['target_offset']}:linear=false")
+    rendered = run(command + ["-af", settings, "-ar", RATE, "-ac", 1, "-f", "f32le", "-"], input=source)
+    mastered = np.frombuffer(rendered.stdout, dtype="<f4").copy()
+    if len(mastered) != len(audio) or not np.all(np.isfinite(mastered)):
+        raise ValueError("narration mastering changed its duration or produced invalid samples")
+    if float(np.max(np.abs(mastered))) >= 1:
+        raise ValueError("narration mastering clipped")
+    report = statistics(rendered)
+    report.update(targetLufs=target_lufs, peakCeilingDbtp=peak_dbtp,
+                  framesBefore=len(audio), framesAfter=len(mastered), soundtrackProcessed=False)
+    return mastered, report
+
+
+def mix_film(film, source, voices, destination, approvals, narration_lufs=-14, narration_peak_dbtp=-2):
     import numpy as np
     import soundfile as sf
     validate_cues(film["cues"], film["duration_seconds"])
@@ -151,6 +187,7 @@ def mix_film(film, source, voices, destination, approvals):
         raise ValueError(f"{source.name}: source movie does not match reviewed script")
     frames = round(duration * RATE)
     speech = np.zeros(frames, dtype=np.float32)
+    voice_windows = np.zeros(frames, dtype=bool)
     report = []
     for cue in film["cues"]:
         wave = voices / (cue["id"] + ".wav")
@@ -177,9 +214,14 @@ def mix_film(film, source, voices, destination, approvals):
         rms = float(np.sqrt(np.mean(active ** 2)))
         gain = min(10 ** (-18 / 20) / rms, 10 ** (-3 / 20) / float(np.max(np.abs(audio))))
         speech[start:stop] += audio * gain
+        voice_windows[start:stop] = True
         report.append({"id": cue["id"], "waveSha256": wave_hash, "start": cue["start"],
                        "duration": len(audio) / RATE, "gainDb": round(20 * math.log10(gain), 3),
                        "voiceChecks": failures, "review": approval or None})
+    speech, mastering = master_narration(speech, narration_lufs, narration_peak_dbtp)
+    # Oversampled peak control can leave tiny filter tails. Keep every cue's
+    # original window and exact silence between cues after returning to 48 kHz.
+    speech[~voice_windows] = 0
     wav_path = destination.with_suffix(".wav")
     sf.write(str(wav_path), speech, RATE, subtype="PCM_24")
     # Original AAC and H.264 are packet copies. Only the independent voice track
@@ -211,24 +253,26 @@ def mix_film(film, source, voices, destination, approvals):
             "originalAudioPacketsUnchanged": original_audio_unchanged, "originalAudioTimingUnchanged": original_audio_timing,
             "containerDurationDeltaSeconds": round(duration_delta, 9),
             "soundtrackGainDb": 0, "soundtrackDucking": False, "audioTrackCount": 2,
-            "narrationPeak": float(np.max(np.abs(speech))), "cues": report}
+            "narrationPeak": float(np.max(np.abs(speech))), "narrationMastering": mastering, "cues": report}
 
 
-def build(script, sources, voices, output, approvals_path=None):
+def build(script, sources, voices, output, approvals_path=None, narration_lufs=-14, narration_peak_dbtp=-2):
     if (output / "Chrono Trigger.exe").exists() or output.resolve() == sources.resolve():
         raise ValueError("build output must be a staging directory, separate from the game and source movies")
     document = read_json(script)
     approvals = read_json(approvals_path) if approvals_path else {}
     output.mkdir(parents=True, exist_ok=True)
     pack = {"version": 2, "playback": "simultaneous-separate-tracks", "minimumModVersion": "0.3.37",
-            "credit": CREDIT, "scriptSha256": sha(script), "movies": []}
+            "credit": CREDIT, "scriptSha256": sha(script),
+            "narrationMastering": {"targetLufs": narration_lufs, "peakCeilingDbtp": narration_peak_dbtp},
+            "movies": []}
     for film in document["films"]:
         name = film["movie"] + ".dat"
         if name not in NAMES:
             raise ValueError("unknown movie name")
         source = sources / (film["movie"] + ".mp4")
         described = output / (film["movie"] + ".mp4")
-        report = mix_film(film, source, voices, described, approvals)
+        report = mix_film(film, source, voices, described, approvals, narration_lufs, narration_peak_dbtp)
         encoded = output / name
         transform(described, encoded)
         roundtrip = output / (film["movie"] + ".roundtrip.mp4")
@@ -379,6 +423,10 @@ def main():
     for arg in ("script", "sources", "voices", "output"):
         command.add_argument("--" + arg, type=Path, required=True)
     command.add_argument("--approvals", type=Path)
+    command.add_argument("--narration-lufs", type=float, default=-14,
+                         help="narration-only loudness target, -24 to -12 LUFS (default -14)")
+    command.add_argument("--narration-peak-dbtp", type=float, default=-2,
+                         help="narration-only true-peak ceiling, -6 to -1 dBTP (default -2)")
     command = commands.add_parser("install")
     command.add_argument("--pack", type=Path, required=True)
     command.add_argument("--game", type=Path, required=True)
@@ -386,7 +434,8 @@ def main():
     command.add_argument("--game", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "build":
-        build(args.script, args.sources, args.voices, args.output, args.approvals)
+        build(args.script, args.sources, args.voices, args.output, args.approvals,
+              args.narration_lufs, args.narration_peak_dbtp)
     else:
         require_closed_game()
         if args.command == "install":
