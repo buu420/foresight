@@ -381,6 +381,22 @@ public sealed class FieldNavigationCaptureTests
         Assert.Null(snapshot);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(7)]
+    [InlineData(null)]
+    public void CapturesTheCurrentScriptPriorityWithoutTreatingUnreadableAsIdle(int? priority)
+    {
+        Assert.Equal(0xE4u, FieldNavigationCapture.ActorScriptPriorityOffset);
+        var memory = CreateValidMemory();
+        if (priority is int value) memory.AddInt32(Actors + FieldNavigationCapture.ActorScriptPriorityOffset, value);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(priority, snapshot.Actors[0].ScriptPriority);
+        Assert.True(snapshot.Actors[0].IsUsable);
+    }
+
     private static TestMemory CreateValidMemory(int actors = 3)
     {
         var memory = new TestMemory()
@@ -464,6 +480,26 @@ public sealed class FieldNavigationCaptureTests
         Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
         Assert.Equal(offset, snapshot.Actors[0].CollisionOffsetX);
         Assert.Equal(slot, snapshot.LastPartySlotRaw);
+    }
+
+    [Fact]
+    public void CapturesTheConfirmContactOverrideAndLeavesItUnknownWhenUnreadable()
+    {
+        // 17D0C0: bit 7 of [fieldState+0x20C4] clear means 178980 touched an actor, and
+        // Confirm runs 17FA20 on [actorBase+0x13174] instead of the facing scan 17D230.
+        Assert.Equal(0x20C4u, FieldNavigationCapture.FieldStateContactActorOffset);
+        Assert.Equal(0x13174u, FieldNavigationCapture.ActorBaseConfirmActorOffset);
+        var memory = CreateValidMemory()
+            .AddInt32(FieldState + FieldNavigationCapture.FieldStateContactActorOffset, 18)
+            .AddInt32(ActorBase + FieldNavigationCapture.ActorBaseConfirmActorOffset, 18);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(18, snapshot.ContactActorRaw);
+        Assert.Equal(18, snapshot.ConfirmActorRaw);
+
+        // Missing words do not fail navigation, but they are not "no contact" either.
+        Assert.True(FieldNavigationCapture.TryCapture(CreateValidMemory(), Engine, out var unknown, out error), error);
+        Assert.Null(unknown.ContactActorRaw);
+        Assert.Null(unknown.ConfirmActorRaw);
     }
 
     [Fact]

@@ -15,8 +15,11 @@ public sealed class NavigationDispatcher(ISemanticEventDispatcher inner, FieldNa
     public void RecordDiagnostic(string message) => inner.RecordDiagnostic(message);
     public void ReportCoverageFailure(string message)
     {
-        navigation.Disable();
-        inner.ReportCoverageFailure(message);
+        // A menu coverage failure must cancel movement, but it does not revoke
+        // the independently verified field/world input hooks. Keep the keys
+        // usable on the next valid player-control frame after the error closes.
+        try { navigation.Suspend("accessibility error"); }
+        finally { inner.ReportCoverageFailure(message); }
     }
     public void Publish(AccessibilityEvent value)
     {

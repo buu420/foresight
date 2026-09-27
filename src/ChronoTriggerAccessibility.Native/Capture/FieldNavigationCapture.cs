@@ -40,6 +40,10 @@ public sealed record FieldActorSnapshot(
     /// <summary>Persistent call gates at actor+E8 and actor+30 bit80, tested by
     /// native confirm/touch dispatch (17FA20 / 16EF30). Neither is camera culling.</summary>
     public bool ScriptCallsEnabled { get; init; } = true;
+    /// <summary>Current script priority slot at actor+E4. Confirm dispatch (17FA20) can
+    /// preempt it only when it exceeds 1. Null means unreadable in a live capture;
+    /// constructed snapshots default to the native idle slot, 7.</summary>
+    public int? ScriptPriority { get; init; } = 7;
     /// <summary>Actor+30 bit80 alone: opcode 0B sets it and 0C clears it (stubs 161C0B /
     /// 161C61), and the script runner stops the actor's own loop while it is set. Unlike
     /// <see cref="ScriptCallsEnabled"/> it ignores +E8 (opcodes 08/09), which blocks only
@@ -105,6 +109,14 @@ public sealed record FieldNavigationSnapshot(
 {
     public int LastPartySlotRaw { get; init; } = 0x80;
     public int ActorCollisionRadius { get; init; } = 160;
+    /// <summary>fieldState+0x20C4: the actor the movement probe 178980 last touched, as slot*2,
+    /// or 0x80 (bit 7) for none. While bit 7 is clear, Confirm (17D0C0) skips the facing scan
+    /// 17D230 and runs 17FA20 on <see cref="ConfirmActorRaw"/>. Null when it could not be read.
+    /// Synthetic snapshots default to "no contact".</summary>
+    public int? ContactActorRaw { get; init; } = 0x80;
+    /// <summary>actorBase+0x13174: the actor 17FA20 runs (slot*2 in the low byte, 0x80 for none).
+    /// Only consulted on the contact path; null when it could not be read.</summary>
+    public int? ConfirmActorRaw { get; init; } = 0x80;
 }
 
 /// <summary>
@@ -328,6 +340,18 @@ public static class FieldNavigationCapture
     /// </summary>
     public const uint ScriptObjectCountOffset = 0x12000;
 
+    /// <summary>178980 stores the touched actor (slot*2) or 0x80 here; 17D0C0 tests bit 7 of
+    /// <c>[fieldState+0x20C4]</c> before choosing between 17FA20 and the facing scan 17D230.</summary>
+    public const uint FieldStateContactActorOffset = 0x20C4;
+
+    /// <summary>17FA20 reads the actor to run from <c>[engine+0x40] + 0x13174</c> (the actor base);
+    /// 17D230 writes 0x80 there before its scan and the chosen slot*2 when one is found.</summary>
+    public const uint ActorBaseConfirmActorOffset = 0x13174;
+
+    /// <summary>Current script priority, preempted/resumed by 164970/1648D0.
+    /// 17FA20 requires a signed value greater than 1 before starting Confirm.</summary>
+    public const uint ActorScriptPriorityOffset = 0xE4;
+
     /// <summary>
     /// Defensive bound only. The true engine maximum is not established; the largest
     /// installed Atel packet header observed is 0x23. Callers must not read this as a
@@ -484,6 +508,9 @@ public static class FieldNavigationCapture
         {
             LastPartySlotRaw = lastPartySlotRaw,
             ActorCollisionRadius = FieldActorCollisionRules.Radius(sceneId, fairFlags),
+            // Optional: an unreadable word leaves navigation usable but never Confirm-ready.
+            ContactActorRaw = Int32(memory, fieldState + FieldStateContactActorOffset, out var contact) ? contact : null,
+            ConfirmActorRaw = Int32(memory, actorBase + ActorBaseConfirmActorOffset, out var confirm) ? confirm : null,
         };
         error = string.Empty;
         return true;
@@ -540,6 +567,7 @@ public static class FieldNavigationCapture
             coordinatesCoherent, facingValid, drawModeKnown)
         {
             ScriptCallsEnabled = scriptDisabled == 0 && (callFlags & 0x80) == 0,
+            ScriptPriority = Int32(memory, address + ActorScriptPriorityOffset, out var priority) ? priority : null,
             ScriptProcessingEnabled = (callFlags & 0x80) == 0,
             CollisionOffsetX = collisionOffsetX,
         };

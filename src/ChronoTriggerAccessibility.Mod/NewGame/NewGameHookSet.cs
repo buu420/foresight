@@ -215,6 +215,21 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             {
                 return;
             }
+            // SceneManager::create (RVA 0x297860, case 0xB) writes the native
+            // scene identity before constructing NameInputScene at 0x2BFDE0.
+            // Cached menu addresses cease to identify it after that scene ends:
+            // the allocator can reuse a confirmation manager for a shop list.
+            // Check the owner before reading any field of the old allocation.
+            if (!TryReadInt32(imageBase + StartupTitleHookSet.CurrentSceneGlobalRva, out var sceneId))
+            {
+                FailCoverage("The native scene identity is unreadable while checking Name Entry focus ownership.");
+                return;
+            }
+            if (sceneId != 0xB)
+            {
+                RunIfActive(epoch, ClearNameRuntimeState);
+                return;
+            }
             if (!TryReadInt32((nuint)manager + ManagerFocusKeyOffset, out var runtimeKey) ||
                 runtimeKey != managerKey)
             {
@@ -2516,6 +2531,16 @@ public sealed class NewGameHookSet : IHookActivationObserver, ISharedNativeHookO
             activeControlManager = 0;
             activeModeScene = 0;
             activeModeSnapshot = null;
+            ClearNameRuntimeState();
+        }
+    }
+
+    private void ClearNameRuntimeState()
+    {
+        lock (stateGate)
+        {
+            // The allocator may reuse a name manager in a newly captured Mode or
+            // Control screen. Retire only the owner that has actually ended.
             activeNameScene = 0;
             activeNameSnapshot = null;
             activeNameGridActionLabel = null;

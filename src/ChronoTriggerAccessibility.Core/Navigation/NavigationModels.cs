@@ -51,12 +51,37 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     public IReadOnlyDictionary<NavigationPoint, NavigationPoint>? ApproachContacts { get; init; }
     public NavigationPoint? ContactAt(NavigationPoint goal) => ApproachContacts is null ? ContactPosition :
         ApproachContacts.TryGetValue(goal, out var centre) ? centre : null;
+    /// <summary>For a destination the game activates with Confirm: the facings from which
+    /// Confirm, pressed with the player standing at a point, reaches it (preferred first; empty
+    /// when none does). Standing in range is not enough; the native handler only tests the
+    /// actor on the side the player faces. Evaluated on the live frame, so a moved actor is
+    /// judged where it is now. Null for touch contacts, exits and anything not confirmed.</summary>
+    public Func<NavigationPoint, IReadOnlyList<NavigationDirection>>? ConfirmFacings { get; init; }
+    /// <summary>Alternative destinations may mix Confirm targets with exits or touch contacts.
+    /// When set, only a goal listed here finishes by facing, with that alternative's rule;
+    /// any other goal is an ordinary arrival. Mirrors <see cref="ApproachContacts"/>.</summary>
+    public IReadOnlyDictionary<NavigationPoint, Func<NavigationPoint, IReadOnlyList<NavigationDirection>>>? ApproachConfirms { get; init; }
+    /// <summary>True where the destination is geometrically in reach but the game would not give
+    /// it Confirm right now (its native scan gate is off, another touched actor overrides, or the
+    /// native state is unreadable). Such a point is neither ready nor unreachable: wait there.</summary>
+    public Func<NavigationPoint, bool>? ConfirmPending { get; init; }
+    public Func<NavigationPoint, IReadOnlyList<NavigationDirection>>? ConfirmAt(NavigationPoint goal) =>
+        ApproachConfirms is null ? ConfirmFacings : ApproachConfirms.TryGetValue(goal, out var rule) ? rule : null;
+    /// <summary>Facings that would work from here for any of this destination's Confirm rules.</summary>
+    public IReadOnlyList<NavigationDirection> AnyConfirmFacings(NavigationPoint point)
+    {
+        IEnumerable<Func<NavigationPoint, IReadOnlyList<NavigationDirection>>> rules = ApproachConfirms is not null
+            ? ApproachConfirms.Values.Distinct() : ConfirmFacings is not null ? [ConfirmFacings] : [];
+        return rules.SelectMany(rule => rule(point)).Distinct().ToArray();
+    }
 }
 
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,
     IReadOnlyList<NavigationTarget> Targets, INavigationGraph Graph, int UnitsPerTile = 16)
 {
     public string? AreaName { get; init; }
+    /// <summary>The leader's live facing; None when it could not be read.</summary>
+    public NavigationDirection PlayerFacing { get; init; }
 }
 
 public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision);

@@ -26,6 +26,13 @@ public static class StoryTarget
             ApproachPoints = approaches.Select(p => p.point).ToArray(), Instruction = instruction,
             ApproachContacts = approaches.Where(p => p.target.ContactAt(p.point) is not null)
                 .ToDictionary(p => p.point, p => p.target.ContactAt(p.point)!.Value),
+            // Each goal keeps the finish of the alternative it came from: an NPC's goal still
+            // needs that NPC's facing, while an exit's goal is an ordinary arrival.
+            ConfirmFacings = null,
+            ApproachConfirms = approaches.Where(p => p.target.ConfirmAt(p.point) is not null)
+                .ToDictionary(p => p.point, p => p.target.ConfirmAt(p.point)!),
+            ConfirmPending = choices.Any(c => c.ConfirmPending is not null)
+                ? point => choices.Any(c => c.ConfirmPending?.Invoke(point) == true) : null,
         };
     }
 

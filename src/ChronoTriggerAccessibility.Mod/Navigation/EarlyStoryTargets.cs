@@ -220,8 +220,9 @@ public static class EarlyStoryTargets
                     // The native startup watcher triggers the encounter when the
                     // player enters the guards' row (23), not at a map exit. Keep
                     // live approaches in that row so arrival does not stop short.
+                    // The watcher, not Confirm, starts it: no facing is part of arrival.
                     result.Add(encounter with { ApproachPoints = guards.SelectMany(t => t.ApproachPoints
-                        .Where(a => a.Y / 256 == t.Position.Y / 256)).Distinct().ToArray() });
+                        .Where(a => a.Y / 256 == t.Position.Y / 256)).Distinct().ToArray(), ConfirmFacings = null, ApproachConfirms = null, ConfirmPending = null });
                     break;
                 }
                 Exit("prison-bridge", "Continue onto the upper bridge", [0]);

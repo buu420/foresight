@@ -187,6 +187,43 @@ public sealed class FieldContentCoverageTests
         Assert.NotEqual(0, merged);
     }
 
+    [Fact]
+    public void EveryMarkerOfAMergedFeatureCanBeTheOneConfirmReaches()
+    {
+        // One row, goals from every marker. Next to one marker the scan (17D230) may pick its
+        // higher-slot sibling; both run the same script, so each marker's native win must be
+        // an accepted finish, not only the first marker's.
+        var checkedGroups = 0;
+        foreach (var group in Content.Groups)
+        {
+            // On camera, 17A4D0 -> 17A860 sets a class-7 marker's +0x20 byte to 0x80.
+            var members = group.Members.Select(Snapshot).Select(m => m with { ActivationBinding = 0x80 }).ToArray();
+            var state = States(group.Scene, members[0]).First();
+            var map = Open(group.Members.Max(m => m.X), group.Members.Max(m => m.Y));
+            if (!members.All(m => Build(group.Scene, [m], state, map).Targets.Any(t => t.Id == Id(m)))) continue;
+            var frame = Build(group.Scene, members, state, map);
+            var row = Assert.Single(frame.Targets, t => members.Any(m => t.Id == Id(m)));
+            var player = FullGameNavigationTests.Actor(0, 384, 384, true) with { ClassTag = 0 };
+            FieldActorSnapshot[] actors = [player, .. members];
+            IReadOnlyList<NavigationDirection> Ready(NavigationPoint p) => row.ConfirmAt(p)?.Invoke(p) ?? [];
+            // Every marker's own standing room finishes as ready.
+            foreach (var member in members)
+                Assert.True(row.ApproachPoints.Any(p => Math.Abs(p.X - member.FineX) <= 512 &&
+                    Math.Abs(p.Y - member.FineY) <= 512 && Ready(p).Count != 0),
+                    $"scene {group.Scene}: no Confirm-ready goal near marker {member.Index}");
+            // And at every goal, any facing the scan gives to any of these markers is accepted; the
+            // first marker's rule alone rejects a sibling's win. (Scene 241 places 12 and 13 on one
+            // point, so 13, the higher slot, takes every Confirm there and 12 never does.)
+            var facings = new[] { NavigationDirection.North, NavigationDirection.South, NavigationDirection.West, NavigationDirection.East };
+            foreach (var goal in row.ApproachPoints)
+            foreach (var facing in facings)
+                if (members.Any(m => m.Index == FieldInteractionRange.ConfirmWinner(actors, 1, goal.X, goal.Y, facing)))
+                    Assert.Contains(facing, Ready(goal));
+            checkedGroups++;
+        }
+        Assert.NotEqual(0, checkedGroups);
+    }
+
     [Theory]
     // Truce Inn (Atel counter marker 13: 12 10 00 00 08, 75 10, 02 10 11, 77 10, 00).
     [InlineData(12, 8, 22, 13200, 4960, 13, 13184, 5119, 52, 28, "Innkeeper")]

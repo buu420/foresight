@@ -112,10 +112,14 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate)
         {
             worldDirection = 0;
-            if (controller.IsActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
-            Emit(controller.Cancel(reason));
+            var wasActive = controller.IsActive;
+            var cancellation = controller.Cancel(reason);
             keyboard.Suspend();
+            // Revoke input before calling external motion, logging or speech code.
+            // Their failure must not leave a route or a held command active.
             resetMotion?.Invoke();
+            if (wasActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
+            Emit(cancellation);
         }
     }
 

@@ -784,6 +784,9 @@ public sealed class NewGameHookSetTests
             return 1;
         });
         ActivateCombinedHooks(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        // The combined fixture starts at the publisher logo. SceneManager::create
+        // sets the Name Entry identity before calling this scene's native init.
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 0xB);
         var result = factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
         Assert.Equal(1, result);
         Assert.Empty(dispatcher.Failures);
@@ -1701,6 +1704,115 @@ public sealed class NewGameHookSetTests
     }
 
     [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void ReusedShopManagerDoesNotReadStaleNameConfirmationOrFaultCoverage(int shopRow)
+    {
+        var memory = CreateNameMemory();
+        AddConfirmationMemory(memory);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        ConfigureConfirmationBuilder(factory, set, [], extraBinding: false);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        var initialize = factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit);
+        initialize((nint)NameScene);
+        var words = EncodeInlineName("Crono");
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+        Assert.Contains(dispatcher.Events, value => value is NameConfirmationPresented);
+        dispatcher.Events.Clear();
+
+        // The name scene has ended. A shop now occupies the old confirmation
+        // manager's allocation, exactly as in the September 27 failure log.
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 5)
+            .AddInt32(ConfirmationManager + NewGameHookSet.ManagerFocusKeyOffset, shopRow);
+        set.AfterFocusSet((nint)ConfirmationManager, shopRow);
+
+        Assert.Empty(dispatcher.Events);
+        Assert.Empty(dispatcher.Failures);
+
+        // Merely returning to the same native scene number cannot revive old
+        // control identities. A fresh init is required and must still work.
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 0xB);
+        memory.AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, 0);
+        set.AfterFocusSet((nint)NameManager, 0);
+        Assert.Empty(dispatcher.Events);
+        initialize((nint)NameScene);
+        Assert.Contains(dispatcher.Events, value => value is NameAccessibilityBatch);
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Fact]
+    public void RetiredNameManagerIsNotDereferencedAfterLeavingItsNativeScene()
+    {
+        var memory = CreateNameMemory();
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+        dispatcher.Events.Clear();
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 3);
+        memory.Remove(NameManager + NewGameHookSet.ManagerFocusKeyOffset);
+
+        set.AfterFocusSet((nint)NameManager, 0);
+
+        Assert.Empty(dispatcher.Events);
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Fact]
+    public void RetiringAnOldNameManagerPreservesANewlyCapturedModeScreen()
+    {
+        const nuint modeClosure = 0xB8000;
+        var memory = CreateModeMemory(CreateNameMemory())
+            .AddPointer(modeClosure, NameManager)
+            .AddPointer(modeClosure + NewGameHookSet.ModeCallbackSceneOffset, ModeScene);
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory);
+        factory.SetOriginal<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit, _ =>
+        {
+            EmitModeLocalizedText(factory);
+            return 1;
+        });
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        factory.SetOriginal<ModeSelectCallbackDelegate>(HookId.ModeSelectCallback, (_, _, value) =>
+        {
+            var key = value * 10;
+            memory.AddInt32(ModeScene + ModeSelectCapture.CompositeFocusOffset, key)
+                .AddInt32(NameManager + NewGameHookSet.ManagerFocusKeyOffset, key);
+            set.AfterFocusSet((nint)NameManager, key);
+        });
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+        factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene);
+
+        // Return to New Game. A newly initialized mode menu now owns the old
+        // name-manager allocation; retiring Name Entry must not erase this menu.
+        memory.AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 0x1D);
+        factory.GetDetour<ModeSelectSteamInitDelegate>(HookId.ModeSelectSteamInit)((nint)ModeScene);
+        Assert.Contains(dispatcher.Events, item => item is ModeSelectPresented);
+        dispatcher.Events.Clear();
+        var callback = factory.GetDetour<ModeSelectCallbackDelegate>(HookId.ModeSelectCallback);
+        callback((nint)modeClosure, 3, 1);
+        callback((nint)modeClosure, 3, 2);
+
+        Assert.Equal(2, dispatcher.Events.Count);
+        Assert.All(dispatcher.Events, item => Assert.IsType<ModeSelectChanged>(item));
+        Assert.Empty(dispatcher.Failures);
+    }
+
+    [Theory]
     [InlineData("missing-prompt")]
     [InlineData("unreadable-prompt")]
     [InlineData("blank-prompt")]
@@ -2583,10 +2695,10 @@ public sealed class NewGameHookSetTests
         return memory;
     }
 
-    private static TestMemory CreateModeMemory()
+    private static TestMemory CreateModeMemory(TestMemory? memory = null)
     {
-        var memory = new TestMemory()
-            .AddPointer(ModeScene + ModeSelectCapture.RecordsBeginOffset, ModeRecords)
+        memory ??= new TestMemory();
+        memory.AddPointer(ModeScene + ModeSelectCapture.RecordsBeginOffset, ModeRecords)
             .AddPointer(
                 ModeScene + ModeSelectCapture.RecordsEndOffset,
                 ModeRecords + 3 * ModeSelectCapture.RecordStride)
@@ -2660,6 +2772,7 @@ public sealed class NewGameHookSetTests
         string gridText = "A")
     {
         var memory = new TestMemory()
+            .AddInt32(ImageBase + StartupTitleHookSet.CurrentSceneGlobalRva, 0xB)
             .AddByte(NameScene + NameInputCapture.ActiveOffset, active)
             .AddInt32(NameScene + NameInputCapture.PageOffset, page)
             .AddInt32(NameScene + NameInputCapture.ColumnOffset, column)

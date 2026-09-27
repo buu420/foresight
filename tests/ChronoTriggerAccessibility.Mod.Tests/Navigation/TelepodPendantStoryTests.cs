@@ -41,8 +41,18 @@ public sealed class TelepodPendantStoryTests
         Assert.DoesNotContain(repeat.Speech.Concat(route.Speech), s =>
             s.Contains("not active") || s.Contains("cannot locate") || s.Contains("No route") || s.Contains("not discovered"));
         var path = NavigationPathfinder.Find(frame.Graph, frame.Player, objective.ApproachPoints)!;
-        var arrival = controller.Update(frame with { Player = path[^1] }, 300);
-        Assert.Contains(arrival.Speech, s => s.StartsWith("Arrived at ") && s.Contains("use confirm"));
+        // The pendant is picked up with Confirm, so arrival also needs the facing the native
+        // handler tests. The captured leader faces down; the route ends beside the pendant.
+        var there = frame with { Player = path[^1] };
+        var turn = objective.ConfirmAt(path[^1])!(path[^1]);
+        Assert.NotEmpty(turn);
+        Assert.DoesNotContain(frame.PlayerFacing, turn);
+        var arrival = controller.Update(there, 300);
+        Assert.DoesNotContain(arrival.Speech, s => s.StartsWith("Arrived at "));
+        if (command == NavigationCommand.ToggleWalk) Assert.Equal(turn[0], arrival.Direction);
+        else Assert.Contains(arrival.Speech, s => s.Contains("to face"));
+        arrival = controller.Update(there with { PlayerFacing = turn[0] }, 400, command == NavigationCommand.Guide);
+        Assert.Contains(arrival.Speech, s => s.Contains("Arrived at ") && s.Contains("use confirm"));
     }
 
     [Fact]

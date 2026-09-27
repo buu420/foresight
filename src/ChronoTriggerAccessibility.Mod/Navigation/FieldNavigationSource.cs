@@ -29,11 +29,30 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         lastFailure = null;
         if (story is null && !storyUnavailable) diagnostic("Navigation story context is unavailable; field targets remain usable.");
         storyUnavailable = story is null;
-        return Build(field, map, viewport, treasures, story);
+        return Build(field, map, viewport, treasures, story, TreasureGrid(field));
     }
 
+    /// <summary>The whole chest grid 179690 builds at engine+E44 (end E48, width E50, height E54):
+    /// 179D90 treats any byte under 0x80 as a treasure, opened or not. Same bounds as the
+    /// treasure capture; null when any part is unreadable or inconsistent.</summary>
+    private Func<int, int, bool>? TreasureGrid(FieldNavigationSnapshot field)
+    {
+        Span<byte> word = stackalloc byte[4];
+        int Read(uint offset, Span<byte> buffer) =>
+            memory.TryRead((nuint)(field.Engine + offset), buffer) ? BitConverter.ToInt32(buffer) : int.MinValue;
+        var begin = Read(0xE44, word); var end = Read(0xE48, word);
+        var width = Read(0xE50, word); var height = Read(0xE54, word);
+        if (begin == int.MinValue || end == int.MinValue || width is < 1 or > 256 || height is < 1 or > 256 ||
+            (long)(uint)end - (uint)begin != width * height) return null;
+        var cells = new byte[width * height];
+        if (!memory.TryRead((nuint)(uint)begin, cells)) return null;
+        return (x, y) => x >= 0 && y >= 0 && x < width && y < height && cells[y * width + x] < 0x80;
+    }
+
+    /// <param name="treasureGrid">True where the live chest grid (engine+E44) holds any treasure
+    /// record, opened or not. Null when it could not be read.</param>
     public NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldViewport viewport,
-        IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null)
+        IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null, Func<int, int, bool>? treasureGrid = null)
     {
         var identity = $"{field.Engine:X8}:{field.SceneId}";
         if (scene != identity)
@@ -53,6 +72,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         // Rows named only by their appearance, and the counters standing in for a keeper.
         var genericIds = new HashSet<string>();
         var standInsOf = new List<(string Owner, string StandIn)>();
+        // The live marker actors behind each Confirm landmark row, for merging equivalent markers.
+        var markerAnchors = new Dictionary<string, FieldActorSnapshot[]>(StringComparer.Ordinal);
         var guideActive = field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 };
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
@@ -109,7 +130,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction),
                 arrivalInstruction: appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
-                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null);
+                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
+                // Confirm reaches the actor or any stand-in that runs its script (the same
+                // set ActorApproach routes to); touch pickups finish by contact instead.
+                confirm: touchOnly ? null : ActorConfirm(Anchors(actor)));
             if (label is null) genericIds.Add(id);
             foreach (var (standIn, same) in InteractionProxies(actor))
                 if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
@@ -118,9 +142,24 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var chest in treasures)
         {
             var position = Position(chest.FineX, chest.FineY);
+            // Approach(position) is the centre of each neighbouring tile, and the one-eighth-tile
+            // arrival box never leaves that tile, so the position already satisfies 179940; the
+            // facing is the rest of the native test.
+            var (chestTileX, chestTileY) = (chest.FineX >> 8, chest.FineY >> 8);
+            // 179D90 finds any grid record, opened or not, so only the live chest grid can prove
+            // that nothing shadows the up probe's second row. Without it, row - 2 never counts.
+            Func<int, int, bool> treasureAt = treasureGrid ?? ((_, _) => true);
+            var chestGoals = Approach(position).ToList();
+            // 179C30 also accepts the chest two rows above when the row between holds no record.
+            // Offer that spot only when the tile directly below cannot be stood on, so an
+            // adjacent goal stays the one chosen whenever it exists.
+            var below = At(chestTileX * 256 + 128, (chestTileY + 1) * 256 + 128).Any();
+            if (!below && !treasureAt(chestTileX, chestTileY + 1))
+                chestGoals.AddRange(At(chestTileX * 256 + 128, (chestTileY + 2) * 256 + 128).Where(p => !graph.IsTerminal(p)));
             Add($"chest:{chest.Index}", chest.IsChest ? "Treasure chest" : "Item pickup", NavigationCategory.Objects, position,
-                Approach(position), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
-                guideAvailable: guideActive);
+                chestGoals.Distinct().ToArray(), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
+                guideAvailable: guideActive,
+                confirm: new(point => FieldInteractionRange.TreasureFacings(point.X, point.Y, chestTileX, chestTileY, treasureAt), null));
         }
         foreach (var save in savePoints)
         {
@@ -161,7 +200,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var approaches = touch
                 ? TouchApproach(actor)
                 : ActorApproach(actor, position);
-            if ((field.SceneId, actor.Index) != (28, 1) && scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null))
+            var terrainContact = (field.SceneId, actor.Index) != (28, 1) &&
+                scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
+            if (terrainContact)
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
             approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
@@ -171,7 +212,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ProtectContactPassage($"landmark:{actor.Index}", actor);
             Add($"landmark:{actor.Index}", label, scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
-                guideAvailable: guideActive && (!touch || scripted.Length != 0));
+                guideAvailable: guideActive && (!touch || scripted.Length != 0),
+                confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
+            if (!touch && !terrainContact) markerAnchors[$"landmark:{actor.Index}"] = Anchors(actor);
         }
         // A counter that only runs its keeper's script is the keeper's destination, already
         // offered under the keeper's name with the counter's reach. A visible character that
@@ -194,6 +237,26 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 Visible = members.Any(m => m.Visible), Discovered = members.Any(m => m.Discovered),
                 GuideAvailable = members.Any(m => m.GuideAvailable),
             };
+            // Equivalent markers run the same script, so Confirm reaching any of them is the
+            // interaction. Next to one marker the scan may well pick its higher-slot sibling.
+            if (members.All(m => markerAnchors.ContainsKey(m.Id)))
+            {
+                var rule = ActorConfirm(members.SelectMany(m => markerAnchors[m.Id]).ToArray());
+                merged = merged with { ConfirmFacings = rule.Ready, ConfirmPending = rule.Pending, ApproachConfirms = null };
+            }
+            else
+            {
+                // Mixed finishes: each goal keeps the rule of the marker it came from.
+                merged = merged with
+                {
+                    ConfirmFacings = null,
+                    ApproachConfirms = members.SelectMany(m => m.ApproachPoints.Where(merged.ApproachPoints.Contains)
+                            .Select(p => (Point: p, Rule: m.ConfirmFacings)))
+                        .Where(p => p.Rule is not null).DistinctBy(p => p.Point).ToDictionary(p => p.Point, p => p.Rule!),
+                    ConfirmPending = members.Any(m => m.ConfirmPending is not null)
+                        ? point => members.Any(m => m.ConfirmPending?.Invoke(point) == true) : null,
+                };
+            }
             targets[targets.IndexOf(first)] = merged;
             targets.RemoveAll(t => members.Skip(1).Contains(t));
         }
@@ -215,7 +278,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 guideAvailable: guideActive, storyCandidate: false,
                 arrivalInstruction: touch ? null : "Press Confirm to interact.",
                 contactPosition: touch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
-                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null);
+                    actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
+                confirm: touch ? null : ActorConfirm([actor]));
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => r.Available(story) &&
@@ -364,7 +428,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals, collisions, touchGoals),
                     map, GameNavigationCatalog.ForScene(field.SceneId))
                 : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
-            { AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId) };
+            {
+                AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
+                PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
+                    ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
+            };
 
         void ReportInventory()
         {
@@ -468,22 +536,27 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
 
         IReadOnlyList<NavigationPoint> ActorApproach(FieldActorSnapshot actor, NavigationPoint p)
         {
-            var direct = Approach(p);
             // The sprite the player recognises is not always the one the game lets them
             // act on. Where another actor exists only to run this one's script, its own
             // standing room counts too, so long as it is really there and really itself.
             var proxies = InteractionProxies(actor);
+            var anchors = Anchors(actor);
+            // Confirm (17D230) tests X - 16 * [actor+0x14C], not the sprite X, so the four
+            // one-step goals are placed around that native point, and every goal must pass the
+            // same facing test the arrival uses, over the whole arrival box.
+            var direct = Approach(Position(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY))
+                .Where(goal => ConfirmGoal(goal, anchors)).ToArray();
             // A nearby goal can be blocked by a counter, hedge, or the actor's
             // own body. Widen to everywhere the confirm handler would still
             // accept, and let the search pick whichever of them it can actually walk
             // to. An actor with all four steps open and no stand-in pays nothing.
-            if (direct.Count == 4 && proxies.Count == 0 && (actor.LoadedFlag & 1) == 0) return direct;
-            var widened = direct.Concat(ConfirmApproach(actor.FineX, actor.FineY));
-            foreach (var (proxy, _) in proxies) widened = widened.Concat(ConfirmApproach(proxy.FineX, proxy.FineY));
+            if (direct.Length == 4 && proxies.Count == 0 && (actor.LoadedFlag & 1) == 0) return direct;
+            var widened = direct.Concat(ConfirmApproach(actor));
+            foreach (var (proxy, _) in proxies) widened = widened.Concat(ConfirmApproach(proxy));
             // Rank by the nearest place the game accepts Confirm, so a keeper's own floor
             // behind the counter cannot crowd out every customer-side goal.
-            var sources = proxies.Select(s => (X: s.Actor.FineX, Y: s.Actor.FineY)).Prepend((X: p.X, Y: p.Y)).ToArray();
-            return widened.Distinct()
+            var sources = anchors.Select(a => (X: a.FineX - a.CollisionOffsetX * 16, Y: a.FineY)).ToArray();
+            return widened.Distinct().Where(goal => ConfirmGoal(goal, anchors))
                 .OrderBy(point => sources.Min(s => Math.Abs(point.X - s.X) + Math.Abs(point.Y - s.Y))).Take(64).ToArray();
         }
         IReadOnlyList<NavigationPoint> Approach(NavigationPoint p)
@@ -497,15 +570,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         /// at these exact coordinates, allowing for the controller calling the walk over as
         /// soon as the player is inside its arrival box. Judging a rounded position instead
         /// would hand out goals up to a rounding and two tolerances too far.</summary>
-        IReadOnlyList<NavigationPoint> ConfirmApproach(int actorX, int actorY)
+        IReadOnlyList<NavigationPoint> ConfirmApproach(FieldActorSnapshot actor)
         {
             var found = new List<NavigationPoint>();
             var reach = FieldInteractionRange.Along + NavigationUnits.LocalStep / 8;
+            var actorX = actor.FineX - actor.CollisionOffsetX * 16;
+            var actorY = actor.FineY;
             for (var py = (actorY - reach) / 64 * 64; py <= actorY + reach; py += 64)
             for (var px = (actorX - reach) / 64 * 64; px <= actorX + reach; px += 64)
             {
                 if (px < 0 || py < 0) continue;
-                if (!FieldInteractionRange.ReachesWithin(px, py, actorX, actorY, NavigationUnits.LocalStep / 8)) continue;
+                // The side-aware test the arrival uses, over the whole arrival box.
+                if (FieldInteractionRange.FacingsWithin(px, py, actor.FineX, actor.FineY, actor.CollisionOffsetX,
+                        NavigationUnits.LocalStep / 8).Count == 0) continue;
                 found.AddRange(At(px, py).Where(point => !graph.IsTerminal(point)));
             }
             return found;
@@ -595,12 +672,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
-            NavigationPoint? contactPosition = null)
+            NavigationPoint? contactPosition = null, ConfirmRule? confirm = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
                 visible || discovered.ContainsKey(id))
-                { Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition });
+                {
+                    Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
+                    ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
+                });
             var output = storyOnly ? storyAnchors : targets;
             if (visible || guideAvailable)
             {
@@ -608,14 +688,104 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
-                    ContactPosition = contactPosition,
+                    ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 };
                 if (visible) discovered[id] = target;
                 output.Add(target);
             }
-            else if (discovered.TryGetValue(id, out var known)) output.Add(known with { Visible = false, Discovered = true });
+            // A remembered target keeps its discovered geometry, but its Confirm readiness is
+            // always this capture's (current position, scan gate, contact), never the old one's.
+            else if (discovered.TryGetValue(id, out var known)) output.Add(known with
+            {
+                Visible = false, Discovered = true,
+                ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
+            });
+        }
+        /// <summary>The actor and every audited stand-in that runs its script (the same set
+        /// ActorApproach routes to).</summary>
+        FieldActorSnapshot[] Anchors(FieldActorSnapshot actor) =>
+            InteractionProxies(actor).Select(p => p.Actor).Prepend(actor).Concat(EquivalentMarkers(actor)).DistinctBy(a => a.Index).ToArray();
+
+        /// <summary>The live markers curated as repeats of this marker's map feature (the same
+        /// groups merged into one row below). They run the same script, so the scan choosing
+        /// any of them is this interaction, when planning as well as on arrival.</summary>
+        IEnumerable<FieldActorSnapshot> EquivalentMarkers(FieldActorSnapshot actor) =>
+            !field.SceneIdCoherent || (actor.ClassTag & 0xFF) != 7 ? [] :
+            FieldContentFacts.MarkerGroups(field.SceneId).Where(g => g.Contains(actor.Index)).SelectMany(g => g)
+                .Where(index => index != actor.Index)
+                .Select(index => field.Actors.FirstOrDefault(a => a.Index == index && (a.ClassTag & 0xFF) == 7 && InsideMap(a)))
+                .OfType<FieldActorSnapshot>();
+
+        /// <summary>Readiness exactly as Confirm (17D0C0) would resolve it with the leader standing at
+        /// the live point. While fieldState+0x20C4 holds a touched actor (bit 7 clear), 17D0C0 skips the
+        /// facing scan and 17FA20 runs the actor at actorBase+0x13174, whatever the facing: ready (any
+        /// facing) only when that is one of these actors. Otherwise the scan 17D230 takes the highest
+        /// eligible slot its exact routine accepts, so only facings whose winner is one of these actors
+        /// are ready. Unknown native state, no leader, a scan gate that is currently off for all of
+        /// these actors, or a touched actor that is someone else, is "pending" (in reach, not ready);
+        /// a facing another actor wins is simply not offered.</summary>
+        ConfirmRule ActorConfirm(FieldActorSnapshot[] anchors)
+        {
+            var ids = anchors.Select(a => a.Index).ToHashSet();
+            var leader = field.LeadPlayerActorIndex;
+            var actors = field.Actors;
+            var (contact, selected) = (field.ContactActorRaw, field.ConfirmActorRaw);
+            var gated = anchors.Any(a => FieldInteractionRange.ConfirmScanned(a, leader));
+            NavigationDirection[] all = [NavigationDirection.North, NavigationDirection.South, NavigationDirection.West, NavigationDirection.East];
+            IReadOnlyList<NavigationDirection> Geometric(NavigationPoint p) => anchors
+                .SelectMany(a => FieldInteractionRange.Facings(p.X, p.Y, a.FineX, a.FineY, a.CollisionOffsetX)).Distinct().ToArray();
+            // 17FA20 runs the selected actor only while its persistent call gates are open and
+            // its script priority at +E4 exceeds 1. Busy/unknown actors still win the scan;
+            // only dispatch is blocked, so never remove them from competing actor selection.
+            bool Runs(int slot) => anchors.Any(a => a.Index == slot && a.ScriptCallsEnabled &&
+                a.ScriptPriority is > 1 && (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0);
+            IReadOnlyList<NavigationDirection> Ready(NavigationPoint p)
+            {
+                if (leader < 0 || contact is not int touched) return [];
+                var preferred = Geometric(p).Concat(all).Distinct();
+                if ((touched & 0x80) == 0)
+                    return selected is int chosen && (chosen & 0x80) == 0 && Runs((chosen & 0xFF) >> 1)
+                        ? preferred.ToArray() : [];
+                return preferred.Where(f => Runs(FieldInteractionRange.ConfirmWinner(actors, leader, p.X, p.Y, f))).ToArray();
+            }
+            // Not ready but in reach is "pending" unless every in-reach facing is simply won by some
+            // other actor; that is a bad standing point, which the controller replans away from.
+            bool Pending(NavigationPoint p)
+            {
+                var geometric = Geometric(p);
+                if (geometric.Count == 0 || Ready(p).Count != 0) return false;
+                if (leader < 0 || contact is not int touched || (touched & 0x80) == 0 || !gated) return true;
+                return geometric.Any(f => FieldInteractionRange.ConfirmWinner(actors, leader, p.X, p.Y, f) is var winner &&
+                    (winner < 0 || ids.Contains(winner)));
+            }
+            return new(Ready, Pending);
+        }
+
+        /// <summary>A route goal for a confirmed actor: some facing reaches one of its anchors
+        /// from the whole arrival box (inward, carry-independent bounds), and no other eligible,
+        /// non-party actor the scan tests first could be accepted from any point of that box with
+        /// the same facing (outward, exact carry-aware bounds). Planning assumes the target's own
+        /// scan gate, a camera-cull state, will be on once the player is there; arrival does not.
+        /// Party followers move with the leader, so they are judged live at arrival.</summary>
+        bool ConfirmGoal(NavigationPoint goal, FieldActorSnapshot[] anchors)
+        {
+            const int tolerance = NavigationUnits.LocalStep / 8;
+            var leader = field.LeadPlayerActorIndex;
+            foreach (var anchor in anchors)
+            foreach (var facing in FieldInteractionRange.FacingsWithin(goal.X, goal.Y, anchor.FineX, anchor.FineY,
+                         anchor.CollisionOffsetX, tolerance))
+                if (!field.Actors.Any(other => anchors.All(a => a.Index != other.Index) && !other.IsPartyMember &&
+                        other.Index > anchor.Index && FieldInteractionRange.ConfirmScanned(other, leader) &&
+                        FieldInteractionRange.MayReach(goal.X, goal.Y, other, leader, tolerance, facing)))
+                    return true;
+            return false;
         }
     }
+
+    /// <summary>A destination's Confirm finish: facings ready now, and where it is in reach but
+    /// the game would not yet give it Confirm.</summary>
+    private sealed record ConfirmRule(Func<NavigationPoint, IReadOnlyList<NavigationDirection>> Ready,
+        Func<NavigationPoint, bool>? Pending);
 
     private static IEnumerable<NavigationPoint> ConnectedExitFootprint(IEnumerable<NavigationPoint> cells,
         IEnumerable<NavigationPoint> discoveredPoints)

@@ -26,6 +26,10 @@ public sealed class NavigationController
     private long? contactStarted;
     private NavigationPoint contactOrigin;
     private NavigationDirection contactDirection;
+    private long? facingStarted;
+    private NavigationDirection facingDirection;
+    private readonly HashSet<NavigationPoint> unreachableGoals = [];
+    private long? pendingStarted;
     // Survives Stop(), which a failed plan performs before anyone can read the
     // destination back. Without it the one case this field explains reports zero.
     private int plannedApproaches;
@@ -33,7 +37,8 @@ public sealed class NavigationController
     public bool IsActive => guiding;
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
-        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={plannedApproaches}; stage={intermediateId ?? "none"}";
+        $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={plannedApproaches}; stage={intermediateId ?? "none"}" +
+        (facingStarted is null ? "" : $"; facing={facingDirection}");
     private bool TakesAnExit => intermediateId?.StartsWith("exit:", StringComparison.Ordinal) == true;
     private static string PointText(NavigationPoint? point) => point is { } p ? $"({p.X},{p.Y},{p.Layer})" : "none";
 
@@ -192,7 +197,12 @@ public sealed class NavigationController
         }
         var direction = Bearing(frame.Player, target.Position);
         var distance = Math.Ceiling(Math.Sqrt(SquaredDistance(frame.Player, target.Position)) / unitsPerTile);
-        var location = frame.Player.Layer != target.Position.Layer ? "on another level" :
+        // Within Confirm's reach the step count misleads (the reach spans nearly two steps);
+        // what still matters is which way to face.
+        var reach = target.AnyConfirmFacings(frame.Player);
+        var location = reach.Count != 0 ? reach.Contains(frame.PlayerFacing) ? "within reach, facing it" :
+                $"within reach, face {DirectionName(reach[0])} to use Confirm" :
+            frame.Player.Layer != target.Position.Layer ? "on another level" :
             direction == NavigationDirection.None ? "here" : $"{DirectionName(direction)}, {distance:0} {(distance == 1 ? "step" : "steps")} away";
         speech.Add($"{target.Label}, {index + 1} of {targets.Count}, {location}.");
         if (!string.IsNullOrWhiteSpace(target.Instruction)) speech.Add(target.Instruction);
@@ -202,19 +212,24 @@ public sealed class NavigationController
     {
         contactStarted = null;
         contactDirection = NavigationDirection.None;
+        facingStarted = null;
+        facingDirection = NavigationDirection.None;
+        pendingStarted = null;
         if (destination!.IsStoryNote)
         {
             speech.Add($"{destination.Label}. {destination.Instruction}");
             Stop();
             return false;
         }
-        var search = NavigationPathfinder.Search(frame.Graph, frame.Player, destination!.ApproachPoints);
+        // A goal proven not to reach its Confirm target during this guidance stays excluded.
+        var goals = destination!.ApproachPoints.Where(p => !unreachableGoals.Contains(p)).ToArray();
+        var search = NavigationPathfinder.Search(frame.Graph, frame.Player, goals);
         planRevision++;
-        plannedApproaches = destination.ApproachPoints.Count;
+        plannedApproaches = goals.Length;
         route = search.Route;
         if (intermediateId != search.IntermediateId) passageWaitStarted = null;
         intermediateId = search.IntermediateId;
-        plannedGoals = destination.ApproachPoints.ToArray();
+        plannedGoals = goals;
         nextPoint = 1;
         if (route is not null) return true;
         speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." : $"No route to {destination.Label} is available.");
@@ -315,6 +330,13 @@ public sealed class NavigationController
             }
             return;
         }
+        if (destination.ConfirmAt(route[^1]) is not null &&
+            (facingStarted is not null || Arrived(frame.Graph, frame.Player, route[^1])))
+        {
+            nextPoint = route.Count;
+            FinishFacing(frame, now, speech);
+            return;
+        }
         if (Arrived(frame.Graph, frame.Player, route[^1]))
         {
             speech.Add(Arrival(destination));
@@ -357,7 +379,8 @@ public sealed class NavigationController
             }
             if (route!.Count == 1)
             {
-                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None || destination.ContactAt(route[^1]) is not null) return;
+                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None ||
+                    destination.ContactAt(route[^1]) is not null || destination.ConfirmAt(route[^1]) is not null) return;
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;
@@ -392,8 +415,96 @@ public sealed class NavigationController
         }
     }
 
+    /// <summary>At a confirmed destination, arrival is the position plus a facing that the
+    /// native confirm test accepts. Automatic walking turns with the ordinary direction pad
+    /// (the player may shuffle toward the actor, which stays in reach); manual guidance names
+    /// the turn and confirms it once the live facing matches.</summary>
+    private void FinishFacing(NavigationFrame frame, long now, List<string> speech)
+    {
+        var target = destination!;
+        var goal = route![^1];
+        var reach = target.ConfirmAt(goal)!(frame.Player);
+        if (reach.Count == 0 && target.ConfirmPending?.Invoke(frame.Player) == true)
+        {
+            // In position, but the game would not give this target Confirm yet. Never claim it
+            // is ready; wait (bounded when walking) instead of abandoning a valid goal.
+            nextPoint = route.Count;
+            // Readiness can be revoked mid-turn (a newly touched actor, an unreadable word):
+            // release the turn's pad input; a later turn starts with its own deadline.
+            facingStarted = null;
+            facingDirection = NavigationDirection.None;
+            if (pendingStarted is null)
+            {
+                pendingStarted = now;
+                speech.Add($"Next to {target.Label}, but Confirm would not reach it yet.");
+            }
+            else if (walking && (now < pendingStarted.Value || now - pendingStarted.Value >= 1500))
+            {
+                speech.Add($"Navigation stopped: {target.Label} did not become ready for Confirm.");
+                Stop();
+            }
+            return;
+        }
+        pendingStarted = null;
+        if (reach.Count == 0)
+        {
+            // The actor moved, or another actor now takes Confirm here. Never call this
+            // arrival: exclude this goal and try the target's other live goals first.
+            unreachableGoals.Add(goal);
+            if (target.ApproachPoints.Any(p => !unreachableGoals.Contains(p)))
+            {
+                var planSpeech = new List<string>();
+                if (Plan(frame, planSpeech))
+                {
+                    announcedDirection = NavigationDirection.None;
+                    lastProgress = now;
+                    lastPosition = frame.Player;
+                    if (!walking) speech.Add($"{target.Label} is out of reach from here. Route updated.");
+                    return;
+                }
+                if (!guiding) { speech.AddRange(planSpeech); return; }
+            }
+            speech.Add($"Navigation stopped: {target.Label} is out of reach from here.");
+            Stop();
+            return;
+        }
+        if (frame.PlayerFacing != NavigationDirection.None && reach.Contains(frame.PlayerFacing))
+        {
+            // After a spoken turn, confirm the turn itself; keep any audited arrival advice.
+            speech.Add(facingStarted is not null && !walking
+                ? "Facing it. " + Arrival(target) + (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? " Press Confirm." : "")
+                : Arrival(target));
+            Stop();
+            return;
+        }
+        if (frame.PlayerFacing == NavigationDirection.None)
+        {
+            // Without a readable facing nothing can be verified or turned. Say where the player
+            // is and what is still needed, without claiming they are ready to interact.
+            speech.Add($"Next to {target.Label}, but the facing could not be read. " +
+                $"Face {DirectionName(reach[0])}, then press Confirm.");
+            Stop();
+            return;
+        }
+        if (facingStarted is null || !reach.Contains(facingDirection))
+        {
+            var first = facingStarted is null;
+            facingStarted ??= now;
+            facingDirection = reach[0];
+            if (!walking) speech.Add($"{(first ? "Next to" : "Still next to")} {target.Label}. " +
+                $"Turn {DirectionName(facingDirection)} to face {target.Label}, then press Confirm.");
+            return;
+        }
+        if (walking && (now < facingStarted.Value || now - facingStarted.Value >= 1500))
+        {
+            speech.Add($"Navigation stopped: could not turn to face {target.Label}.");
+            Stop();
+        }
+    }
+
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
-        new(speech.AsReadOnly(), walking && contactStarted is not null ? contactDirection :
+        new(speech.AsReadOnly(), walking && facingStarted is not null ? facingDirection :
+            walking && contactStarted is not null ? contactDirection :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
             ManualLeg = guiding && !walking && !waitingForManualStop && route is not null && nextPoint < route.Count
@@ -485,6 +596,10 @@ public sealed class NavigationController
         passageWaitStarted = null;
         contactStarted = null;
         contactDirection = NavigationDirection.None;
+        facingStarted = null;
+        facingDirection = NavigationDirection.None;
+        pendingStarted = null;
+        unreachableGoals.Clear();
     }
 
     private string ContactInstruction() => "Continue " + (contactDirection switch

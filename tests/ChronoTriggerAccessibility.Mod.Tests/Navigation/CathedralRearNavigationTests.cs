@@ -100,11 +100,19 @@ public sealed class CathedralRearNavigationTests
                     NavigationDirection.East => p.Y == frame.Player.Y && p.X > frame.Player.X,
                     _ => false,
                 }).ToArray();
-                Assert.Single(next);
-                frame = frame with { Player = next[0] };
+                // A press into the organ turns the leader in place, as the native field does;
+                // every step also turns them. A missing edge on the route itself still ends in
+                // the "blocked" stop asserted below.
+                Assert.True(next.Length <= 1);
+                frame = next.Length == 0 ? frame with { PlayerFacing = result.Direction }
+                    : frame with { Player = next[0], PlayerFacing = result.Direction };
             }
             result = controller.Update(frame, tick * 32);
             speech.AddRange(result.Speech);
+            // The replay keeps its first frame; refresh the target's native camera-scoped state
+            // (not the graph or the player) when arrival is waiting on it, as the live capture does.
+            if (result.Speech.Any(s => s.Contains("would not reach it yet")))
+                frame = frame with { Targets = [Frame(frame.Player.X, frame.Player.Y).Targets.Single(t => t.Id == id)] };
         }
         Assert.False(result.AutoWalking);
         Assert.Contains(speech, s => s.StartsWith("Arrived at ", StringComparison.Ordinal));
@@ -121,8 +129,11 @@ public sealed class CathedralRearNavigationTests
         var player = FullGameNavigationTests.Actor(1, x, y, true) with { ClassTag = 0 };
         // Loaded, drawn native actor from live-field-020936.json. Activation is
         // camera-scoped and zero, so this must use the script's interaction gate.
+        // The per-frame pass 17A4D0 -> 17A6C0 sets its +0x20 byte to 0x80 once the drawn
+        // organ is inside the camera (the viewport below), which the confirm scan requires.
+        var onCamera = Math.Abs(4384 - x) < 400 && Math.Abs(4959 - y) < 400;
         var organ = FullGameNavigationTests.Actor(36, 4384, 4959) with
-        { VisualIndex = 100, ActivationEnabled = 0, ActivationBinding = 0, Facing = 3 };
+        { VisualIndex = 100, ActivationEnabled = 0, ActivationBinding = onCamera ? 0x80 : 0, Facing = 3 };
         var field = FullGameNavigationTests.Field(131) with
         { LeadPlayer = player, Actors = [player, organ], ActorCount = 56 };
         var state = new FieldStoryState(21, true)

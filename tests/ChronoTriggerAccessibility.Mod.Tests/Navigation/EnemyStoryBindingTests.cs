@@ -22,8 +22,10 @@ public sealed class EnemyStoryBindingTests
         var map = JsonSerializer.Deserialize<FieldMapSnapshot>(stream)!;
         var actor = FullGameNavigationTests.Actor(11, 7 * 256 + 128, 21 * 256 + 255)
             with { ClassTag = 5, VisualIndex = 240 };
+        // Hidden (draw mode 0), so the per-frame 17A4D0 -> 17A6C0 pass clears its +0x20 byte;
+        // the confirm scan 17D230 then skips it, and Confirm reaches the visible actor 11.
         var controller = FullGameNavigationTests.Actor(12, actor.FineX, actor.FineY)
-            with { ClassTag = 5, VisualIndex = 159, DrawMode = 0, ScriptProcessingEnabled = running };
+            with { ClassTag = 5, VisualIndex = 159, DrawMode = 0, ActivationBinding = 0, ScriptProcessingEnabled = running };
         var player = FullGameNavigationTests.Actor(1, 7 * 256 + 128, 27 * 256 + 128, true) with { ClassTag = 0 };
         var state = new FieldStoryState(0x88, false)
         {
