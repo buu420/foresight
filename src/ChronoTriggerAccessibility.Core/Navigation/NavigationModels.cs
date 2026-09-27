@@ -46,6 +46,11 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>For contacts approachable from several sides, finish toward
     /// this live native contact centre instead of reporting proximity as arrival.</summary>
     public NavigationPoint? ContactPosition { get; init; }
+    /// <summary>Alternative story destinations can require different contact
+    /// centres, or no contact. Bind the finish to the selected route goal.</summary>
+    public IReadOnlyDictionary<NavigationPoint, NavigationPoint>? ApproachContacts { get; init; }
+    public NavigationPoint? ContactAt(NavigationPoint goal) => ApproachContacts is null ? ContactPosition :
+        ApproachContacts.TryGetValue(goal, out var centre) ? centre : null;
 }
 
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,

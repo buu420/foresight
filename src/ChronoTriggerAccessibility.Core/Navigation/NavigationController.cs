@@ -294,7 +294,7 @@ public sealed class NavigationController
             lastProgress = now;
             lastPosition = frame.Player;
         }
-        if (contactStarted is not null || (destination.ContactDirection != NavigationDirection.None || destination.ContactPosition is not null) &&
+        if (contactStarted is not null || (destination.ContactDirection != NavigationDirection.None || destination.ContactAt(route[^1]) is not null) &&
             Arrived(frame.Graph, frame.Player, route[^1]))
         {
             nextPoint = route.Count;
@@ -302,7 +302,7 @@ public sealed class NavigationController
             {
                 contactStarted = now;
                 contactOrigin = frame.Player;
-                contactDirection = destination.ContactPosition is { } center
+                contactDirection = destination.ContactAt(route[^1]) is { } center
                     ? ContactBearing(frame.Player, center) : destination.ContactDirection;
                 speech.Add(ContactInstruction());
             }
@@ -357,7 +357,7 @@ public sealed class NavigationController
             }
             if (route!.Count == 1)
             {
-                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None || destination.ContactPosition is not null) return;
+                if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None || destination.ContactAt(route[^1]) is not null) return;
                 speech.Add(Arrival(destination!));
                 Stop();
                 return;

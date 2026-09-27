@@ -599,7 +599,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
-                visible || discovered.ContainsKey(id)));
+                visible || discovered.ContainsKey(id))
+                { Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition });
             var output = storyOnly ? storyAnchors : targets;
             if (visible || guideAvailable)
             {

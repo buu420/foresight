@@ -11,6 +11,44 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class StoryArrivalRegionTests
 {
     [Fact]
+    public void OceanPalaceStorySwitchRetainsTheObjectsNativeContact()
+    {
+        var actor = FullGameNavigationTests.Actor(10, 5 * 256 + 128, 5 * 256 + 255)
+            with { ClassTag = 4, VisualIndex = 167 };
+        var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(
+            FullGameNavigationTests.Field(406, actor), FullGameNavigationTests.Map(), new(0, 0, 256, 256), [],
+            new FieldStoryState(195, false) { Globals = new Dictionary<int, int> { [0x162] = 0 } });
+        var objectTarget = Assert.Single(frame.Targets, t => t.Id == "actor:10:4:167");
+        Assert.NotNull(objectTarget.ContactPosition);
+        var story = Assert.Single(frame.Targets, t => t.Id == "story:full:palace-east-switch");
+        Assert.Equal(objectTarget.ContactPosition, story.ContactPosition);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StoryAlternativesFinishOnlyTheContactAtTheChosenRouteGoal(bool secondNeedsContact)
+    {
+        // Visibility puts the unreachable first candidate ahead of a usable
+        // alternative. Finishing must follow the goal the pathfinder chose.
+        var first = new NavigationTarget("first", "First", NavigationCategory.Objects,
+            new(384, 256, 1), [new(384, 256, 1)], true, true) { ContactPosition = new(256, 256, 1) };
+        var second = first with { Id = "second", Position = new(896, 256, 1),
+            ApproachPoints = [new(896, 256, 1)], Visible = false,
+            ContactPosition = secondNeedsContact ? new(1024, 256, 1) : null };
+        var story = StoryTarget.BindAny("alternative", "Alternative", [first, second], [first.Id, second.Id], second.Position);
+        var frame = new NavigationFrame("alternatives", true, second.Position, [story], new NoEdges(), 256);
+        var controller = new NavigationController();
+        for (var i = 0; i < 3; i++) controller.Handle(NavigationCommand.NextCategory, frame, i);
+        var result = controller.Handle(NavigationCommand.ToggleWalk, frame, 4);
+        Assert.Equal(secondNeedsContact, result.AutoWalking);
+        Assert.Equal(secondNeedsContact ? NavigationDirection.East : NavigationDirection.None, result.Direction);
+    }
+
+    private sealed class NoEdges : INavigationGraph
+    { public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => []; }
+
+    [Fact]
     public void MammonMachineApproachBindsBeforeTheLavosScene()
     {
         var state = new FieldStoryState(0xC9, false) { Locals = new Dictionary<int, int> { [8] = 2 } };

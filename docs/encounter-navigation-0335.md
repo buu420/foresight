@@ -36,6 +36,9 @@ to force every optional battle onto the story route. Reference:
   center instead of reporting arrival outside the activation radius. Manual
   guidance speaks that final direction. Confirm-only encounters ask the player
   to press Confirm; navigation does not choose a dialogue option.
+- Story bindings retain contact completion too. When an objective has alternative
+  destinations, its final movement uses the contact centre belonging to the route
+  goal actually chosen, including alternatives that need no contact at all.
 - If no contact position is available but the actor also has an available Confirm
   handler, its valid Confirm approaches remain usable.
 - Spekkio's optional challenge has an audited override for its bounded symbolic

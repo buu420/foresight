@@ -17,12 +17,16 @@ public static class StoryTarget
         if (nearest is null) return Note("story:" + key, label,
             (instruction is null ? "" : instruction + " ") +
             "The mod cannot locate this destination yet.");
+        var approaches = choices.SelectMany(t => t.ApproachPoints.Select((point, rank) => (point, rank, target: t)))
+            .OrderBy(p => p.rank).DistinctBy(p => p.point).Take(64).ToArray();
         return nearest with { Id = "story:" + key, Label = label, Category = NavigationCategory.StoryEvents,
             GuideAvailable = true,
             // Share the search budget across alternatives. A large exit on another
             // floor must not consume all 64 goals before the current floor is added.
-            ApproachPoints = choices.SelectMany(t => t.ApproachPoints.Select((point, rank) => (point, rank)))
-                .OrderBy(p => p.rank).Select(p => p.point).Distinct().Take(64).ToArray(), Instruction = instruction };
+            ApproachPoints = approaches.Select(p => p.point).ToArray(), Instruction = instruction,
+            ApproachContacts = approaches.Where(p => p.target.ContactAt(p.point) is not null)
+                .ToDictionary(p => p.point, p => p.target.ContactAt(p.point)!.Value),
+        };
     }
 
     public static NavigationTarget Bind(string id, string label, IReadOnlyList<NavigationTarget> available,
