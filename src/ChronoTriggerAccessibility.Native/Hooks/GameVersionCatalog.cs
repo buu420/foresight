@@ -498,6 +498,10 @@ public static class GameVersionCatalog
         // These complete XOR/NOP instructions have no interior branch targets.
         new(HookId.GameKeyboardStateFilter, "Game keyboard snapshot before action mapping", 0x18F58B,
             Convert.FromHexString("33C90F1F00"), NativeHookKind.AssemblyInstructionSite, null, null),
+        // Immediately after joyGetPosEx returns: EAX=MMRESULT, EBX=joystick ID,
+        // JOYINFOEX at EBP-138. One complete MOVZX before TEST EAX and event dispatch.
+        new(HookId.GameJoystickStateFilter, "Game controller snapshot before action mapping", 0x18F0D5,
+            Convert.FromHexString("0FB68DC3FEFFFF"), NativeHookKind.AssemblyInstructionSite, null, null),
     ]);
 
     public static HookContract Get(HookId id) => Hooks.Single(hook => hook.Id == id);

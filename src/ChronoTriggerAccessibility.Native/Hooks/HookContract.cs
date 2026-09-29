@@ -176,6 +176,7 @@ public enum HookId
     ExtrasIllustrationViewerCallback,
     ExtrasSoundIdle,
     GameKeyboardStateFilter,
+    GameJoystickStateFilter,
 }
 
 public enum X86CallingConvention
@@ -636,6 +637,9 @@ public delegate uint FieldNavigationPadProbeDelegate(nint engine, uint originalP
 
 [Function(CallingConventions.Cdecl)]
 public delegate void GameKeyboardStateProbeDelegate(nint keyboardState);
+
+[Function(CallingConventions.Cdecl)]
+public delegate void GameJoystickStateProbeDelegate(uint deviceId, nint joystickState, uint result);
 
 // AgeSelectScene::init at RVA 0x2989B0 (cocos2d::Layer::init override, vtable 0x3AF778
 // slot 158). The time gauge is created through SceneManager::create(29) when the world

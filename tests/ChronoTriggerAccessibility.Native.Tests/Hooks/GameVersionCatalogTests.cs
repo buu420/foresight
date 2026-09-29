@@ -164,10 +164,10 @@ public sealed class GameVersionCatalogTests
     [Fact]
     public void HookCatalog_HasExactlyOneHundredSeventyOneUniqueContracts()
     {
-        Assert.Equal(171, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(171, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(171, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(171, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(172, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(172, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(172, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(172, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

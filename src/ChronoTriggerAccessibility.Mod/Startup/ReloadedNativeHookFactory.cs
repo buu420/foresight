@@ -224,11 +224,16 @@ public sealed class ReloadedNativeHookFactory :
         var keyboardInstruction = contract.Id == HookId.GameKeyboardStateFilter &&
             contract.Kind == NativeHookKind.AssemblyInstructionSite && contract.Rva == 0x18F58B &&
             contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("33C90F1F00"));
-        if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction && !keyboardInstruction)
+        // joyGetPosEx has returned to the poller's seven-byte MOVZX. Inspect its
+        // local snapshot before native button/POV/axis events are dispatched.
+        var joystickInstruction = contract.Id == HookId.GameJoystickStateFilter &&
+            contract.Kind == NativeHookKind.AssemblyInstructionSite && contract.Rva == 0x18F0D5 &&
+            contract.ExpectedBytes.AsSpan().SequenceEqual(Convert.FromHexString("0FB68DC3FEFFFF"));
+        if (contract.Kind != NativeHookKind.AssemblyCallSite && !worldInstruction && !keyboardInstruction && !joystickInstruction)
         {
             throw new ArgumentException("Only audited call-site or instruction-site contracts can be installed as assembly hooks.", nameof(id));
         }
-        if (!worldInstruction && !keyboardInstruction &&
+        if (!worldInstruction && !keyboardInstruction && !joystickInstruction &&
             (contract.ExpectedBytes.Length != 5 || contract.ExpectedBytes[0] != 0xE8))
         {
             throw new NotSupportedException(

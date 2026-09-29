@@ -35,6 +35,7 @@ public sealed class NavigationController
     private int plannedApproaches;
 
     public bool IsActive => guiding;
+    public string CurrentCategoryLabel => CategoryName(category);
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
         $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={plannedApproaches}; stage={intermediateId ?? "none"}" +

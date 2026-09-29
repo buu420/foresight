@@ -14,7 +14,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null,
     Action<NavigationLeg?>? synchronizeFootsteps = null,
     Func<nint, VehicleKind, NavigationFrame?>? vehicleCapture = null,
-    Func<nint, VehicleKind, bool>? vehicleActive = null)
+    Func<nint, VehicleKind, bool>? vehicleActive = null, NavigationGamepad? gamepad = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -31,6 +31,49 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private long worldPadManual;
     private uint worldPadLastInput;
     private string worldPadLastReject = "none";
+    private bool controllerInputAllowed;
+    private string? controllerMenuScene;
+    private long lastControllerPoll = -1;
+
+    /// <summary>Called before physical controller state is mapped into game actions.
+    /// Commands are tentative until ProcessInput validates a fresh frame at the
+    /// native task boundary. Vehicle capture uses transient task-local state and
+    /// must never run from this global joystick poll.</summary>
+    public bool FilterController(uint deviceId, NavigationPadButtons buttons, bool neutral, bool connected)
+    {
+        if (gamepad is null) return false;
+        lock (gate)
+        {
+            if (!connected)
+            {
+                if (gamepad.OwnsDevice(deviceId)) Suspend("controller disconnected");
+                return gamepad.Filter(buttons, neutral, false, connected: false, deviceId: deviceId);
+            }
+            var now = clock();
+            var available = enabled && controllerInputAllowed && isForeground() && engine != 0 &&
+                lastCall >= 0 && now >= lastCall && now - lastCall <= 250;
+            try
+            {
+                if (!available && (gamepad.IsOpen || controller.IsActive)) Suspend("controller input is unavailable");
+                var consumed = gamepad.Filter(buttons, neutral, available, deviceId: deviceId);
+                if (gamepad.OwnsDevice(deviceId)) lastControllerPoll = clock();
+                return consumed;
+            }
+            catch (Exception exception)
+            {
+                Suspend("controller state could not be read");
+                diagnostic($"Controller navigation state read failed: {exception.GetType().Name}.");
+                return gamepad.Filter(buttons, neutral, false, deviceId: deviceId);
+            }
+        }
+    }
+
+    private NavigationFrame? CaptureFrame(nint context, NavigationMode current) => current switch
+    {
+        NavigationMode.Field => capture(context),
+        NavigationMode.World => worldCapture?.Invoke(context),
+        _ => vehicleCapture?.Invoke(context, current == NavigationMode.Dactyl ? VehicleKind.Dactyl : VehicleKind.Epoch),
+    };
 
     public uint OnWorldInput(nint currentEngine, uint originalPad) => ProcessInput(currentEngine, originalPad, NavigationMode.World);
 
@@ -80,6 +123,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 worldPadLastReject = reject;
                 return originalPad;
             }
+            if (gamepad?.IsOpen == true) return originalPad;
             if (originalPad != 0)
             {
                 worldPadManual++;
@@ -99,12 +143,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
 
     public void Enable()
     {
-        lock (gate) { enabled = true; lastCall = -1; keyboard.Suspend(); }
+        lock (gate) { enabled = true; lastCall = -1; controllerInputAllowed = false; keyboard.Suspend(); gamepad?.Suspend(); }
     }
 
     public void Disable()
     {
-        lock (gate) { enabled = false; worldDirection = 0; controller.Cancel("accessibility disabled"); keyboard.Suspend(); resetMotion?.Invoke(); }
+        lock (gate) { enabled = false; Suspend("accessibility disabled"); }
     }
 
     public void Suspend(string reason)
@@ -112,9 +156,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate)
         {
             worldDirection = 0;
+            controllerInputAllowed = false;
+            controllerMenuScene = null;
             var wasActive = controller.IsActive;
             var cancellation = controller.Cancel(reason);
             keyboard.Suspend();
+            gamepad?.Suspend();
             // Revoke input before calling external motion, logging or speech code.
             // Their failure must not leave a route or a held command active.
             resetMotion?.Invoke();
@@ -148,6 +195,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     return originalPad;
                 }
                 if (lastCall >= 0 && (now < lastCall || now - lastCall > 250)) Suspend("player input was paused");
+                if (gamepad?.HasOwner == true && (lastControllerPoll < 0 || now < lastControllerPoll ||
+                    now - lastControllerPoll > 250)) Suspend("controller disconnected");
                 if (engine != 0 && (engine != currentEngine || mode != current))
                 {
                     Suspend("area changed");
@@ -156,8 +205,16 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 mode = current;
                 engine = currentEngine;
                 lastCall = now;
-                var commands = keyboard.Poll();
-                if (!controller.IsActive && commands.Count == 0)
+                controllerInputAllowed = true;
+                var commands = keyboard.Poll().ToList();
+                var padActions = gamepad?.Poll() ?? [];
+                if (commands.Count != 0 || originalPad != 0 && gamepad?.IsOpen == true)
+                {
+                    gamepad?.Suspend();
+                    controllerMenuScene = null;
+                    padActions = [];
+                }
+                if (!controller.IsActive && commands.Count == 0 && padActions.Count == 0 && gamepad?.IsOpen != true)
                 {
                     Action<nint>? observer = current switch
                     {
@@ -173,39 +230,72 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     }
                     return originalPad;
                 }
-                var frame = current switch
-                {
-                    NavigationMode.Field => capture(currentEngine),
-                    NavigationMode.World => worldCapture?.Invoke(currentEngine),
-                    _ => vehicleCapture?.Invoke(currentEngine, kind),
-                };
+                var frame = CaptureFrame(currentEngine, current);
                 if (frame is null || !frame.CanNavigate)
                 {
                     Suspend("navigation state is unavailable");
-                    if (commands.Count != 0) speak("Navigation is unavailable here.");
+                    if (commands.Count != 0 || padActions.Count != 0) speak("Navigation is unavailable here.");
+                    return originalPad;
+                }
+                if (controllerMenuScene is not null && frame.Scene != controllerMenuScene)
+                {
+                    Suspend("area changed");
                     return originalPad;
                 }
                 var result = controller.Update(frame, now, originalPad != 0);
                 var speech = new List<string>(result.Speech);
-                foreach (var command in commands)
+                var processedCommands = new List<NavigationCommand>();
+                void Handle(NavigationCommand command)
                 {
-                    // A new manual turn or recovery message also answers a simultaneous
-                    // repeat request. Keep that message without reading the same leg twice.
+                    processedCommands.Add(command);
+                    // A new manual turn or recovery message also answers a repeat.
                     if (command == NavigationCommand.Repeat && result.Guiding &&
-                        !result.AutoWalking && result.Speech.Count != 0) continue;
+                        !result.AutoWalking && result.Speech.Count != 0) return;
                     if (command == NavigationCommand.ToggleWalk && originalPad != 0)
                     {
                         speech.Add("Release the movement and action buttons before starting automatic walking.");
-                        continue;
+                        return;
                     }
                     result = controller.Handle(command, frame, now);
                     speech.AddRange(result.Speech);
                 }
-                if (commands.Count != 0 || speech.Count != 0 ||
+                // Preserve input order, including Open after a queued Walk. Menu
+                // state and route state must agree when this native tick returns.
+                foreach (var action in padActions)
+                {
+                    switch (action)
+                    {
+                        case NavigationPadAction.Open:
+                            result = controller.Cancel("navigation menu opened");
+                            resetMotion?.Invoke();
+                            speech.Clear();
+                            speech.Add($"Navigation menu. {controller.CurrentCategoryLabel}.");
+                            Handle(NavigationCommand.Repeat);
+                            break;
+                        case NavigationPadAction.Close:
+                            speech.Add("Navigation menu closed.");
+                            break;
+                        default:
+                            Handle(action switch
+                            {
+                                NavigationPadAction.PreviousCategory => NavigationCommand.PreviousCategory,
+                                NavigationPadAction.NextCategory => NavigationCommand.NextCategory,
+                                NavigationPadAction.PreviousTarget => NavigationCommand.PreviousTarget,
+                                NavigationPadAction.NextTarget => NavigationCommand.NextTarget,
+                                NavigationPadAction.Guide => NavigationCommand.Guide,
+                                NavigationPadAction.Walk => NavigationCommand.ToggleWalk,
+                                _ => throw new InvalidOperationException("Unknown navigation controller action."),
+                            });
+                            break;
+                    }
+                }
+                controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
+                foreach (var command in commands) Handle(command);
+                if (processedCommands.Count != 0 || speech.Count != 0 ||
                     (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
                 {
-                    if (controller.IsActive || commands.Count != 0) lastRouteState = controller.DiagnosticState;
-                    diagnostic($"Navigation: command={string.Join(",", commands)}; mode={current}; scene={frame.Scene}; " +
+                    if (controller.IsActive || processedCommands.Count != 0) lastRouteState = controller.DiagnosticState;
+                    diagnostic($"Navigation: command={string.Join(",", processedCommands)}; mode={current}; scene={frame.Scene}; " +
                         $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
                         $"input=0x{originalPad:X}; pad=0x{DirectionBits(result.Direction):X}; " +
                         $"guiding={result.Guiding}; walking={result.AutoWalking}; " +
@@ -226,6 +316,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 // unmanaged guard reports a speech failure; no stale pad survives a fault.
                 controller.Cancel("navigation error");
                 keyboard.Suspend();
+                gamepad?.Suspend();
+                controllerInputAllowed = false;
+                controllerMenuScene = null;
                 diagnostic($"Field navigation failure: {exception}");
                 speak("Navigation stopped because its state could not be read.");
                 return originalPad;

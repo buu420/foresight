@@ -217,6 +217,27 @@ public sealed class ReloadedNativeHookFactoryTests
             new(AsmHookBehaviour.ExecuteFirst, 6, true, 6)));
     }
 
+    [Fact]
+    public void AuditedJoystickSnapshotIsAcceptedByTheProductionFactoryWithExactlySevenBytes()
+    {
+        var controller = new RecordingAsmHookController();
+        var factory = new ReloadedNativeHookFactory(controller);
+        GameJoystickStateProbeDelegate callback = (_, _, _) => { };
+        var options = new RuntimeAsmHookOptions(AsmHookBehaviour.ExecuteFirst, 7, true, 7);
+        var prepared = factory.CreateAsmHook(HookId.GameJoystickStateFilter, "Controller snapshot", callback,
+            0x58F0D5, ChronoTriggerAccessibility.Mod.Navigation.NavigationGamepadHookSet.BuildAssembly, options);
+        Assert.Equal(1, controller.AsmCreateCount);
+        Assert.Equal(7, controller.Options!.hookLength);
+        Assert.Equal(AsmHookBehaviour.ExecuteFirst, controller.Options.Behaviour);
+        Assert.Contains(callback, prepared.LifetimeRoots);
+        foreach (var invalid in new[] { options with { Behaviour = AsmHookBehaviour.ExecuteAfter },
+            options with { HookLength = 5 }, options with { MaxOpcodeSize = 5 } })
+            Assert.Throws<ArgumentException>(() => factory.CreateAsmHook(HookId.GameJoystickStateFilter,
+                "Controller snapshot", callback, 0x58F0D5,
+                ChronoTriggerAccessibility.Mod.Navigation.NavigationGamepadHookSet.BuildAssembly, invalid));
+        Assert.Equal(1, controller.AsmCreateCount);
+    }
+
     private static RuntimeAsmHookOptions ValidOptions => new(
         AsmHookBehaviour.ExecuteFirst,
         HookLength: 5,

@@ -162,12 +162,16 @@ public sealed class Mod : ModBase
         NavigationFrame? World(nint context) => areas.Observe(worldSource.Capture(context));
         NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));
         var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
+        var navigationGamepad = new NavigationGamepad();
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); },
             footsteps.Suspend, World, context => World(context), footsteps.SetGuidance,
-            Flight, worldSource.IsVehicleActive);
+            Flight, worldSource.IsVehicleActive, navigationGamepad);
+        var navigationGamepadHooks = new NavigationGamepadHookSet(asmHookFactory,
+            new NavigationJoystick(navigation.FilterController, JoystickDevice.ReadWindows, dispatcher.RecordDiagnostic),
+            () => navigation.Suspend("controller hook disabled"));
         var battleKeyboard = new BattleKeyboard();
         var battle = new BattleRuntime(navigationSpeech.Publish, battleKeyboard,
             NavigationKeyboard.IsGameForeground, _ =>
@@ -261,6 +265,7 @@ public sealed class Mod : ModBase
             .Concat(dialogue.Registrations)
             .Concat(introTrace.Registrations)
             .Concat(navigationHooks.Registrations)
+            .Concat(navigationGamepadHooks.Registrations)
             .Concat(worldHooks.Registrations)
             .Concat(timeGauge.Registrations)
             .Concat(battleHooks.Registrations)
@@ -283,6 +288,7 @@ public sealed class Mod : ModBase
             dialogue,
             introTrace,
             navigationHooks,
+            navigationGamepadHooks,
             worldHooks,
             timeGauge,
             battleHooks,
