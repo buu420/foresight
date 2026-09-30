@@ -22,7 +22,7 @@
 - [x] Build the public payload and manual installation instructions. Pin and verify the official private runtime download, include notices, and hash every file.
 - [x] Validate supported executable, closed game, payload, and registry ownership in the standalone installer; cancellation/failure must be reported as failure. Test lifecycle behavior without altering the live registry.
 - [x] Run the existing test suite, native build, package checks and AMM validators. Obtain a fresh review of release changes.
-- [ ] Audit tracked source/history for private data and game assets; publish source, binary ZIPs and checksums to `buu420/foresight` as a GitHub prerelease.
+- [x] Audit tracked source/history for private data and game assets; publish source, binary ZIPs and checksums to `buu420/foresight` as a GitHub prerelease.
 - [x] Investigate `chrono-trigger` publication to `buu420/buu-s-mods`. Document the uninstall blocker and defer the catalog entry rather than publish an installation that can make the game unlaunchable.
 - [x] Deploy the branded mod locally and verify the approved movie pack remains intact.
 
@@ -46,3 +46,5 @@
 - Independent release review found no remaining blockers after the removal fixes; it verified all 274 candidate archive entries and their checksums.
 
 - Final verification: 2,393 C# tests, 14 native registry checks and 4 package tests passed. Final ZIP has 274 entries, complete matching payload hashes, embedded x86/UAC manifests, successful temporary-folder verification, working private runtime, and rejection of a modified mod DLL. ZIP SHA-256: `5527EAB23CB3435FB21C242DCB0886035F5C2255421F9BF2FAE40EFD4B040AF7`.
+
+- Published public repository `https://github.com/buu420/foresight` and prerelease `https://github.com/buu420/foresight/releases/tag/v0.3.40`. GitHub asset digest matches the final ZIP above. Installed Foresight 0.3.40 and all four approved narration/movie hashes verified unchanged. AMM remains intentionally unlisted for the documented cleanup failure.
