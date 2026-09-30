@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-    Builds the x86 accessibility launcher and installer with MSVC.
+    Builds Foresight's x86 proxy/helper and legacy regression-test binaries.
 
 .DESCRIPTION
     Locates Visual Studio through vswhere, imports the x86 build environment, and
-    compiles both native executables into .build\native.
+    compiles the WinMM DLL, attach helper, and historical launcher/installer into
+    .build\native. Public packages include only the proxy and attach helper.
 
-    The launcher MUST be x86. It injects into Chrono Trigger, which is a 32-bit
+    The attach helper MUST be x86. It injects into Chrono Trigger, which is a 32-bit
     process, and a remote thread's start address has to be valid in the target.
     This script verifies the PE machine type of every output and fails if any of
     them is not 0x14C.
@@ -69,14 +70,16 @@ $commonFlags = @('/nologo', '/std:c++17', '/EHsc', '/W4', '/permissive-', '/DUNI
 $commonFlags += if ($Configuration -eq 'Release') { @('/O2', '/MT', '/DNDEBUG') } else { @('/Od', '/Zi', '/MTd') }
 
 $targets = @(
-    @{ Name = 'ChronoTriggerAccessibility.Launcher';  Source = (Join-Path $launcherDir 'launcher.cpp');   Admin = $false }
-    @{ Name = 'ChronoTriggerAccessibility.Installer'; Source = (Join-Path $installerDir 'installer.cpp'); Admin = $true  }
+    @{ Name = 'ChronoTriggerAccessibility.Launcher'; Extension = 'exe'; Source = (Join-Path $launcherDir 'launcher.cpp'); Admin = $false }
+    @{ Name = 'ChronoTriggerAccessibility.Installer'; Extension = 'exe'; Source = (Join-Path $installerDir 'installer.cpp'); Admin = $true }
+    @{ Name = 'Foresight.Bootstrap'; Extension = 'exe'; Source = (Join-Path $repoRoot 'src/Foresight.Bootstrap/bootstrap.cpp'); Admin = $false }
+    @{ Name = 'winmm'; Extension = 'dll'; Source = (Join-Path $repoRoot 'src/Foresight.WinMMProxy/proxy.cpp'); Admin = $false }
 )
 
 foreach ($target in $targets) {
     if (-not (Test-Path -LiteralPath $target.Source)) { throw "Source not found: $($target.Source)" }
 
-    $exe = Join-Path $outputDir "$($target.Name).exe"
+    $exe = Join-Path $outputDir "$($target.Name).$($target.Extension)"
     $objDir = Join-Path $outputDir "obj\$($target.Name)"
     New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 
@@ -84,6 +87,8 @@ foreach ($target in $targets) {
     # Windows shows the UAC prompt on launch.
     $linkFlags = @('/SUBSYSTEM:WINDOWS', '/MANIFEST:EMBED')
     if ($target.Admin) { $linkFlags += "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'" }
+    else { $linkFlags += "/MANIFESTUAC:level='asInvoker' uiAccess='false'" }
+    if ($target.Extension -eq 'dll') { $linkFlags += @('/DLL', ('/DEF:' + (Join-Path $repoRoot 'src/Foresight.WinMMProxy/winmm.def'))) }
 
     $arguments = @()
     $arguments += $commonFlags
@@ -117,7 +122,7 @@ function Get-PeMachine {
 Write-Host ''
 $failures = @()
 foreach ($target in $targets) {
-    $exe = Join-Path $outputDir "$($target.Name).exe"
+    $exe = Join-Path $outputDir "$($target.Name).$($target.Extension)"
     $machine = Get-PeMachine -Path $exe
     $label = '0x{0:X}' -f $machine
     if ($machine -ne 0x14C) {

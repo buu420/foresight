@@ -14,7 +14,7 @@ Set-StrictMode -Version Latest
 function Get-ModRepositoryRoot {
     [CmdletBinding()]
     param()
-    return (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
+    return [IO.Path]::GetFullPath((Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath)
 }
 
 function Get-GameRoot {
@@ -36,10 +36,10 @@ function Get-GameRoot {
         if (-not (Test-Path -LiteralPath (Join-Path $GameRoot 'Chrono Trigger.exe') -PathType Leaf)) {
             throw "No 'Chrono Trigger.exe' in the supplied -GameRoot: $GameRoot"
         }
-        return (Resolve-Path -LiteralPath $GameRoot).ProviderPath
+        return [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $GameRoot).ProviderPath)
     }
 
-    $candidate = (Resolve-Path -LiteralPath (Join-Path $RepositoryRoot '..')).ProviderPath
+    $candidate = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath (Join-Path $RepositoryRoot '..')).ProviderPath)
     if (-not (Test-Path -LiteralPath (Join-Path $candidate 'Chrono Trigger.exe') -PathType Leaf)) {
         throw ("Could not find 'Chrono Trigger.exe' in the expected game root '$candidate'. " +
                'Pass -GameRoot explicitly.')

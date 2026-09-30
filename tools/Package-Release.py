@@ -55,10 +55,11 @@ def stage(repo: Path, runtime_zip: Path, output: Path) -> Path:
     shutil.copytree(upstream / "Loader/X86", payload / "Reloaded-II/Loader/X86")
     shutil.copytree(upstream / "mods/reloaded.sharedlib.hooks", payload / "Reloaded-II/Mods/reloaded.sharedlib.hooks")
     shutil.copytree(package, payload / "Reloaded-II/Mods/chrono.trigger.accessibility")
-    launcher = payload / "Accessibility/Launcher"
+    launcher = payload / "Accessibility/Bootstrap"
     launcher.mkdir(parents=True)
-    for name in ("ChronoTriggerAccessibility.Launcher.exe", "ChronoTriggerAccessibility.Installer.exe"):
+    for name in ("Foresight.Bootstrap.exe",):
         shutil.copy2(repo / ".build/native" / name, launcher / name)
+    shutil.copy2(repo / ".build/native/winmm.dll", payload / "winmm.dll")
     runtime = payload / "Accessibility/Runtime/dotnet/x86"
     with zipfile.ZipFile(runtime_zip) as archive:
         for entry in archive.infolist():
@@ -75,6 +76,7 @@ def stage(repo: Path, runtime_zip: Path, output: Path) -> Path:
     support = payload / "Accessibility/Foresight"
     support.mkdir(parents=True)
     shutil.copy2(repo / "tools/release/Setup-Foresight.ps1", support)
+    shutil.copy2(repo / "tools/release/Remove-LegacyRegistration.ps1", support)
     for name in ("README.md", "LICENSE", "THIRD-PARTY-NOTICES.md"):
         shutil.copy2(repo / name, support / name)
     shutil.copy2(upstream / "SOURCE.md", support / "Reloaded-SOURCE.md")

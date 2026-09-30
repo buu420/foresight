@@ -1,19 +1,19 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.40 is the first public beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance and automatic walking with keyboard or controller navigation.
+**Foresight 0.3.41 is a public beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance and automatic walking with keyboard or controller navigation.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
-[Download the beta](https://github.com/buu420/foresight/releases/tag/v0.3.40) · [Report a problem](https://github.com/buu420/foresight/issues)
+[Download the beta](https://github.com/buu420/foresight/releases/tag/v0.3.41) · [Report a problem](https://github.com/buu420/foresight/issues)
 
 ## Install the beta download
 
 You need Windows 10 or 11, your own Steam copy of Chrono Trigger, and a screen reader. The ZIP includes the portable Reloaded-II loader, hook library, Prism and a private **32-bit .NET 9 runtime**. No SDK, separate Reloaded installation or global runtime setting is needed.
 
 1. Close Chrono Trigger.
-2. Download **Foresight-v0.3.40-beta-win-x86.zip**. GitHub's automatic “Source code” downloads are for developers.
-3. Extract it and copy its contents into the game folder, beside `Chrono Trigger.exe`. Steam's Properties → Installed Files → Browse opens that folder. `Accessibility` and `Reloaded-II` should sit directly beside the executable.
-4. Run **Install Foresight.cmd**. Approve the Windows administrator prompt, then choose Yes in the Foresight installer. Wait for the installed confirmation.
+2. Download **Foresight-v0.3.41-beta-win-x86.zip**. GitHub's automatic “Source code” downloads are for developers.
+3. If another mod already uses `winmm.dll`, resolve that loader conflict before copying files. Extract the ZIP and copy its contents into the game folder, beside `Chrono Trigger.exe`. Steam's Properties → Installed Files → Browse opens that folder. `Accessibility` and `Reloaded-II` should sit directly beside the executable.
+4. Run **Install Foresight.cmd** to verify the files. Fresh installations need no registry entries or administrator prompt. Upgrading an older Foresight installation may request administrator permission once to remove its old launch registration.
 5. Start your screen reader, then launch the game normally from Steam.
 
 Use the classic game interface. Touch-interface Inventory, Equipment, Tech, Party and shop menus are not implemented. Testing has primarily used English game text. The supported Steam app ID is **613830**.
@@ -22,9 +22,9 @@ For updates, close the game, copy the new ZIP's contents over the mod files and 
 
 ## Remove the beta
 
-Close the game and run **Uninstall Foresight.cmd**. Approve the administrator prompt and removal confirmation. **Wait for the success message before deleting files.** Cancellation or failed removal leaves files available for retry. Never delete a registered launcher first.
+Close the game and run **Uninstall Foresight.cmd**, or uninstall through Accessibility Mod Manager if it installed the mod. Removal deletes the package files. The standalone uninstaller preserves files whose contents have changed, along with saves, backups and separately installed narration. No registry cleanup is needed for the new loader.
 
-The uninstaller removes the matching mod-owned launch redirect and leaves files in place. After success, the files listed in `Foresight-SHA256SUMS.txt` can be removed. Preserve shared mod files, saves, backups and any separate audio-description pack. Restore modified movie files through that pack's own recovery process before deleting its backups.
+The game loads Foresight through `winmm.dll` in its own folder. Removing that mod-owned file disables Foresight; Steam can then launch the original game normally. Do not remove another mod's proxy or shared files. Existing legacy launch registrations are cleared during upgrade, before this file-based installation is accepted.
 
 ## Beta scope
 
@@ -38,7 +38,11 @@ Controller navigation was tested in game and reported working by the user. This 
 
 ## Mod-manager status
 
-The FFVII / Blind Soldier chats confirmed the publication process for [Accessibility Mod Manager](https://github.com/RealAmethyst/AccessibilityModManager) and the existing [buu420 catalog](https://github.com/buu420/buu-s-mods). **Foresight is not listed yet.** The manager currently continues deleting files when its elevated uninstall cleanup is declined or fails. Foresight needs that cleanup to remove its launch redirect, so the catalog package is deferred until failed cleanup can preserve the launcher. Use the standalone ZIP for now. See [integration details](https://github.com/buu420/foresight/blob/main/docs/mod-manager-release.md).
+Foresight's beta is available in the author's [buu420 catalog](https://github.com/buu420/buu-s-mods) for [Accessibility Mod Manager](https://github.com/RealAmethyst/AccessibilityModManager). In the manager, add the catalog source below through Developers → Add source, refresh, and choose the beta release for **Chrono Trigger — Foresight**. If you already use this source for Blind Soldier, refresh it.
+
+`https://raw.githubusercontent.com/buu420/buu-s-mods/main/index.json`
+
+The manager installs and removes files normally. No registry entry or uninstall cleanup hook is required. The only optional elevated action is removing an older Foresight-owned launch registration during migration. This is a custom author catalog, not a listing in the manager's signed central registry. See [integration details](docs/mod-manager-release.md).
 
 Foresight is unofficial and is not affiliated with or endorsed by Square Enix. Its original code uses GPL-3.0-only; dependencies retain their own licenses. See [LICENSE](https://github.com/buu420/foresight/blob/main/LICENSE) and [third-party notices](https://github.com/buu420/foresight/blob/main/THIRD-PARTY-NOTICES.md).
 
@@ -128,7 +132,7 @@ The native hooks are fail-closed and support only this executable:
 - SHA-256: `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`
 - Architecture: 32-bit x86
 
-Both the launcher and the mod verify this hash and refuse to hook anything else. If it does not match, the game still starts â€” silently, with an explanatory dialog. Do not patch the executable to bypass the check.
+The bootstrap helper and mod verify this hash and refuse to hook anything else. A startup failure displays an error and closes the game. Do not patch the executable to bypass the check.
 
 ## Screen-reader output
 
@@ -136,110 +140,46 @@ The included 32-bit Prism 0.17.3 build supports NVDA, UI Automation, Windows One
 
 Start your screen reader **before** launching the game. The first expected announcement is "Square Enix."
 
-## Development prerequisites
+## Build and deploy from source
 
-- Windows 10 or newer.
-- Chrono Trigger installed through Steam.
-- For source deployment, a **32-bit .NET 9 runtime** (already bundled in the public ZIP). Any 9.0.x revision works; no specific patch version is required, and `DOTNET_ROOT_X86` does not need to be set.
-- Visual Studio 2022 Build Tools with the C++ x86 toolset, and the .NET SDK â€” only if you are building from source.
-
-## Development installation
-
-From the repository, in PowerShell:
+Building requires Visual Studio 2022 Build Tools with the C++ x86 toolset and the .NET 9 SDK. Public downloads already contain the native loader, managed mod and private x86 .NET 9.0.20 runtime. Source deployment expects that runtime under `Accessibility/Runtime/dotnet/x86`.
 
 ```powershell
+& '.\tools\Build-Native.ps1'
 & '.\tools\Package-Mod.ps1'
 & '.\tools\Deploy-Mod.ps1'
-```
-
-`Deploy-Mod.ps1` builds the native launcher, lays out the portable tree, removes the superseded ASI proxy, and then runs the installer. Windows shows a security prompt because registering the launch redirect writes to `HKEY_LOCAL_MACHINE`; approve it, then choose **Yes** in the installer dialog.
-
-Deployment is transactional. Existing directories are moved aside first and restored if any step fails. It never writes to `Chrono Trigger.exe`, and re-checks its hash afterwards.
-
-To verify an installation at any time:
-
-```powershell
 & '.\tools\Verify-Deployment.ps1'
 ```
 
-Every path is derived at runtime, so the repository works from any location and for any user. Pass `-GameRoot` if the repository does not live inside the game folder.
+Deployment backs up replaced files and restores them if verification fails. It never modifies `Chrono Trigger.exe`. Pass `-GameRoot` when the repository is outside the game folder. Unknown proxy DLLs are preserved and reported. The developer migration removes the reviewed old `Reloaded.Mod.Loader.Bootstrapper.asi`; public installation refuses an unresolved old ASI loader to prevent double injection. Old Foresight-owned IFEO values are removed once; the new loader never creates them. Historical launcher/installer sources remain for migration research and regression tests and are excluded from public packages.
 
-## Launch
+## How startup works
 
-A normal Steam launch is all that is required. No script, no separate shortcut, no Steam launch option, no Reloaded window.
+A normal Steam launch starts the original game. Windows loads Foresight's local `winmm.dll`, which forwards Windows multimedia and controller calls to the system DLL. A worker starts `Accessibility/Bootstrap/Foresight.Bootstrap.exe` to attach the bundled Reloaded loader to that same game process. API forwarding becomes ready before accessibility injection begins, avoiding an initialization dependency cycle.
 
-### Upgrading from an earlier version
+Startup also waits for the managed mod to acknowledge that Prism and the required hooks are active; successful DLL injection alone is not treated as accessibility readiness.
 
-Earlier versions injected Reloaded through Ultimate ASI Loader, deployed as `winmm.dll` beside the game together with `Reloaded.Mod.Loader.Bootstrapper.asi`. The native launcher replaces both, and `Deploy-Mod.ps1` deletes them â€” but only when their SHA-256 matches the files this mod installed, so a proxy DLL belonging to some other mod is left alone and reported instead. Leaving them in place would load Reloaded twice.
+The helper verifies the executable, process path and architecture. It temporarily leases `%APPDATA%/Reloaded-Mod-Loader-II/ReloadedII.json`, using the same mutex as Blind Soldier, then restores the original file when the game exits. This is a configuration file, not the Windows registry. Runtime environment settings exist only inside the game process; no global environment changes are made.
 
-Earlier versions also required a machine-wide `DOTNET_ROOT_X86` environment variable and a `Launch Chrono Trigger Accessible.ps1` script. Neither is used any more; the variable can be deleted and the script has been removed from the repository.
+The files used to load Foresight are:
 
-## How it works
+- `winmm.dll`
+- `Accessibility/Bootstrap/Foresight.Bootstrap.exe`
+- `Accessibility/Runtime/dotnet/x86/`
+- `Reloaded-II/Loader/X86/`
+- `Reloaded-II/Mods/chrono.trigger.accessibility/`
+- `Reloaded-II/Mods/reloaded.sharedlib.hooks/`
 
-```
-Steam starts "Chrono Trigger.exe"
-  -> Windows redirects to ChronoTriggerAccessibility.Launcher.exe   (IFEO "Debugger" value)
-       -> verifies the game's SHA-256
-       -> borrows %APPDATA%\Reloaded-Mod-Loader-II\ReloadedII.json and aims it
-          at <game>\Reloaded-II  (restored on every exit path)
-       -> starts the real game, bypassing the redirect so it cannot recurse
-       -> injects <game>\Reloaded-II\Loader\X86\Bootstrapper\...Bootstrapper.dll
-       -> waits for the game, forwards its exit code, gives the pointer back
-```
-
-Deployed layout:
-
-```
-<game>\Reloaded-II\Loader\X86\**                        Reloaded-II 1.30.3, x86 only
-<game>\Reloaded-II\Mods\reloaded.sharedlib.hooks\**      hook implementation, 1.16.3
-<game>\Reloaded-II\Mods\chrono.trigger.accessibility\**  this mod, plus prism.dll
-<game>\Reloaded-II\Apps\chrono trigger.exe\AppConfig.json
-<game>\Accessibility\Launcher\*.exe                      launcher and installer
-<game>\Accessibility\Backups\<timestamp>\**              previous copy, kept by deployment
-```
-
-Two design points are worth knowing before changing the launcher:
-
-- **The AppData pointer swap is unavoidable.** Reloaded hardcodes `%APPDATA%\Reloaded-Mod-Loader-II\ReloadedII.json` in both the managed loader (`Reloaded.Mod.Loader.IO/Paths.cs`) and the C++ bootstrapper. `portable.txt` only takes effect *after* that file is located, and `ReloadedPortable.txt` means "relaunch synchronously through the launcher exe", which a launcher-less tree does not have. So the launcher borrows the pointer and gives it back, guarded by a named mutex, a durable backup, and recovery of a leftover backup on the next start. The mutex name is shared with the author's Blind Soldier mod deliberately, so two portable Reloaded installs cannot swap that file concurrently.
-- **The game's primary thread is resumed before injection, on purpose.** Injecting into a pristine `CREATE_SUSPENDED` process, or while the process is parked at its initial loader breakpoint, deadlocks: that breakpoint is raised from inside ntdll's process initialisation, so the primary thread owns the loader lock and a remote `LoadLibraryW` waits on an owner that can never release it. This was measured, not assumed. See the comment in `launcher.cpp`.
-
-## Uninstall
-
-Close Chrono Trigger first, then:
-
-```powershell
-& '<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Installer.exe' /uninstall
-```
-
-Approve the security prompt and choose Yes. The game then starts normally without the mod. The uninstaller removes the launch redirect only if the mod created it, and its ownership value still matches the current redirect.
-
-After successful removal, remove only files belonging to this mod. Preserve shared files, backups and any separately installed movie-description pack. The public beta does not modify original game files.
+The public package contains `Foresight-SHA256SUMS.txt` with every shipped file's hash. It includes no game executable, game data, private recordings or replacement movies.
 
 ## Logs and troubleshooting
 
-Two logs matter:
+- `Accessibility/Logs/proxy.log` records native startup.
+- `Accessibility/Logs/bootstrap.log` records validation, injection and the configuration lease.
+- The newest Chrono Trigger log in `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` records hooks, the Prism backend and announcements. Search for `[chrono.trigger.accessibility]`.
 
-- `<game>\Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.log` â€” the launcher's own record: hash check, pointer lease, injection, exit code.
-- `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` â€” the newest `Chrono Trigger` log. Search it for `[chrono.trigger.accessibility]`; it records the executable check, each hook, the selected Prism backend, semantic events, and the exact announcement text.
+If startup reports missing or changed files, close the game and reinstall the complete package. If another mod already owns `winmm.dll`, do not overwrite it; the loaders need a compatibility arrangement. Start the screen reader before launching the game. The first expected announcement is “Square Enix.”
 
-| Symptom | Cause and fix |
-|---|---|
-| A dialog titled **"Oh Noes!"** | That is Reloaded's own error box, never the game's. It means Reloaded could not find its app configuration. Run `Verify-Deployment.ps1`. |
-| Game starts but says nothing | Check the launcher log for the injection result, then the Reloaded log for the Prism backend. Start your screen reader before the game. |
-| "not the build the accessibility mod supports" | Verify the game files in Steam. The mod deliberately refuses to hook an unknown build. |
-| Game will not start at all | The launch redirect may point at a missing launcher. Run the installer with `/uninstall`, then deploy again. |
-| No x86 .NET 9 runtime | Install the 32-bit .NET 9 Desktop Runtime. Do not substitute an x64-only runtime; the game is 32-bit. |
-| A blocking accessibility error | Stop testing that screen and keep the newest log. The mod treats missing interactive information as a fatal defect rather than continuing silently. |
+For an accessibility error or failed route, keep the latest log and report the screen, location and action that preceded it. Beta coverage is described above; a complete catalog is not proof of a complete successful playthrough.
 
-## Build from source
-
-```powershell
-& '.\tools\Build-Native.ps1'      # x86 launcher and installer; asserts PE machine 0x14C
-& '.\tools\Package-Mod.ps1'       # managed mod + Prism into artifacts\package
-& '.\tools\Deploy-Mod.ps1'        # lay out, register, verify
-& '.\tools\Verify-Deployment.ps1'
-```
-
-`Package-Mod.ps1` writes `SHA256SUMS.txt` over every packaged payload file.
-
-Third-party licensing and reviewed binary details are in `THIRD-PARTY-NOTICES.md`. Provenance and per-file hashes for the vendored Reloaded payload are in `native/reloaded-ii/v1.30.3/SOURCE.md`.
+Third-party licensing and reviewed binary details are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Vendored Reloaded provenance and hashes are in `native/reloaded-ii/v1.30.3/SOURCE.md`.

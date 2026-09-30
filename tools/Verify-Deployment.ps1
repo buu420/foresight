@@ -3,8 +3,8 @@
     Verifies a deployed Chrono Trigger accessibility installation.
 
 .DESCRIPTION
-    Checks the portable Reloaded-II tree, the mod payload, the native launcher and
-    installer, the IFEO redirect, and the x86 .NET runtime. Reports EVERY problem
+    Checks the portable Reloaded-II tree, mod payload, native proxy and helper,
+    immutable-file checksums, absence of legacy redirects, and private runtime. Reports EVERY problem
     rather than stopping at the first, then exits non-zero if any check failed.
 
     All paths derive from -GameRoot (or from this script's location). Nothing here
@@ -15,7 +15,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$GameRoot
+    [string]$GameRoot,
+    # Isolated fixtures must not inspect the host's game registry registration.
+    [switch]$SkipRegistryCheck
 )
 
 Set-StrictMode -Version Latest
@@ -24,8 +26,6 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'ModPaths.psm1') -Force
 
 $PeMachineI386 = 0x014C
-$ifeoKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\Chrono Trigger.exe'
-$ownerValueName = 'ChronoTriggerAccessibilityDebuggerOwner'
 
 $results = [System.Collections.Generic.List[object]]::new()
 function Add-Check {
@@ -35,6 +35,20 @@ function Add-Check {
         [string]$Detail = ''
     )
     $results.Add([pscustomobject]@{ Name = $Name; Ok = $Ok; Detail = $Detail })
+}
+
+function Get-DeploymentCanonicalPath {
+    param([Parameter(Mandatory)][string]$Path)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if ($fullPath -match '^([A-Za-z]):\\') {
+        $drive = Get-PSDrive -Name $Matches[1] -PSProvider FileSystem -ErrorAction SilentlyContinue
+        # Steam can launch through a mapped drive while developer tools use the
+        # UNC share. DisplayRoot is the filesystem provider's actual mapping.
+        if ($null -ne $drive -and $drive.DisplayRoot -and $drive.DisplayRoot.StartsWith('\\')) {
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $drive.DisplayRoot $fullPath.Substring(3)))
+        }
+    }
+    return $fullPath
 }
 
 # ------------------------------------------------------------------- layout ---
@@ -47,14 +61,14 @@ try {
 }
 
 $reloaded    = Get-PortableReloadedRoot -GameRoot $game
-$launcherDir = Get-LauncherRoot -GameRoot $game
 $gameExe     = Join-Path $game 'Chrono Trigger.exe'
 $loaderDir   = Join-Path $reloaded 'Loader\X86'
 $modDir      = Join-Path $reloaded 'Mods\chrono.trigger.accessibility'
 $hooksDir    = Join-Path $reloaded 'Mods\reloaded.sharedlib.hooks'
 $appConfig   = Join-Path $reloaded 'Apps\chrono trigger.exe\AppConfig.json'
-$launcherExe = Join-Path $launcherDir 'ChronoTriggerAccessibility.Launcher.exe'
-$installerExe = Join-Path $launcherDir 'ChronoTriggerAccessibility.Installer.exe'
+$proxy = Join-Path $game 'winmm.dll'
+$bootstrapExe = Join-Path $game 'Accessibility\Bootstrap\Foresight.Bootstrap.exe'
+$manifestPath = Join-Path $game 'Foresight-SHA256SUMS.txt'
 
 Write-Host "Game root: $game"
 Write-Host ''
@@ -88,8 +102,11 @@ foreach ($rel in $requiredLoaderFiles) {
 if (Test-Path -LiteralPath $loaderDir) {
     $nonX86 = @()
     Get-ChildItem $loaderDir -Recurse -File -Include *.dll, *.exe | ForEach-Object {
-        $m = Get-PeMachine -Path $_.FullName
-        if ($m -ne $PeMachineI386) { $nonX86 += ('{0} (0x{1:X})' -f $_.Name, $m) }
+        $binary = $_
+        try {
+            $m = Get-PeMachine -Path $binary.FullName
+            if ($m -ne $PeMachineI386) { $nonX86 += ('{0} (0x{1:X})' -f $binary.Name, $m) }
+        } catch { $nonX86 += ($binary.Name + ' (invalid PE image)') }
     }
     Add-Check 'Every loader binary is x86 (0x14C)' ($nonX86.Count -eq 0) `
         $(if ($nonX86.Count) { $nonX86 -join ', ' } else { 'all x86' })
@@ -118,7 +135,7 @@ if (Test-Path -LiteralPath $appConfig) {
             Add-Check "AppConfig enables $id" ($enabled -contains $id) ($enabled -join ', ')
         }
         Add-Check 'AppConfig AppId is "chrono trigger.exe"' ($cfg.AppId -eq 'chrono trigger.exe') $cfg.AppId
-        Add-Check 'AppConfig AppLocation exists' (Test-Path -LiteralPath $cfg.AppLocation) $cfg.AppLocation
+        Add-Check 'AppConfig AppLocation is the deployed game' ([string]::Equals((Get-DeploymentCanonicalPath $cfg.AppLocation), (Get-DeploymentCanonicalPath $gameExe), [StringComparison]::OrdinalIgnoreCase)) $cfg.AppLocation
     } catch {
         Add-Check 'AppConfig is valid JSON' $false $_.Exception.Message
     }
@@ -126,82 +143,76 @@ if (Test-Path -LiteralPath $appConfig) {
     Add-Check 'AppConfig present' $false $appConfig
 }
 
-# ----------------------------------------------------------------- natives ---
+# ---------------------------------------------------------- native bootstrap ---
 
-foreach ($exe in @($launcherExe, $installerExe)) {
-    $name = Split-Path $exe -Leaf
-    if (Test-Path -LiteralPath $exe) {
-        $m = Get-PeMachine -Path $exe
-        # The launcher injects into a 32-bit process, so it must be 32-bit itself.
-        Add-Check "$name is x86 (0x14C)" ($m -eq $PeMachineI386) ('0x{0:X}' -f $m)
-    } else {
-        Add-Check "$name present" $false $exe
-    }
+foreach ($native in @($proxy, $bootstrapExe)) {
+    $name = Split-Path $native -Leaf
+    if (Test-Path -LiteralPath $native -PathType Leaf) {
+        try {
+            $machine = Get-PeMachine -Path $native
+            Add-Check "$name is x86 (0x14C)" ($machine -eq $PeMachineI386) ('0x{0:X}' -f $machine)
+        } catch { Add-Check "$name is a valid PE image" $false $_.Exception.Message }
+    } else { Add-Check "$name present" $false $native }
 }
 
-# -------------------------------------------------------------------- IFEO ---
-
-if (Test-Path $ifeoKey) {
-    $props = Get-ItemProperty $ifeoKey
-    $names = (Get-Item $ifeoKey).Property
-    $debugger = if ($names -contains 'Debugger') { $props.Debugger } else { $null }
-
-    if ($debugger) {
-        # The registry value is written by an elevated process, which does not
-        # inherit mapped network drives, so it is often a UNC path while $launcherExe
-        # is a drive letter. Comparing strings would produce a false failure.
-        # Compare file identity by hash instead.
-        $debuggerPath = $debugger.Trim('"')
-        if (Test-Path -LiteralPath $debuggerPath) {
-            $sameFile = $false
-            if (Test-Path -LiteralPath $launcherExe) {
-                $sameFile = (Get-FileHash $debuggerPath -Algorithm SHA256).Hash -eq
-                            (Get-FileHash $launcherExe  -Algorithm SHA256).Hash
-            }
-            Add-Check 'IFEO Debugger points at the deployed launcher' $sameFile $debuggerPath
-        } else {
-            # This is the dangerous state: the game becomes unlaunchable.
-            Add-Check 'IFEO Debugger target exists' $false "MISSING: $debuggerPath"
+# The installed manifest recognizes previous Foresight builds without assuming
+# that this checkout's latest native output is the version already deployed.
+$hashes = @{}
+if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    try {
+        $gamePrefix = $game.TrimEnd('\') + '\'
+        foreach ($line in Get-Content -LiteralPath $manifestPath) {
+            if ($line -notmatch '^([A-Fa-f0-9]{64})  (.+)$') { throw 'Invalid checksum manifest line.' }
+            $sha = $Matches[1]
+            $relative = $Matches[2].Replace('/', '\')
+            if ([IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)|:') { throw "Unsafe manifest path: $relative" }
+            $path = [IO.Path]::GetFullPath((Join-Path $game $relative))
+            if (-not $path.StartsWith($gamePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Manifest path escapes game folder: $relative" }
+            if ($hashes.ContainsKey($relative)) { throw "Duplicate manifest entry: $relative" }
+            $hashes[$relative] = $sha
+            $matchesHash = (Test-Path -LiteralPath $path -PathType Leaf) -and
+                ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq $sha)
+            Add-Check "SHA256: $relative" $matchesHash 'missing or changed immutable package file'
         }
-        Add-Check 'IFEO ownership marker present' ($names -contains $ownerValueName) `
-            'lets uninstall avoid deleting a redirect belonging to another tool'
-    } else {
-        Add-Check 'IFEO Debugger value present' $false 'run the installer to register the mod'
-    }
+    } catch { Add-Check 'Foresight checksum manifest is valid' $false $_.Exception.Message }
+} else { Add-Check 'Foresight checksum manifest present' $false $manifestPath }
+foreach ($relative in 'winmm.dll', 'Accessibility\Bootstrap\Foresight.Bootstrap.exe') {
+    Add-Check "SHA256 manifest covers $relative" ($hashes.ContainsKey($relative)) 'a native binary without an ownership checksum cannot be verified'
+}
+
+# ---------------------------------------------------------------- legacy IFEO ---
+
+if ($SkipRegistryCheck) {
+    Write-Warning 'Registry checks skipped for an isolated fixture.'
 } else {
-    Add-Check 'IFEO key present' $false 'run ChronoTriggerAccessibility.Installer.exe'
+    try {
+        . (Join-Path $PSScriptRoot 'release\Remove-LegacyRegistration.ps1')
+        foreach ($state in @(Get-ForesightLegacyRegistrationState)) {
+            Add-Check "No legacy Debugger in $($state.View)" ([string]::IsNullOrWhiteSpace([string]$state.Debugger)) ([string]$state.Debugger)
+        }
+    } catch { Add-Check 'Legacy registry state readable' $false $_.Exception.Message }
 }
 
-# ----------------------------------------------------------------- runtime ---
+# ------------------------------------------------------------- private runtime ---
 
-$runtime = Test-X86Runtime
-Add-Check 'x86 .NET 9 runtime available' $runtime.Satisfied `
-    $(if ($runtime.Satisfied) { "found $($runtime.Found -join ', ') under $($runtime.Root)" }
-      else { "no 9.x under $($runtime.Root)\shared\Microsoft.NETCore.App" })
-
-# ------------------------------------------------- superseded ASI artifacts ---
-
-$asiLoaderSha = 'A51C630B2EA3D78AD55A330EA64D510C8C0737F620BE65AD7503B61840D59E37'
-foreach ($legacy in @(
-    @{ Name = 'winmm.dll'; Sha = $asiLoaderSha }
-    @{ Name = 'Reloaded.Mod.Loader.Bootstrapper.asi'; Sha = $null }
-)) {
-    $p = Join-Path $game $legacy.Name
-    if (-not (Test-Path -LiteralPath $p)) {
-        Add-Check "Superseded $($legacy.Name) removed" $true 'absent'
-    } elseif ($legacy.Sha -and (Get-FileHash $p -Algorithm SHA256).Hash -ne $legacy.Sha) {
-        # Someone else's file with the same name. Not ours to remove.
-        Add-Check "Superseded $($legacy.Name) removed" $true 'present but not ours; left alone'
-    } else {
-        Add-Check "Superseded $($legacy.Name) removed" $false `
-            'still present; the launcher now injects, so this would inject Reloaded twice'
-    }
+$runtimeRoot = Join-Path $game 'Accessibility\Runtime\dotnet\x86'
+$runtime = Test-X86Runtime -DotnetX86Root $runtimeRoot
+Add-Check 'Private x86 .NET 9 runtime available' $runtime.Satisfied $runtime.Root
+foreach ($relative in 'dotnet.exe', 'host\fxr\9.0.20\hostfxr.dll', 'shared\Microsoft.NETCore.App\9.0.20\coreclr.dll') {
+    $path = Join-Path $runtimeRoot $relative
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try { Add-Check "Private runtime x86: $relative" ((Get-PeMachine -Path $path) -eq $PeMachineI386) $path }
+        catch { Add-Check "Private runtime PE: $relative" $false $_.Exception.Message }
+    } else { Add-Check "Private runtime present: $relative" $false $path }
 }
 
-# A lease backup left behind means a launcher was killed mid-session.
+$legacyAsi = Join-Path $game 'Reloaded.Mod.Loader.Bootstrapper.asi'
+Add-Check 'Superseded ASI bootstrapper absent' (-not (Test-Path -LiteralPath $legacyAsi)) 'migrate the old injection chain before activating the proxy'
+
+# A lease backup left behind means a bootstrap helper was killed mid-session.
 $ptr = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) 'Reloaded-Mod-Loader-II\ReloadedII.json'
 Add-Check 'No leftover Reloaded pointer backup' (-not (Test-Path -LiteralPath "$ptr.chrono_trigger_backup")) `
-    'a leftover backup is recovered automatically on the next launch'
+    'a leftover backup requires recovery before launch'
 
 # ------------------------------------------------------------------ report ---
 

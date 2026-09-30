@@ -61,7 +61,7 @@ The package's `LICENSES` directory includes the GPL 3.0 text and the exact LGPL 
 
 ## Ultimate ASI Loader — no longer deployed
 
-Earlier versions deployed 32-bit Ultimate ASI Loader 6.9.0 as `winmm.dll` next to the game so a normal Steam launch would load Reloaded. That is **superseded**: the native launcher in `src/ChronoTriggerAccessibility.Launcher` now injects the Reloaded bootstrapper directly, and deployment removes the proxy DLL.
+Earlier versions deployed 32-bit Ultimate ASI Loader 6.9.0 as `winmm.dll` next to the game so a normal Steam launch would load Reloaded. That loader is **superseded**: Foresight now supplies its own x86 WinMM forwarding proxy and attach helper. The new proxy is not Ultimate ASI Loader and does not enumerate or load ASI plugins. Its export table was adapted from the author's Blind Soldier project.
 
 The reviewed binary and its licence are retained in the repository for provenance and for anyone auditing an older installation.
 
@@ -76,4 +76,4 @@ The reviewed binary and its licence are retained in the repository for provenanc
 
 The public beta ZIP includes the unmodified Microsoft .NET Runtime 9.0.20 for Windows x86, deployed privately at `Accessibility/Runtime/dotnet/x86`. The mod-only development package still uses an external runtime. The runtime MIT license and third-party notices are retained from the official archive. Source: <https://github.com/dotnet/runtime/tree/v9.0.20>. Download: <https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-win-x86.zip>. Official SHA-512: `c9679d5606604ff2970064d6ab9470b3b50e14ceb0a5efa67b3ce9b9e3b24d9edda2af102ac99623a8a0c3b83b645608027ec36483d928c917e83d2d00a60811`.
 
-No patch version is pinned. The Reloaded loader's `runtimeconfig.json` requests framework `9.0.0` with `rollForward: LatestMinor`, so any installed 9.0.x revision satisfies it. The mod no longer sets a machine-wide `DOTNET_ROOT_X86`; if a private runtime is deployed to `<game>\Accessibility\Runtime\dotnet\x86`, the launcher points at it for the game process only.
+Reloaded's runtime configuration permits 9.0.x roll-forward. This release bundles and verifies private runtime 9.0.20, which its native bootstrap expects. Runtime variables are set inside the game process only; the package does not set machine-wide environment variables or create registry entries.

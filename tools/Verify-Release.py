@@ -28,15 +28,16 @@ def verify(zip_path: Path, game_exe: Path) -> dict:
             declared.add(name)
         assert declared | {"Foresight-SHA256SUMS.txt"} == set(names)
         assert not any(n.endswith((".dat", ".mp4", ".mp3", ".log", ".pdb")) for n in names)
-        for name in ("Accessibility/Launcher/ChronoTriggerAccessibility.Launcher.exe", "Accessibility/Launcher/ChronoTriggerAccessibility.Installer.exe"):
+        assert not any("Accessibility/Launcher/" in n for n in names)
+        for name in ("winmm.dll", "Accessibility/Bootstrap/Foresight.Bootstrap.exe"):
             data = archive.read(name)
             offset = int.from_bytes(data[60:64], "little")
             assert int.from_bytes(data[offset+4:offset+6], "little") == 0x14c
             assert b"requestedExecutionLevel" in data
-            if "Installer.exe" in name:
-                assert b"requireAdministrator" in data
+            assert b"requireAdministrator" not in data
+            assert b"asInvoker" in data
         report["all_payload_hashes_match"] = True
-        report["native_x86_and_embedded_uac_manifests"] = True
+        report["native_x86_and_no_elevation_required"] = True
         with tempfile.TemporaryDirectory(prefix="foresight-release-check-") as directory:
             root = Path(directory)
             for name in names:

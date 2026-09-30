@@ -50,8 +50,8 @@ public sealed class ModManifestTests
         Assert.Equal("chrono.trigger.accessibility", root.GetProperty("ModId").GetString());
         Assert.Equal("Foresight (Beta)", root.GetProperty("ModName").GetString());
         Assert.Equal("Buu420", root.GetProperty("ModAuthor").GetString());
-        Assert.Equal("0.3.40", root.GetProperty("ModVersion").GetString());
-        Assert.Equal("Foresight beta: screen-reader menus, dialogue, battle information and navigation for Chrono Trigger. Navigation: U/O categories, J/L destinations, K repeat, I guidance, P auto-walk, F8 footsteps. Controller: R3 menu, L1/LB and R1/RB categories, D-pad Up/Down destinations, Square/X auto-walk, Cross/A guidance, Circle/B close. Battle: 1/2/3 inspect party member, Shift+H HP, M MP, K repeat. See README for limitations.", root.GetProperty("ModDescription").GetString());
+        Assert.Equal("0.3.41", root.GetProperty("ModVersion").GetString());
+        Assert.Equal("Foresight beta, registry-free installation: screen-reader menus, dialogue, battle information and navigation for Chrono Trigger. Navigation: U/O categories, J/L destinations, K repeat, I guidance, P auto-walk, F8 footsteps. Controller: R3 menu, L1/LB and R1/RB categories, D-pad Up/Down destinations, Square/X auto-walk, Cross/A guidance, Circle/B close. Battle: 1/2/3 inspect party member, Shift+H HP, M MP, K repeat. See README for limitations.", root.GetProperty("ModDescription").GetString());
         Assert.Equal("ChronoTriggerAccessibility.Mod.dll", root.GetProperty("ModDll").GetString());
         Assert.Equal(string.Empty, root.GetProperty("ModIcon").GetString());
         Assert.Equal(string.Empty, root.GetProperty("ModR2RManagedDll32").GetString());
@@ -74,7 +74,7 @@ public sealed class ModManifestTests
         Assert.Equal("https://github.com/buu420/foresight", root.GetProperty("ProjectUrl").GetString());
 
         Assert.Equal(
-            "5A2DBD84AC69A42005B031D04C26AF36169ACB5D123FBE1D255DEBAF6358128A",
+            "8B78836F7214BFABE941D6F61446312227D8CD57E32D6F814BDE7EDD1E245F7F",
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))));
     }
 

@@ -8,7 +8,7 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Packaging;
 
 /// <summary>
 /// Covers <c>tools\Deploy-Mod.ps1</c> and <c>tools\Verify-Deployment.ps1</c> for the
-/// portable Reloaded-II layout: a trimmed loader tree plus a native IFEO launcher
+/// portable Reloaded-II layout: a trimmed loader tree plus a native proxy and helper
 /// inside the game folder, with no external Reloaded-II installation.
 ///
 /// Deployment is exercised against a synthetic game folder built in the temp
@@ -40,13 +40,16 @@ public sealed class DeploymentTransactionTests
                      @"Reloaded-II\Mods\chrono.trigger.accessibility\ChronoTriggerAccessibility.Mod.dll",
                      @"Reloaded-II\Mods\chrono.trigger.accessibility\prism.dll",
                      @"Reloaded-II\Apps\chrono trigger.exe\AppConfig.json",
-                     @"Accessibility\Launcher\ChronoTriggerAccessibility.Launcher.exe",
-                     @"Accessibility\Launcher\ChronoTriggerAccessibility.Installer.exe",
+                     @"winmm.dll",
+                     @"Accessibility\Bootstrap\Foresight.Bootstrap.exe",
+                     @"Foresight-SHA256SUMS.txt",
                  })
         {
             var path = Path.Combine(fixture.GameRoot, relative);
             Assert.True(File.Exists(path), $"Deployment did not produce: {relative}");
         }
+        Assert.False(File.Exists(Path.Combine(fixture.GameRoot,
+            @"Accessibility\Launcher\ChronoTriggerAccessibility.Installer.exe")));
     }
 
     [Fact]
@@ -126,7 +129,10 @@ public sealed class DeploymentTransactionTests
         {
             [Path.Combine(fixture.GameRoot, @"Reloaded-II\Loader\sentinel.txt")] = "previous-loader",
             [Path.Combine(fixture.GameRoot, @"Reloaded-II\Mods\chrono.trigger.accessibility\sentinel.txt")] = "previous-mod",
-            [Path.Combine(fixture.GameRoot, @"Accessibility\Launcher\sentinel.txt")] = "previous-launcher",
+            [Path.Combine(fixture.GameRoot, @"Accessibility\Launcher\sentinel.txt")] = "unrelated-launcher-file",
+            [Path.Combine(fixture.GameRoot, @"Accessibility\AudioDescriptions\sentinel.txt")] = "existing-narration",
+            [Path.Combine(fixture.GameRoot, @"save\sentinel.txt")] = "existing-save",
+            [Path.Combine(fixture.GameRoot, @"Reloaded-II\Apps\chrono trigger.exe\AppConfig.json")] = "previous-config",
         };
         foreach (var (path, content) in sentinels)
         {
@@ -137,6 +143,7 @@ public sealed class DeploymentTransactionTests
         var result = fixture.Deploy(failureInjectionPoint: failurePoint);
         Assert.True(result.ExitCode != 0,
             $"Deployment was expected to fail at {failurePoint}.\n{result.Output}");
+        Assert.Contains($"Injected failure: {failurePoint}", result.Output, StringComparison.Ordinal);
 
         foreach (var (path, content) in sentinels)
         {
@@ -144,6 +151,75 @@ public sealed class DeploymentTransactionTests
                 $"Rollback lost a pre-existing file at {failurePoint}: {path}\n{result.Output}");
             Assert.Equal(content, File.ReadAllText(path));
         }
+        Assert.False(File.Exists(Path.Combine(fixture.GameRoot, "winmm.dll")));
+        Assert.False(File.Exists(Path.Combine(fixture.GameRoot,
+            @"Accessibility\Bootstrap\Foresight.Bootstrap.exe")));
+    }
+
+    [Fact]
+    public void Deployment_refuses_a_foreign_proxy_without_changing_it()
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+
+        var proxy = Path.Combine(fixture.GameRoot, "winmm.dll");
+        File.WriteAllText(proxy, "another mods loader");
+        var before = Sha256(proxy);
+        var result = fixture.Deploy();
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("winmm.dll", result.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(before, Sha256(proxy));
+        Assert.False(Directory.Exists(Path.Combine(fixture.GameRoot, "Reloaded-II")));
+    }
+
+    [Fact]
+    public void Updating_a_recognized_installation_preserves_narration_and_rolls_back_proxy()
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+        var initial = fixture.Deploy();
+        Assert.True(initial.ExitCode == 0, initial.Output);
+        var proxy = Path.Combine(fixture.GameRoot, "winmm.dll");
+        var before = Sha256(proxy);
+        var manifest = File.ReadAllText(Path.Combine(fixture.GameRoot, "Foresight-SHA256SUMS.txt"));
+        var narration = Path.Combine(fixture.GameRoot, @"Accessibility\AudioDescriptions\installed-movies.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(narration)!);
+        File.WriteAllText(narration, "existing narration manifest");
+
+        var failed = fixture.Deploy("BeforeVerification");
+        Assert.NotEqual(0, failed.ExitCode);
+        Assert.Contains("Injected failure: BeforeVerification", failed.Output, StringComparison.Ordinal);
+        Assert.Equal(before, Sha256(proxy));
+        Assert.Equal(manifest, File.ReadAllText(Path.Combine(fixture.GameRoot, "Foresight-SHA256SUMS.txt")));
+        Assert.Equal("existing narration manifest", File.ReadAllText(narration));
+        var update = fixture.Deploy();
+        Assert.True(update.ExitCode == 0, update.Output);
+    }
+
+    [Theory]
+    [InlineData("winmm.dll")]
+    [InlineData(@"Accessibility\Bootstrap\Foresight.Bootstrap.exe")]
+    public void Verification_rejects_a_changed_bootstrap_binary(string relative)
+    {
+        using var fixture = DeploymentFixture.TryCreate();
+        if (fixture is null) return;
+        var deployed = fixture.Deploy();
+        Assert.True(deployed.ExitCode == 0, deployed.Output);
+        var path = Path.Combine(fixture.GameRoot, relative);
+        using (var stream = new FileStream(path, FileMode.Append)) stream.WriteByte(1);
+
+        var verified = fixture.Verify();
+        Assert.NotEqual(0, verified.ExitCode);
+        Assert.Contains("SHA256", verified.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Developer_deployment_never_registers_the_old_launcher()
+    {
+        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), @"tools\Deploy-Mod.ps1"));
+        Assert.DoesNotContain("Start-Process -FilePath $installer", script, StringComparison.Ordinal);
+        Assert.Contains("Invoke-ForesightLegacyMigration", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -309,12 +385,27 @@ public sealed class DeploymentTransactionTests
 
             if (!File.Exists(sourceExe)) return null;
             if (!File.Exists(Path.Combine(package, "ChronoTriggerAccessibility.Mod.dll"))) return null;
-            if (!File.Exists(Path.Combine(native, "ChronoTriggerAccessibility.Launcher.exe"))) return null;
+            if (!File.Exists(Path.Combine(native, "winmm.dll"))) return null;
+            if (!File.Exists(Path.Combine(native, "Foresight.Bootstrap.exe"))) return null;
+            var sourceRuntime = Path.Combine(Directory.GetParent(repositoryRoot)!.FullName,
+                @"Accessibility\Runtime\dotnet\x86");
+            if (!File.Exists(Path.Combine(sourceRuntime, "dotnet.exe"))) return null;
 
             var root = Path.Combine(Path.GetTempPath(), $"cta-deploy-{Guid.NewGuid():N}");
             var fixture = new DeploymentFixture(root, repositoryRoot, package);
             Directory.CreateDirectory(fixture.GameRoot);
             File.Copy(sourceExe, Path.Combine(fixture.GameRoot, "Chrono Trigger.exe"));
+            // Runtime discovery/architecture is checked, but fixture tests never
+            // execute the game or the CLR. Copy only the PE files those checks use.
+            var runtime = Path.Combine(fixture.GameRoot, @"Accessibility\Runtime\dotnet\x86");
+            foreach (var source in new[] { Path.Combine(sourceRuntime, "dotnet.exe") }
+                         .Concat(Directory.EnumerateFiles(Path.Combine(sourceRuntime, "host"), "hostfxr.dll", SearchOption.AllDirectories))
+                         .Concat(Directory.EnumerateFiles(Path.Combine(sourceRuntime, "shared"), "coreclr.dll", SearchOption.AllDirectories)))
+            {
+                var target = Path.Combine(runtime, Path.GetRelativePath(sourceRuntime, source));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(source, target);
+            }
             return fixture;
         }
 
@@ -328,7 +419,7 @@ public sealed class DeploymentTransactionTests
 
         public ProcessResult Verify() => RunPowerShell(
             Path.Combine(RepositoryRoot, @"tools\Verify-Deployment.ps1"),
-            "-GameRoot", GameRoot);
+            "-GameRoot", GameRoot, "-SkipRegistryCheck");
 
         private ProcessResult RunPowerShell(string script, params string[] arguments)
         {

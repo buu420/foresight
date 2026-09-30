@@ -69,7 +69,11 @@ public sealed class Mod : ModBase
 
         // Reloaded calls the mod entry point on the game's startup thread. Window discovery must
         // execute on the thread pool so waiting for a visible window cannot deadlock that thread.
-        initializationTask = runtime.StartInBackground();
+        initializationTask = BootstrapReadiness.SignalAfterInitializationAsync(
+            runtime.StartInBackground(),
+            () => runtime.State,
+            Environment.GetEnvironmentVariable(BootstrapReadiness.EnvironmentVariable),
+            log);
         log.Info("Accessibility initialization scheduled off the game startup thread.");
     }
 
