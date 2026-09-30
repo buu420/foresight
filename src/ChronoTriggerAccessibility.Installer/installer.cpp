@@ -19,7 +19,7 @@
 #include "../ChronoTriggerAccessibility.Launcher/common.h"
 using namespace cta;
 
-constexpr const wchar_t* DIALOG_TITLE   = L"Chrono Trigger Accessibility Installer";
+constexpr const wchar_t* DIALOG_TITLE   = L"Foresight Beta Installer";
 constexpr const wchar_t* LOG_NAME       = L"ChronoTriggerAccessibility.Installer.log";
 constexpr const wchar_t* LAUNCHER_NAME  = L"ChronoTriggerAccessibility.Launcher.exe";
 constexpr const wchar_t* OWNER_VALUE    = L"ChronoTriggerAccessibilityDebuggerOwner";
@@ -124,7 +124,7 @@ static LONG RegisterIfeo(const fs::path& launcherExe, Logger& log) {
     // Refuse to steal somebody else's redirect.
     std::wstring existing, owner;
     if (ReadStringValue(key, L"Debugger", existing) &&
-        !ReadStringValue(key, OWNER_VALUE, owner)) {
+        (!ReadStringValue(key, OWNER_VALUE, owner) || existing != owner)) {
         RegCloseKey(key);
         log.W(L"RegisterIfeo: refusing to replace a foreign Debugger value: " + existing);
         ShowError(L"Another program already redirects Chrono Trigger.exe:\n\n" + existing +
@@ -147,7 +147,17 @@ static LONG RegisterIfeo(const fs::path& launcherExe, Logger& log) {
     LONG m = RegSetValueExW(key, OWNER_VALUE, 0, REG_SZ,
                             (const BYTE*)value.c_str(),
                             (DWORD)((value.size() + 1) * sizeof(wchar_t)));
-    if (m != ERROR_SUCCESS) log.Err(L"RegSetValueExW owner marker", (DWORD)m);
+    if (m != ERROR_SUCCESS) {
+        log.Err(L"RegSetValueExW owner marker", (DWORD)m);
+        // Registration is incomplete without proof of ownership. Restore the
+        // previous redirect (if any), so a failed install cannot trap launches.
+        if (existing.empty()) RegDeleteValueW(key, L"Debugger");
+        else RegSetValueExW(key, L"Debugger", 0, REG_SZ,
+                           reinterpret_cast<const BYTE*>(existing.c_str()),
+                           static_cast<DWORD>((existing.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(key);
+        return m;
+    }
 
     RegCloseKey(key);
     log.W(L"RegisterIfeo: Debugger = " + value);
@@ -169,7 +179,7 @@ static LONG UnregisterIfeo(Logger& log) {
     bool hasDebugger = ReadStringValue(key, L"Debugger", debuggerValue);
     bool hasOwner    = ReadStringValue(key, OWNER_VALUE, owner);
 
-    if (hasDebugger && !hasOwner) {
+    if (hasDebugger && (!hasOwner || debuggerValue != owner)) {
         RegCloseKey(key);
         log.W(L"UnregisterIfeo: leaving a foreign Debugger value alone: " + debuggerValue);
         ShowError(L"The Chrono Trigger.exe redirect was not created by this mod:\n\n" +
@@ -190,9 +200,8 @@ static LONG UnregisterIfeo(Logger& log) {
     if (hasOwner) RegDeleteValueW(key, OWNER_VALUE);
     RegCloseKey(key);
 
-    // Tidy the subkey away if it is now empty. Harmless if it is not.
-    LONG d = RegDeleteKeyExW(HKEY_LOCAL_MACHINE, keyPath.c_str(), KEY_WOW64_64KEY, 0);
-    if (d == ERROR_SUCCESS) log.A("UnregisterIfeo: deleted the empty IFEO subkey");
+    // Keep the key: RegDeleteKeyExW deletes unrelated values too. We own only
+    // the matching Debugger value and our marker, never the complete IFEO key.
 
     return ERROR_SUCCESS;
 }
@@ -269,12 +278,12 @@ static int RunInstall(Logger& log) {
         return 1;
     }
 
-    if (!AskYesNo(L"Install the Chrono Trigger accessibility mod?\n\n"
+    if (!AskYesNo(L"Install Foresight, the Chrono Trigger accessibility beta?\n\n"
                   L"This adds a Windows registry entry so the mod loads automatically "
                   L"whenever you start Chrono Trigger, including from Steam.\n\n"
                   L"Game folder:\n" + t.gameRoot.wstring() + L"\n\nProceed?")) {
         log.A("RunInstall: cancelled by the user");
-        return 0;
+        return ERROR_CANCELLED;
     }
 
     LONG r = RegisterIfeo(t.launcherExe, log);
@@ -287,7 +296,7 @@ static int RunInstall(Logger& log) {
         return 1;
     }
 
-    ShowInfo(L"The accessibility mod is installed.\n\nStart Chrono Trigger from Steam as "
+    ShowInfo(L"Foresight beta is installed.\n\nStart Chrono Trigger from Steam as "
              L"usual and it will speak. Start your screen reader first.\n\n"
              L"To remove it, run this installer again with /uninstall.");
     log.A("RunInstall: complete");
@@ -296,11 +305,12 @@ static int RunInstall(Logger& log) {
 
 static int RunUninstall(Logger& log) {
     log.A("=== uninstall ===");
-    if (!AskYesNo(L"Remove the Chrono Trigger accessibility mod's registry entry?\n\n"
-                  L"The game will then start without speech. Mod files are not deleted; "
-                  L"you can remove the Reloaded-II and Accessibility folders afterwards.")) {
+    if (!AskYesNo(L"Remove Foresight's registry entry?\n\n"
+                  L"The game will then start without speech. Mod files are not deleted. "
+                  L"After success, use Foresight-SHA256SUMS.txt to identify this mod's files. "
+                  L"Preserve shared mod files, backups and separate audio-description packs.")) {
         log.A("RunUninstall: cancelled by the user");
-        return 0;
+        return ERROR_CANCELLED;
     }
 
     LONG r = UnregisterIfeo(log);
@@ -312,9 +322,10 @@ static int RunUninstall(Logger& log) {
         return 1;
     }
 
-    ShowInfo(L"The mod is uninstalled and Chrono Trigger will now start normally.\n\n"
-             L"You can delete the Accessibility and Reloaded-II folders from the game "
-             L"folder if you no longer want them.");
+    ShowInfo(L"Foresight is uninstalled and Chrono Trigger will now start normally.\n\n"
+             L"Mod files are left in place. Foresight-SHA256SUMS.txt lists this release's files. "
+             L"Preserve shared mod files, backups and separate audio-description packs. "
+             L"See Foresight-README.md for removal instructions.");
     log.A("RunUninstall: complete");
     return 0;
 }

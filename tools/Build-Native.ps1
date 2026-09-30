@@ -23,7 +23,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..')).ProviderPath
 $outputDir = Join-Path $repoRoot '.build\native'
 $launcherDir = Join-Path $repoRoot 'src\ChronoTriggerAccessibility.Launcher'
 $installerDir = Join-Path $repoRoot 'src\ChronoTriggerAccessibility.Installer'
@@ -82,7 +82,7 @@ foreach ($target in $targets) {
 
     # The installer writes HKLM, so it embeds a requireAdministrator manifest and
     # Windows shows the UAC prompt on launch.
-    $linkFlags = @('/SUBSYSTEM:WINDOWS')
+    $linkFlags = @('/SUBSYSTEM:WINDOWS', '/MANIFEST:EMBED')
     if ($target.Admin) { $linkFlags += "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'" }
 
     $arguments = @()

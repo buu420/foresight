@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Chrono Trigger Accessibility uses the following third-party components. Chrono Trigger and its assets are not included in the mod package.
+Foresight uses the following third-party components. Chrono Trigger and its assets are not included in the mod package.
 
 ## Footstep recordings
 
@@ -74,6 +74,6 @@ The reviewed binary and its licence are retained in the repository for provenanc
 
 ## Microsoft .NET
 
-A 32-bit Microsoft .NET 9 runtime is an external prerequisite and is not included in the mod package. Its licensing remains governed by Microsoft.
+The public beta ZIP includes the unmodified Microsoft .NET Runtime 9.0.20 for Windows x86, deployed privately at `Accessibility/Runtime/dotnet/x86`. The mod-only development package still uses an external runtime. The runtime MIT license and third-party notices are retained from the official archive. Source: <https://github.com/dotnet/runtime/tree/v9.0.20>. Download: <https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.20/dotnet-runtime-9.0.20-win-x86.zip>. Official SHA-512: `c9679d5606604ff2970064d6ab9470b3b50e14ceb0a5efa67b3ce9b9e3b24d9edda2af102ac99623a8a0c3b83b645608027ec36483d928c917e83d2d00a60811`.
 
 No patch version is pinned. The Reloaded loader's `runtimeconfig.json` requests framework `9.0.0` with `rollForward: LatestMinor`, so any installed 9.0.x revision satisfies it. The mod no longer sets a machine-wide `DOTNET_ROOT_X86`; if a private runtime is deployed to `<game>\Accessibility\Runtime\dotnet\x86`, the launcher points at it for the game process only.

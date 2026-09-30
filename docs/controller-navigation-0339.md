@@ -75,3 +75,5 @@ movie narration manifest and movies 001–003 retained their previous hashes. Th
 installation is in `Accessibility/Backups/20260929-141445` beneath the game folder.
 Machine-readable evidence is in `artifacts/research/controller-0339/deployment-verification.json`
 and the four Release result files in `artifacts/test-results/controller-0339/`.
+
+Before the first public beta, the user tested controller navigation in game and reported that it works perfectly. The exact hardware/layout was not recorded; this does not validate every raw Sony device or Steam Input configuration.
