@@ -133,7 +133,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
                 // set ActorApproach routes to); touch pickups finish by contact instead.
-                confirm: touchOnly ? null : ActorConfirm(Anchors(actor)));
+                confirm: touchOnly ? null : ActorConfirm(Anchors(actor)),
+                followUntilInteraction: field.SceneIdCoherent && field.SceneId == 221 &&
+                    actor.Index is 12 or 13 && actor.ClassTag == 5 && actor.VisualIndex == 134 &&
+                    story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false);
             if (label is null) genericIds.Add(id);
             foreach (var (standIn, same) in InteractionProxies(actor))
                 if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
@@ -672,7 +675,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
-            NavigationPoint? contactPosition = null, ConfirmRule? confirm = null)
+            NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -680,6 +683,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 {
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
+                    FollowUntilInteraction = followUntilInteraction,
                 });
             var output = storyOnly ? storyAnchors : targets;
             if (visible || guideAvailable)
@@ -689,6 +693,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
+                    FollowUntilInteraction = followUntilInteraction,
                 };
                 if (visible) discovered[id] = target;
                 output.Add(target);
@@ -699,6 +704,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             {
                 Visible = false, Discovered = true,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
+                FollowUntilInteraction = followUntilInteraction,
             });
         }
         /// <summary>The actor and every audited stand-in that runs its script (the same set

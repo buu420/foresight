@@ -1,17 +1,17 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.41 is a public beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance and automatic walking with keyboard or controller navigation.
+**Foresight 0.3.42 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance and automatic walking with keyboard or controller navigation.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
-[Download the beta](https://github.com/buu420/foresight/releases/tag/v0.3.41) · [Report a problem](https://github.com/buu420/foresight/issues)
+[Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
 ## Install the beta download
 
 You need Windows 10 or 11, your own Steam copy of Chrono Trigger, and a screen reader. The ZIP includes the portable Reloaded-II loader, hook library, Prism and a private **32-bit .NET 9 runtime**. No SDK, separate Reloaded installation or global runtime setting is needed.
 
 1. Close Chrono Trigger.
-2. Download **Foresight-v0.3.41-beta-win-x86.zip**. GitHub's automatic “Source code” downloads are for developers.
+2. Download the standalone **Foresight-v[version]-beta-win-x86.zip** from the release or the supplied test build. GitHub's automatic “Source code” downloads are for developers.
 3. If another mod already uses `winmm.dll`, resolve that loader conflict before copying files. Extract the ZIP and copy its contents into the game folder, beside `Chrono Trigger.exe`. Steam's Properties → Installed Files → Browse opens that folder. `Accessibility` and `Reloaded-II` should sit directly beside the executable.
 4. Run **Install Foresight.cmd** to verify the files. Fresh installations need no registry entries or administrator prompt. Upgrading an older Foresight installation may request administrator permission once to remove its old launch registration.
 5. Start your screen reader, then launch the game normally from Steam.
@@ -102,6 +102,8 @@ Controller navigation uses the same destinations and routes:
 Opening the navigation menu stops the current route and reads the category and destination. Release the closing or start button before using the controller for the game again. Controller input is consumed while browsing; keyboard controls remain available. R3 is unused by the supported game build. Steam Input must pass through right-stick click, rather than remapping it to a keyboard or game action. Xbox layouts and recognized raw DualShock 4 / DualSense layouts are supported; see the controller report for device identification limits. The user confirmed controller navigation working in game; other device layouts remain unverified.
 
 Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object activated with Confirm, automatic walking makes the final turn toward its interaction point; manual guidance announces that turn and checks the live facing. K reports whether the target is within reach and which way to face. Press the game's Confirm button yourself. Touch pickups and floor triggers use their contact positions instead. A menu-reading error cancels the current walk but no longer permanently disables navigation keys.
+
+During the Arris Dome rat chase, select **Catch the rat** under Story Events, or the **Rat** entry, and start automatic walking. Then press and hold your usual game Confirm button. Pursuit stays active when you reach the moving rat, announces when Confirm can reach it, and follows again as it moves. Confirm alone does not cancel this chase; movement keys, other game actions, P, or opening the controller navigation menu still stop it. The game performs the catch. If the rat escapes, leave the rafters and return to retry. Manual guidance also continues tracking the rat; you supply movement and Confirm.
 
 The local maps are 2D. One navigation step means one 16-pixel map tile, not one key press. Directions use left, right, up, and down. Partial tiles use quarter steps. Routes prefer fewer turns among equally short paths, and walking follows cardinal edges with the native body clearance.
 

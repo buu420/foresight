@@ -1,6 +1,6 @@
 # Foresight and Accessibility Mod Manager
 
-Foresight 0.3.41 beta uses a game-folder native proxy and attach helper. Normal installation, launch and removal require no Windows registry entries. Removing the installed package files disables the mod without leaving a launch redirect.
+Foresight 0.3.41 and later beta versions use a game-folder native proxy and attach helper. Normal installation, launch and removal require no Windows registry entries. Removing the installed package files disables the mod without leaving a launch redirect.
 
 ## Publication
 

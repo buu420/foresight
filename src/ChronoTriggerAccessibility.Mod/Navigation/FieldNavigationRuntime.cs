@@ -242,7 +242,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     Suspend("area changed");
                     return originalPad;
                 }
-                var result = controller.Update(frame, now, originalPad != 0);
+                // The rat catch uses the native held Confirm bit. Cancelling on that bit
+                // defeats pursuit precisely when the player tries to catch it. Every other
+                // action still takes manual control, and fresh frame/scene gates still apply.
+                var manualPad = current == NavigationMode.Field && controller.AllowsConfirmWhileFollowing(frame)
+                    ? originalPad & ~0x80u : originalPad;
+                var result = controller.Update(frame, now, manualPad != 0);
                 var speech = new List<string>(result.Speech);
                 var processedCommands = new List<NavigationCommand>();
                 void Handle(NavigationCommand command)

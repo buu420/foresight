@@ -62,8 +62,11 @@ public static class FutureStoryTargets
                 if (state.Flag(0xEC, 0x40) == true)
                     Exit("rat-caught", "Return to the basement consoles", 0);
                 else if (state.Flag(0xEC, 0x10) == true)
+                {
                     Bind("catch-rat", "Catch the rat", ["actor:12:5:134", "actor:13:5:134"],
-                        "Follow the moving rat and press Confirm when close. If it gets away, leave the rafters and return to try again.");
+                        "Follow the moving rat. You can hold Confirm while automatic walking follows it. If it gets away, leave the rafters and return to try again.");
+                    if (!result[^1].IsStoryNote) result[^1] = result[^1] with { FollowUntilInteraction = true };
+                }
                 else if (state.Flag(0xEC, 0x10) == false)
                     Exit("food-chamber", "Continue toward the food stores", 1);
                 else Unavailable("rat", "The rat's current state is unavailable. Explore the rafters and the food stores.");

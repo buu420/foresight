@@ -40,6 +40,10 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     public bool IsStoryNote { get; init; }
     public string? Instruction { get; init; }
     public string? ArrivalInstruction { get; init; }
+    /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
+    /// in Confirm range and follow again when it moves. Only the player's own Confirm
+    /// input is permitted alongside automatic movement; never synthesize the catch.</summary>
+    public bool FollowUntilInteraction { get; init; }
     /// <summary>Audited contact from a reachable standing point. Arrival must
     /// wait for the native objective to advance; proximity alone is insufficient.</summary>
     public NavigationDirection ContactDirection { get; init; }

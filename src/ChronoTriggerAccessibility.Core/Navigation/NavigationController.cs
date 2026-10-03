@@ -30,11 +30,16 @@ public sealed class NavigationController
     private NavigationDirection facingDirection;
     private readonly HashSet<NavigationPoint> unreachableGoals = [];
     private long? pendingStarted;
+    private bool chaseInReach;
+    private long? lastChaseCue;
     // Survives Stop(), which a failed plan performs before anyone can read the
     // destination back. Without it the one case this field explains reports zero.
     private int plannedApproaches;
 
     public bool IsActive => guiding;
+    public bool AllowsConfirmWhileFollowing(NavigationFrame frame) => walking &&
+        destination?.FollowUntilInteraction == true && scene == frame.Scene && frame.CanNavigate &&
+        Eligible(frame).Any(t => t.Id == destination.Id && t.FollowUntilInteraction && !t.IsStoryNote);
     public string CurrentCategoryLabel => CategoryName(category);
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
@@ -111,7 +116,8 @@ public sealed class NavigationController
                 lastProgress = nowMilliseconds;
                 observedPosition = frame.Player;
                 lastManualActivity = nowMilliseconds;
-                speech.Add($"{(walking ? "Walking to" : "Guidance to")} {target.Label}.");
+                speech.Add($"{(walking ? "Walking to" : "Guidance to")} {target.Label}." +
+                    (target.FollowUntilInteraction ? " You can hold Confirm while chasing." : ""));
                 Follow(frame, nowMilliseconds, speech);
                 break;
             default:
@@ -250,6 +256,10 @@ public sealed class NavigationController
             Stop();
             return;
         }
+        // Rejected standing points belong to the actor's previous position, not to a
+        // moving chase for its whole lifetime.
+        if (currentTarget.FollowUntilInteraction && currentTarget.Position != destination?.Position)
+            unreachableGoals.Clear();
         // The chosen approach remains valid when a wide exit exposes additional
         // cells or their order changes. Do not restart speech for alternative goals.
         var leftContact = passageWaitStarted is not null && route is not null && !Arrived(frame.Graph, frame.Player, route[^1]);
@@ -257,6 +267,17 @@ public sealed class NavigationController
             ? !currentTarget.ApproachPoints.Contains(route[^1])
             : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
         destination = currentTarget;
+        if (destination.FollowUntilInteraction)
+        {
+            var ready = frame.PlayerFacing != NavigationDirection.None &&
+                destination.AnyConfirmFacings(frame.Player).Contains(frame.PlayerFacing);
+            if (ready && !chaseInReach && (lastChaseCue is null || now < lastChaseCue || now - lastChaseCue >= 1000))
+            {
+                speech.Add("In reach. Press Confirm, or keep it held.");
+                lastChaseCue = now;
+            }
+            chaseInReach = ready;
+        }
         frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
         if (mustReplan)
         {
@@ -408,7 +429,8 @@ public sealed class NavigationController
             }
         }
         var direction = LegDirection(nextPoint);
-        if (direction != NavigationDirection.None && direction != announcedDirection)
+        if (direction != NavigationDirection.None && direction != announcedDirection &&
+            !(walking && destination.FollowUntilInteraction))
         {
             // Manual guidance speaks only the leg the player should follow now.
             speech.Add(DescribeRoute(frame.Player, walking && announcedDirection == NavigationDirection.None ? 3 : 1));
@@ -471,6 +493,17 @@ public sealed class NavigationController
         }
         if (frame.PlayerFacing != NavigationDirection.None && reach.Contains(frame.PlayerFacing))
         {
+            if (target.FollowUntilInteraction)
+            {
+                // Hold a reachable position without ending pursuit. The next fresh target
+                // moves the goals and restarts steering. Confirm remains the player's input.
+                facingStarted = null;
+                facingDirection = NavigationDirection.None;
+                lastProgress = now;
+                lastPosition = frame.Player;
+                announcedDirection = NavigationDirection.None;
+                return;
+            }
             // After a spoken turn, confirm the turn itself; keep any audited arrival advice.
             speech.Add(facingStarted is not null && !walking
                 ? "Facing it. " + Arrival(target) + (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? " Press Confirm." : "")
@@ -601,6 +634,8 @@ public sealed class NavigationController
         facingDirection = NavigationDirection.None;
         pendingStarted = null;
         unreachableGoals.Clear();
+        chaseInReach = false;
+        lastChaseCue = null;
     }
 
     private string ContactInstruction() => "Continue " + (contactDirection switch
