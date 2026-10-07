@@ -127,7 +127,7 @@ public sealed class PackageContractTests
 
     private static void AssertCanonicalReloadedManifestIsPackagedByteForByte(string repositoryRoot, string packageRoot)
     {
-        const string canonicalHash = "782D902DD52252877096DC5FC8E42F62F02510C40C89882E3FA5EE47814709E3";
+        const string canonicalHash = "B228632B6D549DA178EE222414450C57397360E1D82C939CC74D9BFD5D38B844";
         var sourcePath = Path.Combine(repositoryRoot, "src", "ChronoTriggerAccessibility.Mod", "ModConfig.json");
         var packagedPath = Path.Combine(packageRoot, "ModConfig.json");
         var sourceBytes = File.ReadAllBytes(sourcePath);

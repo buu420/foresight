@@ -103,6 +103,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 (IsCathedralOrgan(actor) ? "Organ" : null) : null;
+            var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
+                actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
@@ -127,13 +129,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add(id, label ?? (field.SceneIdCoherent ? FieldContentFacts.ActorLabel(field.SceneId, actor, description.Category) : null) ??
                 description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
                 storyOnly: encounterOnly,
-                guideAvailable: guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction),
+                storyCandidate: !conveyorRobot,
+                guideAvailable: !conveyorRobot && guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction),
+                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
+                guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." : null,
                 arrivalInstruction: appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
                 // set ActorApproach routes to); touch pickups finish by contact instead.
-                confirm: touchOnly ? null : ActorConfirm(Anchors(actor)),
+                confirm: touchOnly || conveyorRobot ? null : ActorConfirm(Anchors(actor)),
                 followUntilInteraction: field.SceneIdCoherent && field.SceneId == 221 &&
                     actor.Index is 12 or 13 && actor.ClassTag == 5 && actor.VisualIndex == 134 &&
                     story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false);
@@ -278,7 +283,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add($"actor-encounter:{actor.Index}", "Encounter", NavigationCategory.Enemies,
                 position, approaches, actor.IsDrawn && viewport.Contains(position.X, position.Y) ||
                     metadata is { Marker: true } && TileVisible(actor.TileX, actor.TileY),
-                guideAvailable: guideActive, storyCandidate: false,
+                guideAvailable: guideActive, storyCandidate: true,
                 arrivalInstruction: touch ? null : "Press Confirm to interact.",
                 contactPosition: touch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
@@ -435,6 +440,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
+                MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
+                    ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null,
             };
 
         void ReportInventory()
@@ -675,13 +682,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
-            NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false)
+            NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
+            string? guidanceRestriction = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
                 visible || discovered.ContainsKey(id))
                 {
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
+                    GuidanceRestriction = guidanceRestriction,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
                 });
@@ -692,6 +701,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
+                    GuidanceRestriction = guidanceRestriction,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
                 };
@@ -703,6 +713,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
+                GuidanceRestriction = guidanceRestriction,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,
             });

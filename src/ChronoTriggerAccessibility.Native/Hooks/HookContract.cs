@@ -156,6 +156,8 @@ public enum HookId
     TimeGaugeSceneUpdate,
     ShopSceneUpdate,
     ShopSceneDestructor,
+    BikeRaceUpdate,
+    BikeRaceDestructor,
     EndingResultDialogBuilder,
     SaveEndingResultSceneDestructor,
     EndingConfirmationBuilder,
@@ -193,6 +195,14 @@ public delegate void ShopSceneUpdateDelegate(nint scene, float deltaSeconds);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint ShopSceneDestructorDelegate(nint scene, uint deletingFlags);
+
+// SceneSpecialRace is a SpecialEventImpl, not a cocos Scene::update(float).
+// 2EC620 returns AL and takes only ECX; 2EC450 is its non-deleting destructor.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte BikeRaceUpdateDelegate(nint scene);
+
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate void BikeRaceDestructorDelegate(nint scene);
 
 // SaveEndingResultScene (scene 0x1B) message window at RVA 0x2B1390. Callers: the first-clear
 // message 0x2B0CF0, the ending result 0x2B0F30, the Dreamseeker message 0x2B1150 and the

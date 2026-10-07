@@ -228,6 +228,12 @@ public sealed class NavigationController
             Stop();
             return false;
         }
+        if (!string.IsNullOrWhiteSpace(destination.GuidanceRestriction))
+        {
+            speech.Add(destination.GuidanceRestriction);
+            Stop();
+            return false;
+        }
         // A goal proven not to reach its Confirm target during this guidance stays excluded.
         var goals = destination!.ApproachPoints.Where(p => !unreachableGoals.Contains(p)).ToArray();
         var search = NavigationPathfinder.Search(frame.Graph, frame.Player, goals);

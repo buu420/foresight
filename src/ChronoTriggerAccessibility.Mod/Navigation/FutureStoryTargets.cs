@@ -95,7 +95,7 @@ public static class FutureStoryTargets
                 break;
             case 223 when p is >= 55 and < 60:
                 Bind("site32-highway", "Continue onto the eastern highway", ["passage:eastern-highway"],
-                    "You can cross the highway on foot. Speak with Johnny if you want to race instead.");
+                    "This highway passage can start Johnny's bike race. During the race, use up and down to steer and your Dash action to boost. K or right-stick click reads race status.");
                 break;
             case 224 when p is >= 55 and < 60:
                 Exit("site32-cross", "Cross Site 32 to the east", 1);
@@ -127,8 +127,27 @@ public static class FutureStoryTargets
                 else Unavailable("factory", "The security system's current state is unavailable. Examine the entrance terminal.");
                 break;
             case 231 when p is >= 60 and < 63:
-                Note("warehouse", "Explore the warehouse", "The conveyor leads west through the inspection area. The upper walkways lead to the crane and its instructions. Read the security code before returning to the laboratory.");
-                Known("crane", "Operate the crane", "landmark:9", "Use the crane instructions from the nearby terminal. Wait for its tone before entering a pattern.");
+                Note("warehouse", "Explore the warehouse", "Getting caught by a conveyor robot starts the inspection ride along the upper conveyor, moving west through three battles. The lower conveyor moves east; run west and step south into the gaps to avoid the robots. The west entrance to the conveyor passage leads toward the upper walkways, the crane and its instructions. Read the security code before returning to the laboratory.");
+                // Map125: the inspection drop and south pockets are on layer1.
+                // Reach the upper walkway through scene232 rather than offering
+                // the disconnected crane nook as a direct walk from this floor.
+                if (player.Layer == 1 && player.Y >= 26 * 256 && player.X < 37 * 256)
+                {
+                    Bind("warehouse-walkways", "Reach the warehouse walkways", ["exit:4", "exit:5"],
+                        "Go south through the conveyor passage. Its other doorway returns to the upper warehouse walkway.");
+                    break;
+                }
+                if (player.Layer == 1 && player.X / 256 == 13 && player.Y / 256 is >= 6 and <= 9)
+                {
+                    if (state.Global(0x58) is not { } alcoveCrane || (alcoveCrane & 0x60) != 0x60)
+                        Known("crane", "Operate the crane", "landmark:9", "Use the crane instructions from the nearby terminal. Wait for its tone before entering a pattern.");
+                    Known("crane-alcove-return", "Return through the room before the crane", "exit:0",
+                        "Take the eastern doorway in that room to reach the main warehouse walkway.");
+                    break;
+                }
+                if (state.Global(0x58) is not { } completedCrane || (completedCrane & 0x60) != 0x60)
+                    KnownAny("crane-passage", "Reach the passage to the crane", ["exit:0", "exit:1"],
+                        "In the room before the crane, take the western doorway to its control alcove.");
                 Known("crane-codes-room", "Find the crane instructions", "exit:3");
                 if (state.Global(0x58) is { } craneFlags && (craneFlags & 0x60) == 0x60)
                 {
@@ -137,10 +156,12 @@ public static class FutureStoryTargets
                 }
                 break;
             case 232 when p is >= 60 and < 63:
-                Bind("warehouse-walkway", "Return to the warehouse walkways", ["exit:0", "exit:1"]);
+                Exit("warehouse-walkway", "Reach the warehouse walkways", 1);
                 break;
             case 233 when p is >= 60 and < 63:
-                Note("crane-passage", "Passage to the crane", "The western doorway leads toward the crane controls. Use Exits to find the doorways.");
+                if (state.Global(0x58) is not { } movedBarrels || (movedBarrels & 0x60) != 0x60)
+                    Exit("crane-passage", "Enter the crane-control alcove", 0);
+                Exit("crane-return", "Return to the warehouse walkway", 1);
                 break;
             case 234 when p is >= 60 and < 63:
                 Bind("security-code", "Read the security-code terminal", ["actor:8:4:127"]);
@@ -155,7 +176,18 @@ public static class FutureStoryTargets
                 break;
             case 229 when p is >= 60 and < 63:
                 if (state.Flag(0x5C, 0x20) == false)
-                    Bind("lab-hatch", "Open the laboratory hatch", ["actor:12:4:127"]);
+                {
+                    // Atel0040 hides actor12 until controller0 completes the
+                    // encounter requested by actors9..11. Use its real contact
+                    // approaches while the terminal is still absent.
+                    if (available.Any(t => t.Id == "actor:12:4:127"))
+                        Bind("lab-hatch", "Open the laboratory hatch", ["actor:12:4:127"]);
+                    else if (available.Any(t => t.Id is "actor-encounter:9" or "actor-encounter:10" or "actor-encounter:11"))
+                        Bind("lab-entrance", "Clear the laboratory entrance",
+                            ["actor-encounter:9", "actor-encounter:10", "actor-encounter:11"],
+                            "Defeat the monsters to reveal the hatch terminal.");
+                    else Unavailable("lab-entrance", "The laboratory encounter and hatch terminal are currently unavailable. Wait for the encounter to finish, then examine the terminal when it appears.");
+                }
                 else if (state.Flag(0x5C, 0x20) == true)
                     Exit("lab-downstairs", "Climb down to the lower laboratory", 0);
                 else Unavailable("hatch", "The hatch's current state is unavailable. Examine the terminal in the laboratory.");
@@ -247,6 +279,10 @@ public static class FutureStoryTargets
         void Known(string id, string label, string target, string? instruction = null)
         {
             if (available.Any(t => t.Id == target)) Bind(id, label, [target], instruction);
+        }
+        void KnownAny(string id, string label, string[] ids, string? instruction = null)
+        {
+            if (available.Any(t => ids.Contains(t.Id))) Bind(id, label, ids, instruction);
         }
     }
 }

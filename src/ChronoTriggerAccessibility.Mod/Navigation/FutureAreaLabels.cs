@@ -24,6 +24,7 @@ public static class FutureAreaLabels
             (228, 8, 4, 127) => "Entrance security terminal",
             (229, 12, 4, 127) => "Hatch control terminal",
             (230, 17, 4, 127) => "Laser control terminal",
+            (231, >= 12 and <= 15, 4, 170) => "Conveyor robot",
             (234, 8, 4, 127) => "Security-code terminal",
             (235, 14, 4, 127) => "Security lock display",
             (259, 8, 4, 127) => "Crane instructions terminal",

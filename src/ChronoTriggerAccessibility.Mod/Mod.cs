@@ -17,6 +17,7 @@ using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Mod.Template;
 using ChronoTriggerAccessibility.Mod.TopMenu;
 using ChronoTriggerAccessibility.Mod.Menus;
+using ChronoTriggerAccessibility.Mod.Racing;
 using ChronoTriggerAccessibility.Native.Memory;
 using ChronoTriggerAccessibility.Native.Capture;
 using Reloaded.Hooks.ReloadedII.Interfaces;
@@ -143,6 +144,8 @@ public sealed class Mod : ModBase
         var worldSource = new WorldNavigationSource(memory, dispatcher.RecordDiagnostic);
         var areas = new NavigationAreaAnnouncer(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        var floors = new FieldFloorFeedback(
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         var footstepSound = new FootstepSound(navigationSpeech.RecordDiagnostic,
             () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")),
             timingInterrupted: () => navigationSpeech.Publish(new NavigationAnnouncement(
@@ -167,14 +170,45 @@ public sealed class Mod : ModBase
         NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));
         var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
         var navigationGamepad = new NavigationGamepad();
+        void ResetMotion() { footsteps.Suspend(); floors.Reset(); }
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); },
-            footsteps.Suspend, World, context => World(context), footsteps.SetGuidance,
-            Flight, worldSource.IsVehicleActive, navigationGamepad);
+            ResetMotion, World, context => World(context), footsteps.SetGuidance,
+            Flight, worldSource.IsVehicleActive, navigationGamepad,
+            context => floors.Observe(FieldFloorCapture.Capture(memory, (nuint)context)), () => floors.Status,
+            (frame, result) => FieldFloorMovement.Adjust(frame, result, floors.Current));
+        nuint raceImage = 0;
+        var raceToneFailure = 0;
+        var raceCapture = new BikeRaceCapture(memory);
+        var raceTones = new RaceTonePlayer(NavigationKeyboard.IsGameForeground, message =>
+        {
+            navigationSpeech.RecordDiagnostic(message);
+            Interlocked.Exchange(ref raceToneFailure, 1);
+        });
+        var raceFeedback = new BikeRaceFeedback(
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
+            lane => raceTones.Play(lane switch
+            {
+                BikeRaceLane.Above => RaceTone.Above,
+                BikeRaceLane.Below => RaceTone.Below,
+                _ => RaceTone.Aligned,
+            }), raceTones.Stop, () => Volatile.Read(ref raceToneFailure) == 0);
+        var race = new BikeRaceRuntime(
+            scene => raceCapture.Capture(raceImage, scene), raceFeedback, NavigationKeyboard.IsGameForeground,
+            () => NavigationKeyboard.IsKeyDown(0x4B), () => Environment.TickCount64,
+            () => { navigation.Suspend("bike race"); footsteps.Suspend(); }, navigationSpeech.RecordDiagnostic);
+        var raceHooks = new BikeRaceHookSet(hookFactory,
+            race.Update, scene => race.Close(scene), image => raceImage = image,
+            () => { race.Close(); raceTones.Dispose(); });
         var navigationGamepadHooks = new NavigationGamepadHookSet(asmHookFactory,
-            new NavigationJoystick(navigation.FilterController, JoystickDevice.ReadWindows, dispatcher.RecordDiagnostic),
+            new NavigationJoystick((device, buttons, neutral, connected) =>
+            {
+                if (!race.HasContext) return navigation.FilterController(device, buttons, neutral, connected);
+                race.ObserveController(device, buttons, connected);
+                return false;
+            }, JoystickDevice.ReadWindows, dispatcher.RecordDiagnostic),
             () => navigation.Suspend("controller hook disabled"));
         var battleKeyboard = new BattleKeyboard();
         var battle = new BattleRuntime(navigationSpeech.Publish, battleKeyboard,
@@ -276,6 +310,7 @@ public sealed class Mod : ModBase
             .Concat(battleKeyboardHooks.Registrations)
             .Concat(submenuHooks.Registrations)
             .Concat(shopHooks.Registrations)
+            .Concat(raceHooks.Registrations)
             .Concat(movieAudio is null ? [] : new[] { movieAudio })
             .ToArray();
         var participants = new IHookActivationObserver[]
@@ -299,6 +334,7 @@ public sealed class Mod : ModBase
             battleKeyboardHooks,
             submenuHooks,
             shopHooks,
+            raceHooks,
         };
         var installer = new ReloadedHookInstaller(registrations, participants);
         return new CompleteAccessibilityComposition(

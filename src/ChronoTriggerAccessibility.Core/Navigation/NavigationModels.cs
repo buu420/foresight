@@ -39,6 +39,9 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>A current story reminder with no spatial claim. Its Position is unused.</summary>
     public bool IsStoryNote { get; init; }
     public string? Instruction { get; init; }
+    /// <summary>A visible moving hazard remains readable by position, but is
+    /// not a destination for the mod's guidance or automatic walking.</summary>
+    public string? GuidanceRestriction { get; init; }
     public string? ArrivalInstruction { get; init; }
     /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
     /// in Confirm range and follow again when it moves. Only the player's own Confirm
@@ -80,12 +83,16 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     }
 }
 
+public readonly record struct NavigationFloor(NavigationDirection Direction, int Speed);
+
 public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationPoint Player,
     IReadOnlyList<NavigationTarget> Targets, INavigationGraph Graph, int UnitsPerTile = 16)
 {
     public string? AreaName { get; init; }
     /// <summary>The leader's live facing; None when it could not be read.</summary>
     public NavigationDirection PlayerFacing { get; init; }
+    /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
+    public NavigationFloor? MovingFloor { get; init; }
 }
 
 public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision);

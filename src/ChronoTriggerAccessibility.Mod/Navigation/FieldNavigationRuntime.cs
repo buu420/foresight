@@ -6,6 +6,8 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// <summary>Which native input boundary currently drives navigation.</summary>
 public enum NavigationMode { Field, World, Epoch, Dactyl }
 
+public readonly record struct FieldNavigationPad(uint Pad, string? StopReason = null);
+
 /// <summary>Runs only at the game's accepted field-input boundary. It returns one
 /// ordinary pad value; it never holds OS keys or writes player coordinates.</summary>
 public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture, NavigationKeyboard keyboard,
@@ -14,7 +16,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     Func<nint, NavigationFrame?>? worldCapture = null, Action<nint>? worldObserve = null,
     Action<NavigationLeg?>? synchronizeFootsteps = null,
     Func<nint, VehicleKind, NavigationFrame?>? vehicleCapture = null,
-    Func<nint, VehicleKind, bool>? vehicleActive = null, NavigationGamepad? gamepad = null)
+    Func<nint, VehicleKind, bool>? vehicleActive = null, NavigationGamepad? gamepad = null,
+    Action<nint>? observeFieldInput = null, Func<string?>? fieldStatus = null,
+    Func<NavigationFrame, NavigationResult, FieldNavigationPad>? adjustFieldInput = null)
 {
     private readonly NavigationController controller = new();
     private readonly object gate = new();
@@ -206,6 +210,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 engine = currentEngine;
                 lastCall = now;
                 controllerInputAllowed = true;
+                if (current == NavigationMode.Field) observeFieldInput?.Invoke(currentEngine);
                 var commands = keyboard.Poll().ToList();
                 var padActions = gamepad?.Poll() ?? [];
                 if (commands.Count != 0 || originalPad != 0 && gamepad?.IsOpen == true)
@@ -253,6 +258,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 void Handle(NavigationCommand command)
                 {
                     processedCommands.Add(command);
+                    if (command == NavigationCommand.Repeat && current == NavigationMode.Field && fieldStatus?.Invoke() is { } status)
+                        speech.Add(status);
                     // A new manual turn or recovery message also answers a repeat.
                     if (command == NavigationCommand.Repeat && result.Guiding &&
                         !result.AutoWalking && result.Speech.Count != 0) return;
@@ -296,13 +303,26 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 }
                 controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
                 foreach (var command in commands) Handle(command);
+                var movementPad = DirectionBits(result.Direction);
+                if (current == NavigationMode.Field && result.AutoWalking && movementPad != 0 && adjustFieldInput is not null)
+                {
+                    var adjusted = adjustFieldInput(frame, result);
+                    if (adjusted.StopReason is { } reason)
+                    {
+                        result = controller.Cancel(reason);
+                        speech.AddRange(result.Speech);
+                        resetMotion?.Invoke();
+                        movementPad = 0;
+                    }
+                    else movementPad = adjusted.Pad;
+                }
                 if (processedCommands.Count != 0 || speech.Count != 0 ||
                     (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
                 {
                     if (controller.IsActive || processedCommands.Count != 0) lastRouteState = controller.DiagnosticState;
                     diagnostic($"Navigation: command={string.Join(",", processedCommands)}; mode={current}; scene={frame.Scene}; " +
                         $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
-                        $"input=0x{originalPad:X}; pad=0x{DirectionBits(result.Direction):X}; " +
+                        $"input=0x{originalPad:X}; pad=0x{movementPad:X}; " +
                         $"guiding={result.Guiding}; walking={result.AutoWalking}; " +
                         (current != NavigationMode.Field ? WorldPadDiagnostic() + "; " : string.Empty) +
                         string.Join(" ", speech));
@@ -312,8 +332,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 // a manual flight leg must not synchronize a footstep count.
                 synchronizeFootsteps?.Invoke(flight ? null : result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
-                if (current != NavigationMode.Field) worldDirection = DirectionBits(result.Direction);
-                return originalPad | DirectionBits(result.Direction);
+                if (current != NavigationMode.Field) worldDirection = movementPad;
+                return originalPad | movementPad;
             }
             catch (Exception exception)
             {

@@ -1,6 +1,6 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.42 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance and automatic walking with keyboard or controller navigation.
+**Foresight 0.3.44 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
@@ -75,6 +75,16 @@ The inspection member stays selected when another character's turn starts. Empty
 
 Live validation still needs a real encounter in each interface, including party reordering, commands, targets, Techs, Items, status effects, defeat, rewards, and return to exploration. Reading observes the game's timing and does not pause combat or select actions. The battle Item panel has no description to read; descriptions from other screens are not inserted into it. Popups announce the recipient and displayed damage or recovery amount. HP versus MP is not appended to popup amounts until that distinction is verified; Shift+H and M read the exact party HUD values. Element icons within battle messages still need a separate reader.
 
+## Site 32 bike race
+
+Acceleration is automatic. Use the game's **Up/Down** controls to steer and your configured **Dash** action to boost. You have three boosts in the standard race, with a recharge between uses. The alternate race mode has no boosts. Foresight observes the race; you control the bike.
+
+- **High tone:** Johnny is above your lane. **Low tone:** below. **Middle tone:** aligned with your lane. These cues follow the visible track overview even if the camera rotates.
+- Speech announces the start, stable lead changes, boosts remaining, recharge readiness, distance milestones, pause, and the result. Distances use the game's displayed counter.
+- **K** or **right-stick click (R3)** reads the current lead, Johnny's lane, distance to the finish, score, and boost status. R3 reads race status while racing; it opens the navigation menu during exploration.
+
+Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. This is a new beta feature: native code and automated checks support it, but its timing and playability still need a real race test. See [race research and verification](docs/bike-race-research.md).
+
 ## Navigation
 
 Use these keys while controlling the party in a local field area, walking on the world map, or flying a vehicle:
@@ -101,7 +111,9 @@ Controller navigation uses the same destinations and routes:
 
 Opening the navigation menu stops the current route and reads the category and destination. Release the closing or start button before using the controller for the game again. Controller input is consumed while browsing; keyboard controls remain available. R3 is unused by the supported game build. Steam Input must pass through right-stick click, rather than remapping it to a keyboard or game action. Xbox layouts and recognized raw DualShock 4 / DualSense layouts are supported; see the controller report for device identification limits. The user confirmed controller navigation working in game; other device layouts remain unverified.
 
-Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary directional input and does not interact, choose dialogue, or bypass collisions. At a person or object activated with Confirm, automatic walking makes the final turn toward its interaction point; manual guidance announces that turn and checks the live facing. K reports whether the target is within reach and which way to face. Press the game's Confirm button yourself. Touch pickups and floor triggers use their contact positions instead. A menu-reading error cancels the current walk but no longer permanently disables navigation keys.
+Browsing to another destination stops the old route. Manual movement, menus, dialogue, loss of focus, area changes, unreadable state, and blocked movement stop automatic walking. Press P again to restart it. Walking uses the game's ordinary direction controls, plus its Dash action when needed on moving floors, and does not interact, choose dialogue, or bypass collisions. At a person or object activated with Confirm, automatic walking makes the final turn toward its interaction point; manual guidance announces that turn and checks the live facing. K reports whether the target is within reach and which way to face. Press the game's Confirm button yourself. Touch pickups and floor triggers use their contact positions instead. A menu-reading error cancels the current walk but no longer permanently disables navigation keys.
+
+Factory conveyors announce their movement direction when you step on them, change direction, or step off. K includes the current moving-floor status. Conveyor robots remain readable as moving hazards; guidance and automatic walking will not target one. Getting caught starts the westward inspection ride along the upper belt. On the lower east-moving belt, run west and step south into the gaps to avoid robots. After the west-end inspection drop, select **Reach the warehouse walkways** under Story Events: it leads south through the conveyor passage, then back to the upper walkway through its other door. Further objectives use the separate room before the crane to reach its control alcove. Automatic walking respects your native run setting. If moving against a belt requires a manual toggle, the mod stops and asks you to enable running with your Dash control. In the laboratory, Story Events guides to the entrance fight while the hatch terminal is hidden, then to the visible terminal and the opened ladder. You still fight and press Confirm yourself. See [Factory repair evidence and limits](docs/factory-conveyors-and-hatch.md).
 
 During the Arris Dome rat chase, select **Catch the rat** under Story Events, or the **Rat** entry, and start automatic walking. Then press and hold your usual game Confirm button. Pursuit stays active when you reach the moving rat, announces when Confirm can reach it, and follows again as it moves. Confirm alone does not cancel this chase; movement keys, other game actions, P, or opening the controller navigation menu still stop it. The game performs the catch. If the rat escapes, leave the rafters and return to retry. Manual guidance also continues tracking the rat; you supply movement and Confirm.
 
