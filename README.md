@@ -1,6 +1,6 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.44 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
+**Foresight 0.3.45 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
@@ -52,6 +52,8 @@ Foresight is unofficial and is not affiliated with or endorsed by Square Enix. I
 
 Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the selected character or equipped slot, replacement item names and quantities, and the displayed stat preview with increases or decreases. Techs reads the selected character card and tech category, then the selected row and its rendered description, component names, and MP/requirements panel. Party reads the selected member's card and the displayed combinations. These readers follow native focus and do not select or change anything for you.
 
+The classic party-change screen opened at the End of Time also uses the Party reader. Use the game's normal controls to choose and exchange members; the reader follows the visible roster, focus, locks and held member. See [party-change evidence and limits](docs/party-change-scene-0345.md).
+
 Save/Load reads the selected file number, its displayed card text, and the visible party and save details. Empty files do not read an old preview. Save, overwrite, Bookmark, and Resume confirmations use the existing prompt and Yes/No reader. While a confirmation is open, file-list updates cannot interrupt it. Brief redraws are retried; a persistent unreadable selection is announced and logged, with recovery on the next valid capture.
 
 The save list also reads its displayed instruction when the page opens or returns from a confirmation, including when saving is unavailable. Saving, completion, load-error, and other native notices are read when shown.
@@ -83,9 +85,11 @@ Acceleration is automatic. Use the game's **Up/Down** controls to steer and your
 - Speech announces the start, stable lead changes, boosts remaining, recharge readiness, distance milestones, pause, and the result. Distances use the game's displayed counter.
 - **K** or **right-stick click (R3)** reads the current lead, Johnny's lane, distance to the finish, score, and boost status. R3 reads race status while racing; it opens the navigation menu during exploration.
 
-Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. This is a new beta feature: native code and automated checks support it, but its timing and playability still need a real race test. See [race research and verification](docs/bike-race-research.md).
+Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. A tester reported completing the race on 0.3.44; broader timing and playability testing remains needed. **Interactable Objects → Jet bike** now tracks the native bike interaction in either Site 32 parking lot. Press Confirm yourself after arriving. See [race research and verification](docs/bike-race-research.md).
 
 ## Navigation
+
+At the End of Time, **Exits → Pillar of light** tracks the lights currently drawn on the platform. Complete the old man's introduction and Spekkio's lesson before using them; afterwards, press Confirm in the light to hear the game's destination prompt. Routes can approach the touch triggers that open the platform stairs and the room behind the old man, then continue after the game opens the floor. These changes still need live testing. See [End of Time navigation evidence](docs/end-of-time-navigation-0345.md).
 
 Use these keys while controlling the party in a local field area, walking on the world map, or flying a vehicle:
 

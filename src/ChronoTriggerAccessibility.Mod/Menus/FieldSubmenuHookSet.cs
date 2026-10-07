@@ -13,10 +13,12 @@ public sealed class FieldSubmenuHookSet : IHookActivationObserver
     private readonly FieldSubmenuSession session;
     private static readonly HookId[] Boundaries = [HookId.ClassicFieldMenuReplace, HookId.TouchFieldMenuReplace,
         HookId.SaveSlotOpen, HookId.MenuManagerDispatch, HookId.InventoryHelpRefresh, HookId.SaveSlotDetailsRefresh,
-        HookId.MenuManagerUpdate];
+        HookId.MenuManagerUpdate, HookId.FormationSceneInit, HookId.FormationSceneDestructor];
     private bool active;
     private int prepared;
     private long lastSample;
+    // The End of Time party change is its own scene; its page never reaches the field menu.
+    private nuint formationScene, formationPage;
     public FieldSubmenuHookSet(IRuntimeNativeHookFactory factory, FieldSubmenuSource source, FieldSubmenuSession session)
     {
         this.factory = factory; this.source = source; this.session = session;
@@ -28,7 +30,7 @@ public sealed class FieldSubmenuHookSet : IHookActivationObserver
         if (prepared != Boundaries.Length) throw new InvalidOperationException("All submenu boundaries must be prepared.");
         active = true;
     }
-    public void AfterHooksDisabled() { active = false; session.Close(); }
+    public void AfterHooksDisabled() { active = false; formationScene = formationPage = 0; session.Close(); }
 
     private void Observe(UnmanagedBoundaryGuard guard, string name, Action read)
     {
@@ -49,6 +51,8 @@ public sealed class FieldSubmenuHookSet : IHookActivationObserver
             {
                 HookId.SaveSlotOpen => Open(address, guard),
                 HookId.MenuManagerDispatch => Dispatch(address, guard),
+                HookId.FormationSceneInit => FormationInit(address, guard),
+                HookId.FormationSceneDestructor => FormationDestroy(address, guard),
                 _ => Member(address, guard),
             };
             prepared = true; owner.prepared++; return hook;
@@ -118,6 +122,47 @@ public sealed class FieldSubmenuHookSet : IHookActivationObserver
             var hook = owner.factory.CreateHook(id, detour, address);
             original = hook.OriginalFunction ?? throw new InvalidOperationException("Menu dispatch original is unavailable.");
             return new ReloadedPreparedHook<SubmenuManagerDispatchDelegate>(Name, hook, detour);
+        }
+        private IPreparedHook FormationInit(nuint address, UnmanagedBoundaryGuard guard)
+        {
+            FormationSceneInitDelegate? original = null;
+            FormationSceneInitDelegate detour = scene =>
+            {
+                byte result = 0;
+                guard.Run(Name + " original", () => result = original!(scene));
+                // The page exists only once the native init has built and attached it.
+                if (result != 0) owner.Observe(guard, Name, () =>
+                {
+                    var page = owner.source.StandaloneFormation((nuint)scene);
+                    (owner.formationScene, owner.formationPage) = ((nuint)scene, page);
+                    if (page == 0)
+                        owner.session.ReportUnavailable((nuint)scene, "Party", "Unable to read the party selection.");
+                    else owner.session.Enter(page);
+                });
+                return result;
+            };
+            var hook = owner.factory.CreateHook(id, detour, address);
+            original = hook.OriginalFunction ?? throw new InvalidOperationException("Party scene init original is unavailable.");
+            return new ReloadedPreparedHook<FormationSceneInitDelegate>(Name, hook, detour);
+        }
+        private IPreparedHook FormationDestroy(nuint address, UnmanagedBoundaryGuard guard)
+        {
+            FormationSceneDestructorDelegate? original = null;
+            FormationSceneDestructorDelegate detour = (scene, flags) =>
+            {
+                // Release the page while the scene still owns it; the original frees both.
+                if ((nuint)scene == owner.formationScene) owner.Observe(guard, Name + " leave", () =>
+                {
+                    owner.session.CloseContext(owner.formationPage != 0 ? owner.formationPage : owner.formationScene);
+                    owner.formationScene = owner.formationPage = 0;
+                });
+                nint result = 0;
+                guard.Run(Name + " original", () => result = original!(scene, flags));
+                return result;
+            };
+            var hook = owner.factory.CreateHook(id, detour, address);
+            original = hook.OriginalFunction ?? throw new InvalidOperationException("Party scene destructor original is unavailable.");
+            return new ReloadedPreparedHook<FormationSceneDestructorDelegate>(Name, hook, detour);
         }
     }
 }

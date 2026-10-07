@@ -48,14 +48,20 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                 var preview = Preview(map, action.Copy!);
                 if (preview is null) continue;
                 var after = Wrap(preview, terminals, collisions, touchGoals);
-                foreach (var contact in Contacts(actor, start.Layer))
+                var nativeTouch = scene.Id == 464 && actor.Index is 24 or 25;
+                foreach (var contact in Contacts(actor, start.Layer).Concat(nativeTouch ? EdgeContacts(actor, start.Layer) : []))
                 {
                     if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);
                     if (approach.Route is null) continue;
                     var continuation = NavigationPathfinder.Search(after, contact, goals, maximumVisited);
                     if (continuation.Route is not null)
-                        return approach with { IntermediateId = $"landmark:{actor.Index}" };
+                        return approach with
+                        {
+                            IntermediateId = $"landmark:{actor.Index}",
+                            IntermediateContact = nativeTouch
+                                ? new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY, start.Layer) : null,
+                        };
                 }
             }
         }
@@ -72,6 +78,21 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         yield return new(x, y - 64, layer);
         yield return new(x - 128, y + 64, layer);
         yield return new(x + 128, y + 64, layer);
+    }
+
+    private static IEnumerable<NavigationPoint> EdgeContacts(FieldActorSnapshot actor, int layer)
+    {
+        // End of Time's closed stair/door floor keeps the old central contacts
+        // inaccessible. 178980 accepts the leading movement probe before the
+        // terrain check: +/-112 in X, -64 in Y for side probes, -112 for up.
+        // Reach a real floor point outside the closed tiles, then keep moving
+        // toward the live marker until its script opens the captured terrain.
+        var x = (actor.FineX - actor.CollisionOffsetX * 16 + 32) / 64 * 64;
+        var y = (actor.FineY + 32) / 64 * 64;
+        yield return new(x - 256, y - 64, layer);
+        yield return new(x + 256, y - 64, layer);
+        yield return new(x, y + 256, layer);
+        yield return new(x, y - 128, layer);
     }
 
     private static INavigationGraph Wrap(FieldMapSnapshot value,

@@ -1,6 +1,11 @@
 namespace ChronoTriggerAccessibility.Core.Navigation;
 
-public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Route, bool LimitReached, string? IntermediateId = null);
+public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Route, bool LimitReached, string? IntermediateId = null)
+{
+    /// <summary>A native touch target that must be approached with movement while
+    /// waiting for the live terrain to change. Never authorizes Confirm.</summary>
+    public NavigationPoint? IntermediateContact { get; init; }
+}
 
 public static class NavigationPathfinder
 {

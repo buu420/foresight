@@ -16,6 +16,8 @@ public sealed class GameVersionCatalogTests
         { HookId.InventoryHelpRefresh, "Inventory selected item details", 0x1C7610, "558BEC6AFF68E0C1760064A1000000005083EC38", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.SaveSlotDetailsRefresh, "Save file selected details", 0x218FE0, "558BEC6AFF688C3E770064A1000000005081ECD8", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.MenuManagerUpdate, "Menu manager completed update", 0x1DCF10, "558BEC83E4F883EC14538BD9565780BB90020000", typeof(SubmenuNodeWordDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.FormationSceneInit, "FormationSteamScene::init", 0x2A49A0, "558BEC6AFF688F5C760064A100000000", typeof(FormationSceneInitDelegate), X86CallingConvention.MicrosoftThiscall },
+        { HookId.FormationSceneDestructor, "FormationSteamScene::deletingDestructor", 0x2A4960, "558BECA1C4B48100568BF1C706480A7B00", typeof(FormationSceneDestructorDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TimeGaugeSceneInit, "AgeSelectScene::init", 0x2989B0, "558BEC6AFF68BF95770064A100000000", typeof(TimeGaugeSceneInitDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TimeGaugeSceneUpdate, "AgeSelectScene::update", 0x2996D0, "558BEC83E4F851A1DCC3810085C05356", typeof(TimeGaugeSceneUpdateDelegate), X86CallingConvention.MicrosoftThiscall },
         { HookId.TextManagerGetMsg, "TextManager::getMsg", 0x1B9110, "558BEC6AFF68A1AD760064A100000000", typeof(TextManagerGetMsgDelegate), X86CallingConvention.MicrosoftThiscall },
@@ -162,12 +164,12 @@ public sealed class GameVersionCatalogTests
     }
 
     [Fact]
-    public void HookCatalog_HasExactlyOneHundredSeventyFourUniqueContracts()
+    public void HookCatalog_HasExactlyOneHundredSeventySixUniqueContracts()
     {
-        Assert.Equal(174, GameVersionCatalog.Hooks.Count);
-        Assert.Equal(174, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
-        Assert.Equal(174, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(174, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
+        Assert.Equal(176, GameVersionCatalog.Hooks.Count);
+        Assert.Equal(176, GameVersionCatalog.Hooks.Select(contract => contract.Id).Distinct().Count());
+        Assert.Equal(176, GameVersionCatalog.Hooks.Select(contract => contract.Symbol).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(176, GameVersionCatalog.Hooks.Select(contract => contract.Rva).Distinct().Count());
     }
 
     [Fact]

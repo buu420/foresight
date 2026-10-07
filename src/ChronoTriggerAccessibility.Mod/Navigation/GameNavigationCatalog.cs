@@ -61,8 +61,11 @@ public static class GameNavigationCatalog
     public sealed record Actor(int Id, Load[] Loads, bool Marker, bool Touch, string? Label,
         bool GivesItem, int[] Destinations, Action[] Actions)
     {
+        // 16B220 changes load_enemy's class 5 to class 6 for its high-bit
+        // load mode, including Spekkio. The visual identity remains the same.
         public bool Matches(FieldActorSnapshot actor) => Id == actor.Index &&
-            (Marker ? actor.ClassTag == 7 : Loads.Any(l => l.Class == actor.ClassTag && l.Visual == actor.VisualIndex));
+            (Marker ? actor.ClassTag == 7 : Loads.Any(l =>
+                (l.Class == actor.ClassTag || l.Class == 5 && actor.ClassTag == 6) && l.Visual == actor.VisualIndex));
     }
     public sealed record Region(int Actor, string Kind, int Destination, int Value, int Left, int Top, int Right, int Bottom, Requirement[] Guards,
         string? Source = null, int Index = 0, bool Set = true)

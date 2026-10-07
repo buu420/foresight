@@ -228,7 +228,7 @@ public static class FutureStoryTargets
                 Exit("spekkio-room", "Enter the room behind the old man", 0);
                 break;
             case 465 when p < 76:
-                Bind("spekkio", "Speak with Spekkio", Enumerable.Range(224, 6).Select(v => $"actor:10:5:{v}").ToArray());
+                Bind("spekkio", "Speak with Spekkio", SpekkioBindings());
                 break;
             case 465 when p == 76:
                 MagicLesson();
@@ -256,7 +256,7 @@ public static class FutureStoryTargets
             if (laps == 3 || laps == 4 && counts.Any(v => v != 0))
             {
                 Bind("magic-lesson-checkpoint", laps == 3 ? "Return to Spekkio" : "Speak with Spekkio to restart the walking lesson",
-                    Enumerable.Range(224, 6).Select(v => $"actor:10:5:{v}").ToArray());
+                    SpekkioBindings());
                 return;
             }
             // A valid partial circuit is a prefix at n, followed by n-1. All
@@ -270,6 +270,9 @@ public static class FutureStoryTargets
                 NavigationDirection.North, NavigationDirection.East, NavigationDirection.South];
             if (!result[^1].IsStoryNote) result[^1] = result[^1] with { ContactDirection = contact[next] };
         }
+
+        static string[] SpekkioBindings() => new[] { 5, 6 }
+            .SelectMany(c => Enumerable.Range(224, 6).Select(v => $"actor:10:{c}:{v}")).ToArray();
 
         void Bind(string id, string label, string[] ids, string? instruction = null) =>
             result.Add(StoryTarget.BindAny("future:" + id, label, available, ids, player, instruction));

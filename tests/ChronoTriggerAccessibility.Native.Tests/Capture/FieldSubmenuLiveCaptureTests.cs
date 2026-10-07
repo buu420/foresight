@@ -186,6 +186,55 @@ public sealed class FieldSubmenuLiveCaptureTests
         Assert.Null(new FieldSubmenuCapture(memory).Capture(image, node));
     }
 
+    [Fact]
+    public void TheStandalonePartySceneLeadsToThePageItBuiltAndReadsItsRoster()
+    {
+        var (memory, image, node) = StandaloneParty();
+        var capture = new FieldSubmenuCapture(memory);
+        Assert.True(capture.TryFindStandaloneFormation(image, StandaloneScene, out var page));
+        Assert.Equal((nuint)node, page);
+        Assert.Equal("Please select party members. Current party. Crono LV 1. HP 43/70. MP 8/8. Locked. Reserve. Empty. Usable Combos. None.",
+            capture.Capture(image, page)!.Text);
+    }
+
+    [Theory]
+    [InlineData("touch scene")]
+    [InlineData("foreign parent")]
+    [InlineData("hidden page")]
+    [InlineData("second page")]
+    public void AStandalonePartySceneMustOwnExactlyOneVisibleClassicPage(string mutation)
+    {
+        var (memory, image, node) = StandaloneParty();
+        switch (mutation)
+        {
+            case "touch scene": memory.Word(StandaloneScene, image + 0x3B5764); break; // FormationScene, MenuNodeFormation
+            case "foreign parent": memory.Word(node + 0x16C, Backdrop); break;
+            case "hidden page": memory.Byte(node + 0x1AD, 0); break;
+            case "second page":
+                memory.Word(StandaloneScene + 0x164, SceneChildren + 12).Word(SceneChildren + 8, 0x51003000)
+                    .Word(0x51003000, image + FieldSubmenuCapture.ClassicFormationNodeVtableRva)
+                    .Word(0x51003000 + 0x16C, StandaloneScene).Byte(0x51003000 + 0x1AD, 1);
+                break;
+        }
+        Assert.False(new FieldSubmenuCapture(memory).TryFindStandaloneFormation(image, StandaloneScene, out var page));
+        Assert.Equal((nuint)0, page);
+    }
+
+    // FormationSteamScene::init (2A49A0) adds a backdrop, then the page built by 1BE850(0), to ECX.
+    // The captured field-menu page is re-parented under a synthetic scene of that class.
+    private const uint StandaloneScene = 0x51000000, Backdrop = 0x51001000, SceneChildren = 0x51002000;
+
+    private static (NavigationMemory Memory, uint Image, uint Node) StandaloneParty()
+    {
+        var (memory, image, node) = Frame("party_locked", "0321");
+        memory.Word(StandaloneScene, image + 0x3B0A48).Byte(StandaloneScene + 0x1AD, 1)
+            .Word(StandaloneScene + 0x160, SceneChildren).Word(StandaloneScene + 0x164, SceneChildren + 8)
+            .Word(SceneChildren, Backdrop).Word(SceneChildren + 4, node)
+            .Word(Backdrop, image + 0x3A5D04).Word(Backdrop + 0x16C, StandaloneScene).Byte(Backdrop + 0x1AD, 1)
+            .Word(node + 0x16C, StandaloneScene);
+        return (memory, image, node);
+    }
+
     // Synthetic reserve topology using the actual captured manager map and Label protocol.
     // This tests key/card correlation and swap speech; it is not a live multi-member capture.
     private static (NavigationMemory Memory, uint Image, uint Node) PartyWithSyntheticReserve()

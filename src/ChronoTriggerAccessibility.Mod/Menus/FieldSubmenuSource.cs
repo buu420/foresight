@@ -39,6 +39,8 @@ public sealed class FieldSubmenuSource(IReadableMemory memory)
     }
     public bool ConfirmationActive(nuint node) => Word(node, out var vt) &&
         vt == image + SaveSlotCapture.NodeVtableRva && saves.ConfirmationActive(node);
+    public nuint StandaloneFormation(nuint scene) =>
+        image != 0 && fields.TryFindStandaloneFormation(image, scene, out var node) ? node : 0;
     public bool IsAttached(nuint scene, nuint node, bool touch) =>
         Word(scene + (touch ? 0x294u : 0x290u), out var selected) && selected == node &&
         Word(node + 0x16C, out var parent) && parent == scene;

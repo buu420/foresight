@@ -119,7 +119,7 @@ public sealed class FutureStoryTests
     }
 
     [Fact]
-    public void HighwayGoalReachesTheNativeTransitionRegionInsteadOfStoppingAtTheJetbike()
+    public void HighwayGoalUsesItsNativeRegionAndBikeHasItsOwnObjectTarget()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });
         var field = Field(223, Actor(8, 43 * 256 + 128, 5 * 256 + 255));
@@ -128,10 +128,11 @@ public sealed class FutureStoryTests
         Assert.False(onward.IsStoryNote);
         Assert.NotEmpty(onward.ApproachPoints);
         Assert.All(onward.ApproachPoints, p => { Assert.True(p.X / 256 > 46); Assert.True(p.Y / 256 < 11); });
-        Assert.DoesNotContain(frame.Targets, t => t.Id == "landmark:8");
+        Assert.Contains(frame.Targets, t => t.Id == "landmark:8" && t.Label == "Jet bike" && t.Category == NavigationCategory.Objects);
         Assert.Contains(frame.Targets, t => t.Category == NavigationCategory.Exits && t.Label == "Eastern highway");
         source.Reset();
-        var unseen = Assert.Single(source.Build(field, Map(), new(0, 0, 256, 256), [], State(55)).Targets);
+        var unseen = Assert.Single(source.Build(field, Map(), new(0, 0, 256, 256), [], State(55)).Targets,
+            t => t.Category == NavigationCategory.StoryEvents);
         Assert.False(unseen.IsStoryNote);
         Assert.False(unseen.Discovered);
         Assert.NotEmpty(unseen.ApproachPoints);

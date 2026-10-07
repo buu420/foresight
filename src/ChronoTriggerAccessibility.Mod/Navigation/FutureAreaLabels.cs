@@ -29,14 +29,16 @@ public static class FutureAreaLabels
             (235, 14, 4, 127) => "Security lock display",
             (259, 8, 4, 127) => "Crane instructions terminal",
             (464, 28, 4, 72) => "Old man under the lamp",
-            (465, 10, 5, >= 224 and <= 229) => "Spekkio",
+            (465, 10, 5 or 6, >= 224 and <= 229) => "Spekkio",
             _ => null,
         };
 
     public static string? Landmark(int scene, FieldStoryState? state, FieldActorSnapshot actor)
     {
-        if (state is not { Point: >= 51 and <= 77 } || !actor.IsUsable || actor.ClassTag != 7 ||
-            actor.IsPartyMember || !actor.ScriptCallsEnabled) return null;
+        if (!actor.IsUsable || actor.ClassTag != 7 || actor.IsPartyMember || !actor.ScriptCallsEnabled) return null;
+        // Native Confirm markers for the bike remain available on later visits.
+        if (IsBike(scene, actor.Index)) return "Jet bike";
+        if (state is not { Point: >= 51 and <= 77 }) return null;
         return (scene, actor.Index, state.Point) switch
         {
             (208, 8, _) or (210, 17, _) or (217, 9, _) => "Sealed door",
@@ -61,6 +63,23 @@ public static class FutureAreaLabels
 
     public static bool IsTouchLandmark(int scene, int actor) => (scene, actor) == (464, 24) ||
         scene == 465 && actor is >= 16 and <= 20;
+
+    public static bool IsBike(int scene, int actor) => (scene, actor) is (223, 8) or (225, 9);
+
+    // Atel0283's pillar actors stay at the off-map sentinel. Their loops use
+    // player-tile guards instead. The first three lights are part of the map;
+    // the other six are drawn by the same A6 flags that guard their regions.
+    public static bool IsPillar(int scene, GameNavigationCatalog.Region region) =>
+        scene == 464 && region.Kind == "Warp" &&
+        FullStoryObjectives.PillarDestinations.TryGetValue(region.Actor, out var destination) &&
+        destination == region.Destination;
+
+    public static bool PillarVisible(GameNavigationCatalog.Region region, FieldStoryState? state) =>
+        state is not null && region.Available(state with { Point = Math.Max(77, state.Point) });
+
+    public static string PillarInstruction(FieldStoryState state) => state.Point < 77
+        ? "Complete the old man's introduction and Spekkio's lesson to use the pillars."
+        : "Stand in the light and press Confirm to read its destination.";
 
     public static string? ExitLabel(int scene, int exit) => (scene, exit) switch
     {

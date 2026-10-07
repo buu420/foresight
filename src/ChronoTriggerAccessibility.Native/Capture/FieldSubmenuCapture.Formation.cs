@@ -16,6 +16,42 @@ public sealed partial class FieldSubmenuCapture
         uint FocusKey, int HeldKey, nuint ComboPanel,
         FormationMember[] Current, FormationMember[] Reserve, string Signature);
 
+    /// <summary>FormationSteamScene, which SceneManager::create(0x19) builds through 2A4910 and
+    /// 2A4860 for NextScene action 8 (field request 5, script C8 00).</summary>
+    public const uint FormationSteamSceneVtableRva = 0x3B0A48;
+    private const int MaximumSceneChildren = 64;
+
+    /// <summary>
+    /// 2A49A0 builds one ClassicMenuNodeFormation with builder 1BE850(0) and adds it to its own
+    /// scene after a backdrop, without keeping it in a field. The page is accepted only as the
+    /// scene's sole visible child of that class whose parent is the scene.
+    /// </summary>
+    public bool TryFindStandaloneFormation(nuint imageBase, nuint scene, out nuint node)
+    {
+        node = 0;
+        try
+        {
+            if (imageBase == 0 || !Pointer(scene, out var vtable) || vtable != imageBase + FormationSteamSceneVtableRva ||
+                !UInt32(scene + ChildrenBeginOffset, out var begin) || !UInt32(scene + ChildrenBeginOffset + 4, out var end) ||
+                end < begin || (end - begin) % 4 != 0 || (end - begin) / 4 > MaximumSceneChildren) return false;
+            nuint found = 0;
+            for (nuint child = begin; child < end; child += 4)
+            {
+                if (!Pointer(child, out var candidate) || !Pointer(candidate, out var candidateVtable)) return false;
+                if (candidateVtable != imageBase + ClassicFormationNodeVtableRva) continue;
+                if (found != 0 || !Pointer(candidate + NodeParentOffset, out var parent) || parent != scene ||
+                    !HasAncestor(candidate, candidate)) return false;
+                found = candidate;
+            }
+            node = found;
+            return found != 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private FieldSubmenuSnapshot? CaptureFormation(nuint imageBase, nuint node)
     {
         if (!TryReadFormationFrame(imageBase, node, out var frame)) return null;

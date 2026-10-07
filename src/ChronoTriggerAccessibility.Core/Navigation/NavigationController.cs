@@ -20,6 +20,7 @@ public sealed class NavigationController
     private long lastManualActivity;
     private long instructionRevision;
     private string? intermediateId;
+    private NavigationPoint? intermediateContact;
     private IReadOnlyList<NavigationPoint> plannedGoals = [];
     private long? passageWaitStarted;
     private long nextPassageCheck;
@@ -242,6 +243,7 @@ public sealed class NavigationController
         route = search.Route;
         if (intermediateId != search.IntermediateId) passageWaitStarted = null;
         intermediateId = search.IntermediateId;
+        intermediateContact = search.IntermediateContact;
         plannedGoals = goals;
         nextPoint = 1;
         if (route is not null) return true;
@@ -313,7 +315,9 @@ public sealed class NavigationController
                 var contactLabel = frame.Targets.FirstOrDefault(t => t.Id == intermediateId)?.Label;
                 // A passage opens where the player is standing; a way out has to be
                 // walked through. Telling someone to wait at a door strands them.
-                speech.Add(TakesAnExit
+                speech.Add(intermediateContact is { } touch
+                    ? $"Continue {DirectionName(ContactBearing(frame.Player, touch))} until the passage opens."
+                    : TakesAnExit
                     ? contactLabel is null ? "Take the exit here to continue." : $"Take {contactLabel} to continue."
                     : contactLabel is null ? "Waiting for the passage to open." : $"Waiting for {contactLabel} to open.");
             }
@@ -545,6 +549,7 @@ public sealed class NavigationController
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
         new(speech.AsReadOnly(), walking && facingStarted is not null ? facingDirection :
             walking && contactStarted is not null ? contactDirection :
+            walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
             ManualLeg = guiding && !walking && !waitingForManualStop && route is not null && nextPoint < route.Count
@@ -632,6 +637,7 @@ public sealed class NavigationController
         announcedDirection = NavigationDirection.None;
         waitingForManualStop = false;
         intermediateId = null;
+        intermediateContact = null;
         plannedGoals = [];
         passageWaitStarted = null;
         contactStarted = null;

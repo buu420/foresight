@@ -28,10 +28,104 @@ public sealed class FieldSubmenuHookSetTests
         ((SubmenuNodeWordDelegate)f.Detours[HookId.InventoryHelpRefresh])(104, 0x8001);
         ((SubmenuNodeWordDelegate)f.Detours[HookId.SaveSlotDetailsRefresh])(105, 0x12345678);
         ((SubmenuNodeWordDelegate)f.Detours[HookId.MenuManagerUpdate])(106, 0x3C888889);
+        Assert.Equal((byte)1, ((FormationSceneInitDelegate)f.Detours[HookId.FormationSceneInit])(107));
+        Assert.Equal((nint)12345, ((FormationSceneDestructorDelegate)f.Detours[HookId.FormationSceneDestructor])(108, 1));
         Assert.Equal(["ClassicFieldMenuReplace:100,200", "TouchFieldMenuReplace:101,201", "SaveSlotOpen:102,5,1",
             "MenuManagerDispatch:103,2,19", "InventoryHelpRefresh:104,32769", "SaveSlotDetailsRefresh:105,305419896",
-            "MenuManagerUpdate:106,1015580809"], calls);
+            "MenuManagerUpdate:106,1015580809", "FormationSceneInit:107", "FormationSceneDestructor:108,1"], calls);
         Assert.Empty(errors.Messages);
+    }
+    [Fact] public void TheStandalonePartySceneIsReadAfterItsInitAndReleasedBeforeItsDestructor()
+    {
+        var calls = new List<string>(); var f = new Factory(calls); var errors = new Errors();
+        var hooks = new FieldSubmenuHookSet(f, new(StandalonePartyScene()), PartySession(calls));
+        Prepare(hooks, errors); hooks.AfterHooksActivated();
+        Assert.Equal((byte)1, ((FormationSceneInitDelegate)f.Detours[HookId.FormationSceneInit])((nint)Scene));
+        Assert.Equal((nint)12345, ((FormationSceneDestructorDelegate)f.Detours[HookId.FormationSceneDestructor])((nint)Scene, 1));
+        Assert.Equal(["FormationSceneInit:4096", "presented:20480:Party:Current party, 1 of 3. Crono",
+            "exited:20480", "FormationSceneDestructor:4096,1"], calls);
+        Assert.Empty(errors.Messages);
+    }
+    [Fact] public void AFailedPartySceneIsNotEnteredAndAnotherScenesDestructionKeepsTheOpenMenu()
+    {
+        var calls = new List<string>(); var f = new Factory(calls); var errors = new Errors();
+        f.ByteResults[HookId.FormationSceneInit] = 0;
+        var session = PartySession(calls);
+        var hooks = new FieldSubmenuHookSet(f, new(StandalonePartyScene()), session);
+        Prepare(hooks, errors); hooks.AfterHooksActivated();
+        Assert.Equal((byte)0, ((FormationSceneInitDelegate)f.Detours[HookId.FormationSceneInit])((nint)Scene));
+        session.Enter(OtherPage);
+        ((FormationSceneDestructorDelegate)f.Detours[HookId.FormationSceneDestructor])((nint)Scene, 1);
+        Assert.Equal(["FormationSceneInit:4096", "presented:24576:Party:Current party, 1 of 3. Crono",
+            "FormationSceneDestructor:4096,1"], calls);
+        Assert.True(session.HasContext);
+        Assert.Empty(errors.Messages);
+    }
+    [Fact] public void ASuccessfulPartySceneWithUnreadablePageAnnouncesFailureAndPreservesNativeCalls()
+    {
+        var calls = new List<string>(); var f = new Factory(calls); var errors = new Errors();
+        var session = PartySession(calls);
+        // Reject the page with another parent; do not relax native ownership.
+        var memory = StandalonePartyScene().Word(Page + 0x16C, 0x9000);
+        var hooks = new FieldSubmenuHookSet(f, new(memory), session);
+        Prepare(hooks, errors); hooks.AfterHooksActivated();
+        Assert.Equal((byte)1, ((FormationSceneInitDelegate)f.Detours[HookId.FormationSceneInit])((nint)Scene));
+        Assert.True(session.HasContext);
+        Assert.Contains($"presented:{Scene}:Party:Unable to read the party selection.", calls);
+        Assert.Equal((nint)12345, ((FormationSceneDestructorDelegate)f.Detours[HookId.FormationSceneDestructor])((nint)Scene, 1));
+        Assert.False(session.HasContext);
+        Assert.Equal(["FormationSceneInit:4096", "presented:4096:Party:Unable to read the party selection.",
+            "exited:4096", "FormationSceneDestructor:4096,1"], calls);
+        Assert.Empty(errors.Messages);
+    }
+    [Fact] public void AnUnreadablePartySceneCannotCloseASubmenuThatReplacedItsFailureContext()
+    {
+        var calls = new List<string>(); var f = new Factory(calls); var errors = new Errors();
+        var session = PartySession(calls);
+        var hooks = new FieldSubmenuHookSet(f, new(StandalonePartyScene().Word(Page + 0x16C, 0x9000)), session);
+        Prepare(hooks, errors); hooks.AfterHooksActivated();
+        ((FormationSceneInitDelegate)f.Detours[HookId.FormationSceneInit])((nint)Scene);
+        session.Enter(OtherPage);
+        ((FormationSceneDestructorDelegate)f.Detours[HookId.FormationSceneDestructor])((nint)Scene, 1);
+        Assert.True(session.HasContext);
+        Assert.Equal(OtherPage, session.Node);
+        Assert.DoesNotContain($"exited:{OtherPage}", calls);
+        Assert.Empty(errors.Messages);
+    }
+    private const nuint Scene = 0x1000, Page = 0x5000, OtherPage = 0x6000;
+    private static FieldSubmenuSession PartySession(List<string> calls) => new(
+        node => node is Page or OtherPage ? new("Formation", "Party", $"formation:{node}", "Current party, 1 of 3. Crono") : null,
+        node => node is Page or OtherPage ? "Party" : null, _ => false, () => true,
+        value => calls.Add(value switch
+        {
+            ChronoTriggerAccessibility.Core.Menus.MenuContentPresented p => $"presented:{p.Owner.Instance}:{p.Title}:{p.Text}",
+            ChronoTriggerAccessibility.Core.Menus.MenuExited x => $"exited:{x.Owner?.Instance}",
+            _ => value.GetType().Name,
+        }), _ => { });
+    // 2A49A0 adds a backdrop and then the page built by 1BE850(0) to the FormationSteamScene (vtable 3B0A48).
+    private static ByteMemory StandalonePartyScene() => new ByteMemory()
+        .Word(0x1000, 0x400000 + 0x3B0A48).Word(0x1000 + 0x160, 0x3000).Word(0x1000 + 0x164, 0x3008)
+        .Word(0x3000, 0x2000).Word(0x3004, 0x5000)
+        .Word(0x2000, 0x400000 + 0x3A5D04).Word(0x2000 + 0x16C, 0x1000).Byte(0x2000 + 0x1AD, 1)
+        .Word(0x5000, 0x400000 + 0x3A3270).Word(0x5000 + 0x16C, 0x1000).Byte(0x5000 + 0x1AD, 1);
+    private sealed class ByteMemory : IReadableMemory
+    {
+        private readonly Dictionary<nuint, byte> bytes = [];
+        public ByteMemory Byte(nuint p, byte value) { bytes[p] = value; return this; }
+        public ByteMemory Word(nuint p, uint value)
+        {
+            for (var i = 0; i < 4; i++) bytes[p + (nuint)i] = (byte)(value >> (8 * i));
+            return this;
+        }
+        public bool TryRead(nuint p, Span<byte> b)
+        {
+            for (var i = 0; i < b.Length; i++)
+            {
+                if (!bytes.TryGetValue(p + (nuint)i, out var value)) return false;
+                b[i] = value;
+            }
+            return true;
+        }
     }
     [Fact] public void AFailedCloseCannotSkipNativeReplacementAndDisabledHooksKeepForwarding()
     {
@@ -93,6 +187,7 @@ public sealed class FieldSubmenuHookSetTests
     private sealed class Factory(List<string> calls) : IRuntimeNativeHookFactory
     {
         public Dictionary<HookId, Delegate> Detours { get; } = [];
+        public Dictionary<HookId, byte> ByteResults { get; } = [];
         public IHook<T> CreateHook<T>(HookId id, T detour, nuint address) where T : Delegate
         {
             Detours.Add(id, detour);
@@ -101,7 +196,9 @@ public sealed class FieldSubmenuHookSetTests
             var record = new Action<long[]>(v => calls.Add($"{id}:{string.Join(',', v)}"));
             Expression body = Expression.Invoke(Expression.Constant(record), Expression.NewArrayInit(typeof(long),
                 p.Select(x => Expression.Convert(x, typeof(long)))));
-            if (invoke.ReturnType == typeof(byte)) body = Expression.Block(body, Expression.Constant((byte)1));
+            if (invoke.ReturnType == typeof(byte))
+                body = Expression.Block(body, Expression.Constant(ByteResults.GetValueOrDefault(id, (byte)1)));
+            if (invoke.ReturnType == typeof(nint)) body = Expression.Block(body, Expression.Constant((nint)12345));
             return new Hook<T>(Expression.Lambda<T>(body, p).Compile());
         }
     }

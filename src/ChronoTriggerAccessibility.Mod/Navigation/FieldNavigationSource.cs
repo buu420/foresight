@@ -75,6 +75,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         // The live marker actors behind each Confirm landmark row, for merging equivalent markers.
         var markerAnchors = new Dictionary<string, FieldActorSnapshot[]>(StringComparer.Ordinal);
         var guideActive = field.SceneIdCoherent && GameNavigationCatalog.IsFieldScene(field.SceneId) && story is { Point: >= 3 };
+        FieldNavigationGraph? openedEndOfTimeDoor = null;
+        if (guideActive && field.SceneId == 464 &&
+            field.Actors.Any(a => a.Index == 25 && a.ClassTag == 7 && a.IsUsable &&
+                a.ScriptCallsEnabled && a.ScriptProcessingEnabled))
+        {
+            var copy = GameNavigationCatalog.ForScene(464)?.Actors.FirstOrDefault(a => a.Id == 25)?.Actions
+                .FirstOrDefault(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null && a.Available(story))?.Copy;
+            if (copy is not null && FieldTerrainGraph.Preview(map, copy) is { } opened)
+                openedEndOfTimeDoor = new(opened, collisions, touchGoals);
+        }
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
         var savePoints = FieldSavePoints.Find(field, story);
@@ -216,11 +226,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
             if (touch && actor.ScriptCallsEnabled) touchGoals.Add((actor.Index, approaches));
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
+            var bike = FutureAreaLabels.IsBike(field.SceneId, actor.Index);
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage($"landmark:{actor.Index}", actor);
-            Add($"landmark:{actor.Index}", label, scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
+            Add($"landmark:{actor.Index}", label, !bike && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
+                arrivalInstruction: bike ? "Press Confirm to interact with the jet bike." : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[$"landmark:{actor.Index}"] = Anchors(actor);
         }
@@ -290,33 +302,37 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 confirm: touch ? null : ActorConfirm([actor]));
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
-        foreach (var group in sceneInfo.Regions.Where(r => r.Available(story) &&
+        foreach (var group in sceneInfo.Regions.Where(r =>
+                     (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story)) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
-                         (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0)).GroupBy(r => r.Id))
+                         (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
+                         (!FutureAreaLabels.IsPillar(field.SceneId, r) || a.ClassTag == 7 && a.ScriptProcessingEnabled))).GroupBy(r => r.Id))
         {
             var region = group.First();
+            var pillar = FutureAreaLabels.IsPillar(field.SceneId, region);
             var goals = new List<NavigationPoint>();
             for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
             for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
                 goals.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
             var points = goals.OrderBy(Distance).Distinct().Take(64).ToArray();
             if (points.Length == 0) continue;
-            if (region.Kind == "Warp") scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
+            if (region.Kind == "Warp" && !pillar) scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
             // Encounters are the script's own battle triggers (native D8 under a
             // leader-coordinate guard), so they carry the trigger's location but no
             // party, name or reward. Offer the trigger and leave the fight to the
             // player; the guard that the script sets when it is over removes it.
             var (regionLabel, regionCategory) = region.Kind switch
             {
-                "Warp" => (GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
+                "Warp" => (pillar ? "Pillar of light" : GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
                 "Switch" => ("Floor trigger", NavigationCategory.Objects),
                 "Encounter" => ("Encounter", NavigationCategory.Enemies),
                 _ => ("Story event", NavigationCategory.Exits),
             };
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
-                storyOnly: region.Kind is not ("Warp" or "Encounter"), guideAvailable: true);
+                storyOnly: region.Kind is not ("Warp" or "Encounter"), guideAvailable: true,
+                arrivalInstruction: pillar ? FutureAreaLabels.PillarInstruction(story!) : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -677,7 +693,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // those pixel boundaries alongside the ordinary four-pixel lattice.
             foreach (var x in new[] { 0, 64, 112, 128, 192, 240 })
             foreach (var y in new[] { 0, 64, 112, 128, 192, 240 })
-                foreach (var point in At(p.X / 256 * 256 + x, p.Y / 256 * 256 + y)) yield return point;
+            {
+                var px = p.X / 256 * 256 + x; var py = p.Y / 256 * 256 + y;
+                foreach (var point in At(px, py)) yield return point;
+                // This doorway has no standing points until its native touch
+                // script opens the floor. Keep its exit goals so staged search
+                // can prove the contact and continuation. The live graph still
+                // controls every step and must be captured again after contact.
+                if (openedEndOfTimeDoor is not null && graph.ExitAt(px, py) == 0)
+                    for (var layer = 1; layer <= 3; layer++)
+                        if (openedEndOfTimeDoor.TryPosition(px, py, layer, out var point)) yield return point;
+            }
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,

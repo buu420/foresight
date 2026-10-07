@@ -20,7 +20,7 @@ public sealed class FieldSubmenuSession(
     private MenuOwner? owner;
     private FieldSubmenuSnapshot? last;
     private bool paused, failedSelection;
-    public bool HasContext => node != 0;
+    public bool HasContext => owner is not null;
     public nuint Node => node;
     public void Pause(nuint value) { if (node == value && node != 0) paused = true; }
 
@@ -33,12 +33,26 @@ public sealed class FieldSubmenuSession(
         owner = new("field-submenu", (ulong)value);
         Refresh();
     }
+    /// <summary>A verified native screen opened, but no readable page was found.
+    /// Keep its speech ownership until teardown without inventing a selection.</summary>
+    public void ReportUnavailable(nuint context, string menuTitle, string message)
+    {
+        Close();
+        if (context == 0) return;
+        owner = new("field-submenu", (ulong)context);
+        diagnostic($"Submenu page unavailable: context=0x{context:X}, title={menuTitle}.");
+        if (foreground()) publish(new MenuContentPresented(owner, menuTitle, message));
+    }
     public void Close(nuint value = 0)
     {
         if (value != 0 && node != value) return;
         var previousOwner = owner;
         node = 0; owner = null; last = null; paused = false; failedSelection = false; failureStarted = null;
         if (previousOwner is not null) publish(new MenuExited(previousOwner));
+    }
+    public void CloseContext(nuint context)
+    {
+        if (context != 0 && owner?.Instance == (ulong)context) Close();
     }
     public void Refresh(nuint value = 0)
     {

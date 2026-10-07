@@ -6,6 +6,25 @@ namespace ChronoTriggerAccessibility.Core.Tests.Navigation;
 public sealed class StagedNavigationTests
 {
     [Theory]
+    [InlineData(NavigationCommand.ToggleWalk)]
+    [InlineData(NavigationCommand.Guide)]
+    public void NativeTouchPassageContinuesMovementUntilFreshFloorOpens(NavigationCommand command)
+    {
+        var controller = new NavigationController();
+        var graph = new DoorGraph { NeedsTouch = true };
+        var frame = Frame(graph);
+        controller.Handle(command, frame, 0);
+        frame = frame with { Player = new(16, 0, 1) };
+        var touching = controller.Update(frame, 300);
+        Assert.Equal(command == NavigationCommand.ToggleWalk ? NavigationDirection.East : NavigationDirection.None, touching.Direction);
+        Assert.Contains(touching.Speech, s => s.Contains("right") && s.Contains("passage"));
+        Assert.True(touching.Guiding);
+        graph.Open = true;
+        Assert.True(controller.Update(frame, 800).Guiding);
+        Assert.False(controller.Update(frame with { Player = new(48, 0, 1) }, 900).Guiding);
+    }
+
+    [Theory]
     [InlineData(NavigationCommand.Guide)]
     [InlineData(NavigationCommand.ToggleWalk)]
     public void ReachingOpeningTriggerContinuesToDestinationOnlyAfterLiveFloorChanges(NavigationCommand command)
@@ -65,17 +84,21 @@ public sealed class StagedNavigationTests
     private static NavigationFrame Frame(INavigationGraph graph) => new("castle", true, new(0, 0, 1),
         [new("queen", "Queen's chamber", NavigationCategory.People, new(48, 0, 1), [new(48, 0, 1)], true, true)], graph);
 
-    [Fact]
-    public void ATriggerThatDoesNotOpenCannotBeClaimedAsTheDestination()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ATriggerThatDoesNotOpenStopsMovementWithoutClaimingArrival(bool nativeTouch)
     {
         var controller = new NavigationController();
         var frame = new NavigationFrame("castle", true, new(0, 0, 1),
-            [new("queen", "Queen's chamber", NavigationCategory.People, new(48, 0, 1), [new(48, 0, 1)], true, true)], new DoorGraph());
+            [new("queen", "Queen's chamber", NavigationCategory.People, new(48, 0, 1), [new(48, 0, 1)], true, true)], new DoorGraph { NeedsTouch = nativeTouch });
         controller.Handle(NavigationCommand.ToggleWalk, frame, 0);
         frame = frame with { Player = new(16, 0, 1) };
         controller.Update(frame, 300);
         var stopped = controller.Update(frame, 3400);
         Assert.False(stopped.Guiding);
+        Assert.False(stopped.AutoWalking);
+        Assert.Equal(NavigationDirection.None, stopped.Direction);
         Assert.Contains(stopped.Speech, s => s.Contains("passage did not open"));
         Assert.DoesNotContain(stopped.Speech, s => s.StartsWith("Arrived"));
     }
@@ -83,6 +106,7 @@ public sealed class StagedNavigationTests
     private sealed class DoorGraph : IStagedNavigationGraph
     {
         public bool Open { get; set; }
+        public bool NeedsTouch { get; set; }
         public int StageSearches { get; private set; }
         public IEnumerable<NavigationPoint> Neighbours(NavigationPoint p)
         {
@@ -92,7 +116,8 @@ public sealed class StagedNavigationTests
         public NavigationSearchResult FindStage(NavigationPoint start, IReadOnlyList<NavigationPoint> goals, int maximumVisited)
         {
             StageSearches++;
-            return new(Enumerable.Range(start.X / 4, (16 - start.X) / 4 + 1).Select(x => new NavigationPoint(x * 4, 0, 1)).ToArray(), false, "stairs");
+            return new(Enumerable.Range(start.X / 4, (16 - start.X) / 4 + 1).Select(x => new NavigationPoint(x * 4, 0, 1)).ToArray(), false, "stairs")
+            { IntermediateContact = NeedsTouch ? new(32, 0, 1) : null };
         }
     }
 }

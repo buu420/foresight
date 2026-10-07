@@ -179,6 +179,8 @@ public enum HookId
     ExtrasSoundIdle,
     GameKeyboardStateFilter,
     GameJoystickStateFilter,
+    FormationSceneInit,
+    FormationSceneDestructor,
 }
 
 public enum X86CallingConvention
@@ -195,6 +197,20 @@ public delegate void ShopSceneUpdateDelegate(nint scene, float deltaSeconds);
 
 [Function(CallingConventions.MicrosoftThiscall)]
 public delegate nint ShopSceneDestructorDelegate(nint scene, uint deletingFlags);
+
+// FormationSteamScene::init at RVA 0x2A49A0 (cocos2d::Layer::init override, vtable 0x3B0A48
+// slot 158). SceneManager::create(0x19) reaches it through 0x2A4910 when [0x81B4C4]+0x13FDC is
+// nonzero; NextScene action 8 pushes that scene for field request 5 (script C8 00). It builds one
+// ClassicMenuNodeFormation (0x1BE730, builder 0x1BE850(0)), stores the close std::function at
+// node+0x298 and addChilds the node to ECX, never to the field menu. Returns AL; RET.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate byte FormationSceneInitDelegate(nint scene);
+
+// FormationSteamScene deleting destructor, vtable slot 0 at RVA 0x2A4960. It reinstalls the class
+// vtable, clears [0x81B4C4]+0x10F84, runs cocos2d::Layer::~Layer, frees the 0x290-byte object
+// when bit 0 is set and returns the scene. RET 4.
+[Function(CallingConventions.MicrosoftThiscall)]
+public delegate nint FormationSceneDestructorDelegate(nint scene, uint deletingFlags);
 
 // SceneSpecialRace is a SpecialEventImpl, not a cocos Scene::update(float).
 // 2EC620 returns AL and takes only ECX; 2EC450 is its non-deleting destructor.

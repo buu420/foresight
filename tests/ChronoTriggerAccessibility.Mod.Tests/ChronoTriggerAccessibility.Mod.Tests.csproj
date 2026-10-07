@@ -20,6 +20,7 @@
     <EmbeddedResource Include="Navigation\cathedral-rear-live-0329.json" />
     <EmbeddedResource Include="Navigation\queen-chamber-map-0330.json" />
     <EmbeddedResource Include="Navigation\spekkio-initial-map-0332.json" />
+    <EmbeddedResource Include="Navigation\end-of-time-map-0345.json" />
     <EmbeddedResource Include="Navigation\prison-skywalk-live-0334.json" />
     <EmbeddedResource Include="Navigation\prison-save-point-live-0334.json" />
     <EmbeddedResource Include="Navigation\field-content-coverage-0335.json" />
