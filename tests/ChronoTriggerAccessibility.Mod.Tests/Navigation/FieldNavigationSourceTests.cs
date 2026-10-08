@@ -9,6 +9,55 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class FieldNavigationSourceTests
 {
     [Fact]
+    public void RepeatedExitNamesHaveStableDistinctLabelsAcrossMovementAndDisappearance()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var field = Field(Actor(1, 128, 128, party: true)) with { SceneId = 1023 };
+        var map = Map(); map.ExitCells[3] = 0; map.ExitCells[12] = 1;
+        var first = source.Build(field, map, new(0, 0, 1024, 1024), []);
+        var exits = first.Targets.Where(t => t.Category == NavigationCategory.Exits).OrderBy(t => t.Id).ToArray();
+        Assert.Equal(new[] { "Exit A", "Exit B" }, exits.Select(t => t.Label));
+        Assert.All(exits, t => Assert.NotEmpty(t.ApproachPoints));
+        var moved = field with { LeadPlayer = Actor(1, 640, 640, party: true) };
+        var second = source.Build(moved, map, new(512, 512, 1024, 1024), []);
+        Assert.All(exits, t => Assert.Equal(t.Label, Assert.Single(second.Targets, n => n.Id == t.Id).Label));
+        map.ExitCells[3] = 128;
+        Assert.Equal("Exit B", Assert.Single(source.Build(moved, map, new(0, 0, 1024, 1024), []).Targets).Label);
+        map.ExitCells[5] = 2;
+        var expanded = source.Build(moved, map, new(0, 0, 1024, 1024), []).Targets;
+        Assert.Equal("Exit B", Assert.Single(expanded, t => t.Id == "exit:1").Label);
+        Assert.Equal("Exit C", Assert.Single(expanded, t => t.Id == "exit:2").Label);
+    }
+
+    [Fact]
+    public void RepeatedNamedExitsRetainTheirDestinationAndGainDistinctSuffixes()
+    {
+        var field = Field(Actor(1, 128, 128, party: true));
+        var map = Map() with { ExitDestinations = new Dictionary<int, int> { [0] = 496, [1] = 496 } };
+        map.ExitCells[3] = 0; map.ExitCells[12] = 1;
+        var targets = new FieldNavigationSource(new NoMemory(), _ => { })
+            .Build(field, map, new(0, 0, 1024, 1024), []).Targets;
+        Assert.Equal(new[] { "Outside, exit A", "Outside, exit B" }, targets.OrderBy(t => t.Id).Select(t => t.Label));
+    }
+
+    [Fact]
+    public void ManyUnnamedExitsContinuePastZAndAliasesResetForANewVisit()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var field = Field(Actor(1, 128, 128, party: true)) with { SceneId = 1023 };
+        var map = Map(8);
+        for (var i = 0; i < 28; i++) map.ExitCells[i] = (byte)i;
+        var exits = source.Build(field, map, new(0, 0, 2048, 2048), []).Targets;
+        Assert.Equal(28, exits.Select(t => t.Label).Distinct().Count());
+        Assert.Contains(exits, t => t.Label == "Exit Z");
+        Assert.Contains(exits, t => t.Label == "Exit AA");
+        Assert.Contains(exits, t => t.Label == "Exit AB");
+        source.Reset();
+        Array.Fill(map.ExitCells, (byte)128); map.ExitCells[3] = 27;
+        Assert.Equal("Exit", Assert.Single(source.Build(field, map, new(0, 0, 2048, 2048), []).Targets).Label);
+    }
+
+    [Fact]
     public void ListsVisibleEligiblePeopleExitsAndChestsAndExcludesPartyAndHiddenActors()
     {
         var source = new FieldNavigationSource(new NoMemory(), _ => { });

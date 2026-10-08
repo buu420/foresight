@@ -77,6 +77,11 @@ public static class FutureAreaLabels
     public static bool PillarVisible(GameNavigationCatalog.Region region, FieldStoryState? state) =>
         state is not null && region.Available(state with { Point = Math.Max(77, state.Point) });
 
+    // Atel0283 actors15-23 refer to the same nine map lights on every visit.
+    // Their number stays fixed as later lights appear; the native Confirm
+    // prompt supplies destination information when the player asks for it.
+    public static string PillarLabel(GameNavigationCatalog.Region region) => $"Pillar of light {region.Actor - 14}";
+
     public static string PillarInstruction(FieldStoryState state) => state.Point < 77
         ? "Complete the old man's introduction and Spekkio's lesson to use the pillars."
         : "Stand in the light and press Confirm to read its destination.";

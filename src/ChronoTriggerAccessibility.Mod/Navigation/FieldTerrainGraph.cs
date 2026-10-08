@@ -23,7 +23,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null) =>
         actors.Any(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember && a.ScriptCallsEnabled &&
             scene.Actors.Any(m => m.Matches(a) && m.Actions.Any(c => c.Touch && c.Kind == "Terrain" &&
-                c.Copy is { } copy && c.Available(story) && HasChanges(map, copy))))
+                c.Copy is { } copy && ActionAvailable(scene.Id, a.Index, c, story) && HasChanges(map, copy))))
             ? new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals) : Wrap(map, terminals, collisions, touchGoals);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => live.Neighbours(point);
     public bool IsTerminal(NavigationPoint point) => live.IsTerminal(point);
@@ -36,7 +36,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         var candidates = actors.Where(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember && a.ScriptCallsEnabled &&
             a.FineX >= 0 && a.FineY >= 0 && a.TileX < map.Width && a.TileY < map.Height)
             .Select(a => (Actor: a, Actions: scene.Actors.FirstOrDefault(m => m.Matches(a))?.Actions
-                .Where(c => c.Touch && c.Kind == "Terrain" && c.Copy is not null && c.Available(story)).ToArray() ?? []))
+                .Where(c => c.Touch && c.Kind == "Terrain" && c.Copy is not null && ActionAvailable(scene.Id, a.Index, c, story)).ToArray() ?? []))
             .Where(c => c.Actions.Length != 0)
             .OrderBy(c => Math.Abs((long)c.Actor.FineX - start.X) + Math.Abs((long)c.Actor.FineY - start.Y)).Take(16);
         foreach (var (actor, actions) in candidates)
@@ -47,9 +47,16 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
             {
                 var preview = Preview(map, action.Copy!);
                 if (preview is null) continue;
-                var after = Wrap(preview, terminals, collisions, touchGoals);
                 var nativeTouch = scene.Id == 464 && actor.Index is 24 or 25;
-                foreach (var contact in Contacts(actor, start.Layer).Concat(nativeTouch ? EdgeContacts(actor, start.Layer) : []))
+                // The End of Time route from the pillar platform needs the stair
+                // contact before the door contact. Preview only the remaining
+                // audited contacts, removing the actor just previewed so this
+                // proof is finite. Movement still uses the first live leg only.
+                INavigationGraph after = nativeTouch
+                    ? new FieldTerrainGraph(preview, actors.Where(a => a.Index is 24 or 25 && a.Index != actor.Index).ToArray(),
+                        story, scene, terminals, collisions, touchGoals)
+                    : Wrap(preview, terminals, collisions, touchGoals);
+                foreach (var contact in Contacts(actor, start.Layer, scene.Id).Concat(nativeTouch ? EdgeContacts(actor, start.Layer) : []))
                 {
                     if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);
@@ -68,13 +75,22 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         return new(null, false);
     }
 
-    internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer)
+    internal static bool ActionAvailable(int scene, int actor, GameNavigationCatalog.Action action, FieldStoryState story) =>
+        action.Guards.All(guard => scene == 464 && actor == 25 && action.Touch && action.Kind == "Terrain" &&
+            guard is { Source: "Local", Index: 11, Operation: 0, Value: 0, Expected: true }
+                // Atel0283's main loop copies the lead's facing into local0B.
+                // The northward finish below enforces this native condition;
+                // facing elsewhere while planning does not lock the passage.
+                ? story.Local(11) is >= 0 and <= 3 : guard.Allows(story));
+
+    internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
         // 178980 tests the leading probe against +/-160 native units. Up's
         // probe is 112 above the foot; horizontal probes are 64 above it.
         yield return new(x, y + 128, layer);
+        if (scene == 464 && actor.Index == 25) yield break; // Native door requires facing up.
         yield return new(x, y - 64, layer);
         yield return new(x - 128, y + 64, layer);
         yield return new(x + 128, y + 64, layer);
@@ -89,6 +105,11 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // toward the live marker until its script opens the captured terrain.
         var x = (actor.FineX - actor.CollisionOffsetX * 16 + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
+        if (actor.Index == 25)
+        {
+            yield return new(x, y + 256, layer);
+            yield break;
+        }
         yield return new(x - 256, y - 64, layer);
         yield return new(x + 256, y - 64, layer);
         yield return new(x, y + 256, layer);

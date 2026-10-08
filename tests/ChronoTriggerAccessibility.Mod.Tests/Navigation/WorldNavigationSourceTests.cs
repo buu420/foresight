@@ -9,6 +9,41 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class WorldNavigationSourceTests
 {
     [Fact]
+    public void SameNamedWorldEntrancesRemainDistinguishableWhenNativeRecordOrderChanges()
+    {
+        var one = Entrance(6, 25, 19, 6, 12, 400, 304);
+        var two = Entrance(7, 26, 19, 6, 14, 416, 304);
+        var source = Source();
+        var first = source.Build(Snapshot([one, two]), Label).Targets;
+        Assert.Equal(new[] { "Truce Inn, exit A", "Truce Inn, exit B" }, first.OrderBy(t => t.Id).Select(t => t.Label));
+        var second = source.Build(Snapshot([two, one]), Label).Targets;
+        Assert.All(first, t => Assert.Equal(t.Label, Assert.Single(second, n => n.Id == t.Id).Label));
+    }
+
+    [Fact]
+    public void SameNamedFlightDestinationsKeepTheirAliasesAndLandingRoutes()
+    {
+        var one = Entrance(6, 25, 19, 6, 12, 400, 304);
+        var two = Entrance(7, 26, 19, 6, 14, 416, 304);
+        var world = Snapshot([one, two]) with
+        {
+            Vehicle = new(1, 2, 3, 4, 0, VehicleKind.Epoch, 0xC70, 3, 600, 200, 0xE0),
+            Vehicles = new(true, 600, 200, true, false, 0, 0, 2, 1, false, false),
+        };
+        var source = Source();
+        var first = source.BuildFlight(world, Label);
+        Assert.Equal(new[] { "Truce Inn, exit A", "Truce Inn, exit B" }, first.Targets.OrderBy(t => t.Id).Select(t => t.Label));
+        var second = source.BuildFlight(world with { Entrances = [two, one] }, Label);
+        Assert.All(first.Targets, t =>
+        {
+            var current = Assert.Single(second.Targets, n => n.Id == t.Id);
+            Assert.Equal(t.Label, current.Label);
+            Assert.Equal(t.ApproachPoints, current.ApproachPoints);
+            Assert.NotNull(NavigationPathfinder.Find(second.Graph, second.Player, current.ApproachPoints));
+        });
+    }
+
+    [Fact]
     public void OnlyVisibleOrDiscoveredEnabledEntrancesBecomeTargets()
     {
         var source = Source();

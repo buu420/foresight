@@ -10,12 +10,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
     private readonly FullStoryTargets fullStory = new();
+    private readonly NavigationExitLabels exitLabels = new();
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
     private bool storyUnavailable;
 
-    public void Reset() { discovered.Clear(); guideGeometry.Clear(); scene = null; lastInventory = null; }
+    public void Reset() { discovered.Clear(); guideGeometry.Clear(); exitLabels.Reset(); scene = null; lastInventory = null; }
 
     public NavigationFrame? Capture(nint engine)
     {
@@ -81,7 +82,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 a.ScriptCallsEnabled && a.ScriptProcessingEnabled))
         {
             var copy = GameNavigationCatalog.ForScene(464)?.Actors.FirstOrDefault(a => a.Id == 25)?.Actions
-                .FirstOrDefault(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null && a.Available(story))?.Copy;
+                .FirstOrDefault(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null && FieldTerrainGraph.ActionAvailable(464, 25, a, story!))?.Copy;
             if (copy is not null && FieldTerrainGraph.Preview(map, copy) is { } opened)
                 openedEndOfTimeDoor = new(opened, collisions, touchGoals);
         }
@@ -202,7 +203,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (knownTouch && label is null) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
-                ? metadata.Actions.Where(a => a.Available(story)).ToArray() : [];
+                ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
             var generic = label is null;
@@ -221,7 +222,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var terrainContact = (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
             if (terrainContact)
-                approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer)
+                approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer, field.SceneId)
                     .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
             approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
             if (touch && actor.ScriptCallsEnabled) touchGoals.Add((actor.Index, approaches));
@@ -324,7 +325,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // player; the guard that the script sets when it is over removes it.
             var (regionLabel, regionCategory) = region.Kind switch
             {
-                "Warp" => (pillar ? "Pillar of light" : GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
+                "Warp" => (pillar ? FutureAreaLabels.PillarLabel(region) : GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
                 "Switch" => ("Floor trigger", NavigationCategory.Objects),
                 "Encounter" => ("Encounter", NavigationCategory.Enemies),
                 _ => ("Story event", NavigationCategory.Exits),
@@ -444,6 +445,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 targets.AddRange(FutureStoryTargets.Build(field.SceneId, story, available, player));
             targets.AddRange(fullStory.Build(field.SceneId, story, available, player, fieldDestinations: map.ExitDestinations));
         }
+        exitLabels.Apply(targets);
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,

@@ -10,6 +10,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private readonly WorldRegionIndex regions = new();
     private readonly FullStoryTargets fullStory = new();
+    private readonly NavigationExitLabels exitLabels = new();
     private readonly VehicleStoryRouting vehicleRouting = new();
     private readonly VehicleFlightRegions flightRegions = new();
     private nuint imageBase;
@@ -17,7 +18,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
     public string MotionStage { get; private set; } = "not sampled";
     public string FlightStage { get; private set; } = "not sampled";
     public void BindImageBase(nuint value) => imageBase = value;
-    public void Reset() { discovered.Clear(); scene = null; lastInventory = null; lastFlightInventory = null; }
+    public void Reset() { discovered.Clear(); exitLabels.Reset(); scene = null; lastInventory = null; lastFlightInventory = null; }
     public FootstepFrame? CaptureMotion(nint context)
     {
         var motion = WorldNavigationCapture.Motion(memory, imageBase, (nuint)context, out var stage);
@@ -131,6 +132,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         }
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
+        exitLabels.Apply(targets);
         return new(identity, true, player, targets.AsReadOnly(), graph, NavigationUnits.WorldStep)
         { AreaName = string.IsNullOrWhiteSpace(era) ? "World map" : $"World map, {era}" };
 
@@ -327,6 +329,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
         var ride = kind == VehicleKind.Epoch ? "flying the Epoch" : "riding the Dactyls";
+        exitLabels.Apply(targets);
         return new(identity, true, player, targets.AsReadOnly(), graph, NavigationUnits.WorldStep)
         { AreaName = string.IsNullOrWhiteSpace(era) ? $"World map, {ride}" : $"World map, {era}, {ride}" };
     }
