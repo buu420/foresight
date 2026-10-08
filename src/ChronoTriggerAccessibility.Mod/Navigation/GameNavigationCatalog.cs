@@ -86,7 +86,7 @@ public static class GameNavigationCatalog
     public static IEnumerable<World> Worlds => catalog.Worlds;
     public static Scene? ForScene(int scene) => scenes.GetValueOrDefault(scene);
     public static bool IsFieldScene(int scene) => scene > 0 && scene is not (>= 496 and <= 511) && scenes.ContainsKey(scene);
-    public static string? AreaName(int scene) => ForScene(scene)?.Name;
+    public static string? AreaName(int scene) => scene == 464 ? "End of Time, Main Room" : ForScene(scene)?.Name;
     public static Actor? ActorInfo(int scene, FieldActorSnapshot actor) => ForScene(scene)?.Actors.FirstOrDefault(a => a.Matches(actor));
     public static string? ExitLabel(int scene, int exit)
     {

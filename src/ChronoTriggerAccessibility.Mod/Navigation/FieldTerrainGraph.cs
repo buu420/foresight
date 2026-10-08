@@ -66,7 +66,8 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                         return approach with
                         {
                             IntermediateId = $"landmark:{actor.Index}",
-                            IntermediateContact = nativeTouch
+                            IntermediateContact = CanContinueContact(scene.Id, actor.Index,
+                                scene.Actors.First(a => a.Matches(actor)).Actions)
                                 ? new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY, start.Layer) : null,
                         };
                 }
@@ -76,17 +77,36 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
     }
 
     internal static bool ActionAvailable(int scene, int actor, GameNavigationCatalog.Action action, FieldStoryState story) =>
-        action.Guards.All(guard => scene == 464 && actor == 25 && action.Touch && action.Kind == "Terrain" &&
-            guard is { Source: "Local", Index: 11, Operation: 0, Value: 0, Expected: true }
-                // Atel0283's main loop copies the lead's facing into local0B.
-                // The northward finish below enforces this native condition;
-                // facing elsewhere while planning does not lock the passage.
-                ? story.Local(11) is >= 0 and <= 3 : guard.Allows(story));
+        action.Guards.All(guard => FacingGuard(scene, actor) is { } facing && action.Touch && action.Kind == "Terrain" &&
+            guard is { Source: "Local", Operation: 0, Expected: true } && guard.Index == facing.Local && guard.Value == facing.Value
+                // These exact locals are written from the lead's facing every
+                // loop by opcode24. Contacts enforce their direction at the
+                // finish; facing elsewhere does not lock the passage.
+                ? story.Local(facing.Local) is >= 0 and <= 3 : guard.Allows(story));
+
+    private static (int Local, int Value)? FacingGuard(int scene, int actor) => (scene, actor) switch
+    {
+        (464, 25) => (11, 0), // Atel0283: up.
+        (465, 15 or 16) => (38, 1), // Atel0284: down.
+        _ => null,
+    };
+
+    internal static bool CanContinueContact(int scene, int actor, IReadOnlyList<GameNavigationCatalog.Action> actions) =>
+        // The stairs and lesson marker have separately audited native effects.
+        // Other terrain triggers can also start cutscenes: preserve their old
+        // wait rather than introduce a push into an unaudited interaction.
+        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) ||
+        actions.Any(a => a.Touch && a.Kind == "Terrain") && actions.Where(a => a.Touch).All(a => a.Kind == "Terrain");
 
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
+        if (FacingGuard(scene, actor.Index) is { Value: 1 })
+        {
+            yield return new(x, y - 64, layer);
+            yield break;
+        }
         // 178980 tests the leading probe against +/-160 native units. Up's
         // probe is 112 above the foot; horizontal probes are 64 above it.
         yield return new(x, y + 128, layer);

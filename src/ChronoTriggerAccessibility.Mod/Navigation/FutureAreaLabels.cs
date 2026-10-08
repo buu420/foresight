@@ -38,6 +38,7 @@ public static class FutureAreaLabels
         if (!actor.IsUsable || actor.ClassTag != 7 || actor.IsPartyMember || !actor.ScriptCallsEnabled) return null;
         // Native Confirm markers for the bike remain available on later visits.
         if (IsBike(scene, actor.Index)) return "Jet bike";
+        if (scene == 465 && actor.Index == 15) return "Door to the main room";
         if (state is not { Point: >= 51 and <= 77 }) return null;
         return (scene, actor.Index, state.Point) switch
         {

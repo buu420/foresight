@@ -200,10 +200,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
                 FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
-            if (knownTouch && label is null) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
+            if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
             var generic = label is null;
@@ -222,8 +222,20 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var terrainContact = (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
             if (terrainContact)
+            {
+                // A door marker can lie beyond its own closed floor. Publish
+                // goals on its guarded native copy as well as the live floor;
+                // the staged graph must still reach an opening contact on the
+                // live map before any movement through that door is possible.
+                var opened = scripted.Where(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null &&
+                        FieldTerrainGraph.CanContinueContact(field.SceneId, actor.Index, metadata!.Actions))
+                    .Select(a => FieldTerrainGraph.Preview(map, a.Copy!)).OfType<FieldMapSnapshot>()
+                    .Select(m => new FieldNavigationGraph(m, collisions, touchGoals)).ToArray();
                 approaches = FieldTerrainGraph.Contacts(actor, map.PlayerLayer, field.SceneId)
-                    .Where(p => graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p && !graph.IsTerminal(p)).ToArray();
+                    .Where(p => !graph.IsTerminal(p) &&
+                        (graph.TryPosition(p.X, p.Y, p.Layer, out var at) && at == p ||
+                         opened.Any(g => g.TryPosition(p.X, p.Y, p.Layer, out var goal) && goal == p))).ToArray();
+            }
             approaches = InteractionPositions(approaches, metadata?.Actions ?? [], touch);
             if (touch && actor.ScriptCallsEnabled) touchGoals.Add((actor.Index, approaches));
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
@@ -233,7 +245,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add($"landmark:{actor.Index}", label, !bike && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                arrivalInstruction: bike ? "Press Confirm to interact with the jet bike." : null,
+                arrivalInstruction: bike ? "Press Confirm to interact with the jet bike." :
+                    field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[$"landmark:{actor.Index}"] = Anchors(actor);
         }
@@ -455,7 +468,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     map, GameNavigationCatalog.ForScene(field.SceneId))
                 : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
             {
-                AreaName = areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
+                AreaName = field.SceneId == 464 ? GameNavigationCatalog.AreaName(field.SceneId)
+                    : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
                 MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height

@@ -1,6 +1,6 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.46 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
+**Foresight 0.3.47 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
@@ -90,6 +90,8 @@ Tones stop during pause, loss of game focus, and race exit. Capture failures are
 ## Navigation
 
 At the End of Time, **Exits → Pillar of light 1–9** distinguishes the lights currently drawn on the platform. Each light keeps its number as more appear. Complete the old man's introduction and Spekkio's lesson before using them; afterwards, press Confirm in the light to hear the game's destination prompt. Routes can approach the touch triggers that open the platform stairs and the room behind the old man, then continue after the game opens the floor. The door approach finishes by moving up, even if you started facing another direction. These changes still need live testing. See [End of Time navigation evidence](docs/end-of-time-navigation-0346.md).
+
+The hub is announced as **End of Time, Main Room**. In Spekkio's room, **Objects → Door to the main room** identifies the return doorway; **Exits → End of Time platform** routes through it. The return door opens by moving down into it. Verified automatic tile-copy passages use a reachable opening contact and continue only after the game supplies opened floor. Doors requiring a key, switch, story event or Confirm retain those requirements. These changes need live testing. See [closed-door navigation evidence](docs/closed-door-navigation-0347.md).
 
 Repeated exit names receive letter suffixes, such as **Exit A**, **Exit B**, or **Outside, exit A**, in field, world-map and flight navigation. Once assigned, a suffix stays with that target for the current area and navigation mode. A name can gain its first suffix when another exit with that name becomes available.
 
