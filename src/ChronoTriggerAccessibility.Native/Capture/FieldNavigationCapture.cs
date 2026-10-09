@@ -46,6 +46,9 @@ public sealed record FieldActorSnapshot(
     public int? ScriptPriority { get; init; } = 7;
     /// <summary>Current script PC at actor+48 (161560 / 164D10). Optional when unreadable.</summary>
     public int? ScriptAddress { get; init; }
+    /// <summary>Opcode at ScriptData+12001+ScriptAddress. B0 runs native party
+    /// following for classes 1 and 2; null when the current instruction is unreadable.</summary>
+    public int? CurrentScriptOpcode { get; init; }
     /// <summary>Actor+30 bit80 alone: opcode 0B sets it and 0C clears it (stubs 161C0B /
     /// 161C61), and the script runner stops the actor's own loop while it is set. Unlike
     /// <see cref="ScriptCallsEnabled"/> it ignores +E8 (opcodes 08/09), which blocks only
@@ -421,7 +424,7 @@ public static class FieldNavigationCapture
         }
 
         // 0x176119/0x176121/0x176129 compare against all three slots, so read them all:
-        // every party member must be excluded from the target list, not just the lead.
+        // retain membership separately from the player's Confirm eligibility.
         var partySlots = new int[PartySlotCount];
         var lastPartySlotRaw = 0x80;
         for (var slot = 0; slot < PartySlotCount; slot++)
@@ -457,6 +460,9 @@ public static class FieldNavigationCapture
                 return false;
             }
 
+            if (actor.ScriptAddress is int pc && Byte(memory,
+                    scriptData + ScriptObjectCountOffset + 1u + (nuint)pc, out var opcode))
+                actor = actor with { CurrentScriptOpcode = opcode };
             actors[index] = actor;
         }
 

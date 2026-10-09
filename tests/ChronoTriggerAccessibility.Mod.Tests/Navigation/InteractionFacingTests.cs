@@ -249,7 +249,7 @@ public sealed class InteractionFacingTests
         // The next capture sees the byte set (the target is now drawn on camera): ready.
         var live = Open(Npc(8, 1152, 1152) with { ActivationBinding = 0x80 });
         var ready = controller.Update(live with { Player = goal, PlayerFacing = facing }, 150);
-        Assert.Contains("Arrived at Person.", ready.Speech);
+        Assert.Contains($"Arrived at {target.Label}.", ready.Speech);
 
         // Walking gives up honestly if the gate never opens.
         controller = new NavigationController();

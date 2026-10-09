@@ -5,19 +5,20 @@ using ChronoTriggerAccessibility.Native.Memory;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 public sealed class FieldNavigationSource(IReadableMemory memory, Action<string> diagnostic,
-    Func<int, string?>? areaName = null)
+    Func<int, string?>? areaName = null, Func<int, string?>? characterName = null)
 {
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
     private readonly FullStoryTargets fullStory = new();
     private readonly NavigationExitLabels exitLabels = new();
+    private readonly NavigationPeopleLabels peopleLabels = new();
     private readonly FieldLevelCrossings levelCrossings = new();
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
     private bool storyUnavailable;
 
-    public void Reset() { discovered.Clear(); guideGeometry.Clear(); exitLabels.Reset(); scene = null; lastInventory = null; }
+    public void Reset() { discovered.Clear(); guideGeometry.Clear(); exitLabels.Reset(); peopleLabels.Reset(); scene = null; lastInventory = null; }
 
     public NavigationFrame? Capture(nint engine)
     {
@@ -93,7 +94,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var savePointActors = savePoints.SelectMany(s => s.Actors).ToHashSet();
         foreach (var actor in field.Actors)
         {
-            if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown || actor.IsPartyMember || actor.Index == 0 ||
+            if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown ||
+                actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             var description = FieldVisualLabels.Describe(actor);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
@@ -112,7 +114,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 !(field.SceneIdCoherent && EarlyStoryTargets.IsScriptedPickupAvailable(field.SceneId, story, actor)))) continue;
             var position = Position(actor.FineX, actor.FineY);
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
-            var label = field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
+            var currentName = actor.IsPlayerClass && actor.VisualIndex is >= 0 and < 7
+                ? characterName?.Invoke(actor.VisualIndex) : null;
+            var label = !string.IsNullOrWhiteSpace(currentName) ? currentName :
+                field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 (IsCathedralOrgan(actor) ? "Organ" : null) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
@@ -460,6 +465,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             targets.AddRange(fullStory.Build(field.SceneId, story, available, player, fieldDestinations: map.ExitDestinations));
         }
         exitLabels.Apply(targets);
+        peopleLabels.Apply(targets, genericIds);
         var transitions = guideActive ? FieldTransitions.Find(field, map, story) : [];
         if (guideActive)
             targets.AddRange(levelCrossings.Find(field.SceneId, map).Select(t => t with
@@ -516,7 +522,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             diagnostic("Navigation actor facts: " + string.Join(" | ", field.Actors.Take(32).Select(a =>
                 $"id={a.Index},class=0x{a.ClassTag:X},visual=0x{a.VisualIndex:X},draw=0x{a.DrawMode:X}," +
                 $"loaded={a.LoadedFlag},usable={a.IsUsable},party={a.IsPartyMember}," +
-                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},scriptCalls={a.ScriptCallsEnabled},collisionOffsetX={a.CollisionOffsetX},pos=({a.FineX},{a.FineY})")) + ".");
+                $"flag152={a.ActivationEnabled},field20={a.ActivationBinding},scriptCalls={a.ScriptCallsEnabled}," +
+                $"scriptPc={a.ScriptAddress?.ToString("X4") ?? "?"},opcode={a.CurrentScriptOpcode?.ToString("X2") ?? "?"}," +
+                $"collisionOffsetX={a.CollisionOffsetX},pos=({a.FineX},{a.FineY})")) + ".");
         }
 
         // Scripts park retired actors at tile FF,FF without necessarily clearing
@@ -548,7 +556,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         /// to run. A generated stand-in may be an interaction marker, which is never drawn.</summary>
         IReadOnlyList<(FieldActorSnapshot Actor, bool SameDestination)> InteractionProxies(FieldActorSnapshot actor)
         {
-            if (!field.SceneIdCoherent || !actor.IsUsable || !actor.IsDrawn || !InsideMap(actor) || actor.IsPartyMember ||
+            if (!field.SceneIdCoherent || !actor.IsUsable || !actor.IsDrawn || !InsideMap(actor) ||
+                actor.IsPartyMember && !PartyTalk(actor) ||
                 !actor.ScriptCallsEnabled || GameNavigationCatalog.ActorInfo(field.SceneId, actor) is null) return [];
             var bindings = FieldContentFacts.StandInsFor(field.SceneId, actor.Index, story).Select(s => (s.Actor, s.SameDestination, AllowMarker: true));
             if (FieldActorProxies.ProxyFor(field.SceneId, actor.Index) is { } audited) bindings = bindings.Append((audited, true, false));
@@ -560,6 +569,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     result.Add((proxy, same));
             return result;
         }
+        // 1760B0's activation list excludes the party, but Confirm's 17D230
+        // scan skips only the leader. A loaded companion with its own native
+        // Confirm dialogue (such as the Ioka feast) is a person to speak with.
+        // Calls can be disabled temporarily during idle animations; that gates
+        // Confirm readiness, not the visible companion's People entry.
+        bool PartyTalk(FieldActorSnapshot actor) => field.SceneIdCoherent && actor.IsPlayerClass &&
+            actor.VisualIndex is >= 0 and < 7 && (actor.LoadedFlag & 1) != 0 && actor.ScriptProcessingEnabled &&
+            actor.Index != field.LeadPlayerActorIndex && actor.CurrentScriptOpcode is >= 0 and not 0xB0 &&
+            GameNavigationCatalog.ActorInfo(field.SceneId, actor)?.Actions.Any(a =>
+                !a.Touch && a.Kind == "Talk" && a.Available(story)) == true;
         /// <summary>One step away may be on the inaccessible side of a counter.
         /// Add in-range standing positions for actors; chests keep their separate rule.</summary>
         IReadOnlyList<NavigationPoint> InteractionPositions(IReadOnlyList<NavigationPoint> points,
@@ -838,10 +857,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
 
         /// <summary>A route goal for a confirmed actor: some facing reaches one of its anchors
         /// from the whole arrival box (inward, carry-independent bounds), and no other eligible,
-        /// non-party actor the scan tests first could be accepted from any point of that box with
+        /// actor the scan tests first could be accepted from any point of that box with
         /// the same facing (outward, exact carry-aware bounds). Planning assumes the target's own
         /// scan gate, a camera-cull state, will be on once the player is there; arrival does not.
-        /// Party followers move with the leader, so they are judged live at arrival.</summary>
+        /// Every scanned actor can win, including busy companions and followers;
+        /// their positions and dispatch gates are checked again live at arrival.</summary>
         bool ConfirmGoal(NavigationPoint goal, FieldActorSnapshot[] anchors)
         {
             const int tolerance = NavigationUnits.LocalStep / 8;
@@ -849,7 +869,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             foreach (var anchor in anchors)
             foreach (var facing in FieldInteractionRange.FacingsWithin(goal.X, goal.Y, anchor.FineX, anchor.FineY,
                          anchor.CollisionOffsetX, tolerance))
-                if (!field.Actors.Any(other => anchors.All(a => a.Index != other.Index) && !other.IsPartyMember &&
+                if (!field.Actors.Any(other => anchors.All(a => a.Index != other.Index) &&
                         other.Index > anchor.Index && FieldInteractionRange.ConfirmScanned(other, leader) &&
                         FieldInteractionRange.MayReach(goal.X, goal.Y, other, leader, tolerance, facing)))
                     return true;

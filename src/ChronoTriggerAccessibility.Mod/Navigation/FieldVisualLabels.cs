@@ -26,7 +26,7 @@ public static class FieldVisualLabels
         if (type is < 0 or > 4 || visual is < 0 or > 262) return ("Interactable", NavigationCategory.Objects);
         if (visual is 66 or 182 or 183 or 184 or 197) return ("Cat", NavigationCategory.People);
         if (visual is 63 or 75 or 84 or 103 or 133 or 165 or 171 or 191 or 217) return ("Creature", NavigationCategory.People);
-        if (!Objects.Contains(visual)) return ("Person", NavigationCategory.People);
+        if (!Objects.Contains(visual)) return (PersonAppearance(visual), NavigationCategory.People);
         var label = visual switch
         {
             99 or 166 => "Door", 100 => "Gravestone", 101 or 157 or 161 => "Opening",
@@ -38,4 +38,56 @@ public static class FieldVisualLabels
         };
         return (label, NavigationCategory.Objects);
     }
+
+    // Reviewed PC texture sheets c007..c090. Hair, clothing and visible
+    // equipment only: no character identities or inferred occupations.
+    private static string PersonAppearance(int visual) => visual switch
+    {
+        7 or 68 => "Person with a wide-brimmed hat",
+        8 or 62 => "Person in a red robe",
+        10 => "Blond person in a light-blue dress",
+        11 => "Person with a purple hat and red cloak",
+        13 => "Blond person in blue",
+        14 => "Person with a white beard and green robe",
+        15 => "Person in a brown cloak",
+        16 or 17 => "Person in purple with a blue headdress",
+        18 => "Person with a white beard and red robe",
+        19 or 41 or 42 => "Figure in blue and gold armor",
+        20 or 44 => "Green-haired person in blue",
+        21 => "Red-haired person in blue",
+        22 => "Blond person in blue",
+        23 => "Brown-haired person in blue",
+        24 => "Blond person in orange",
+        25 => "Green-haired person in blue",
+        26 or 53 => "Green-haired child in orange",
+        27 or 54 => "Child in a green cap",
+        28 => "Long-haired person in a blue cap",
+        29 or 56 => "Person in a blue cap and green vest",
+        30 or 57 => "White-haired person in blue",
+        31 => "Person in an orange hooded cloak",
+        32 or 59 => "Brown-haired person in a green shirt",
+        33 or 34 or 35 or 36 or 72 or 73 or 74 => "Person in a brown hooded robe",
+        37 => "Short-haired person in green",
+        38 => "Long-haired person in green",
+        39 => "Person in a purple hat and green tunic",
+        40 => "Person in a purple hood and green tunic",
+        43 or 65 => "Person in a purple cap and gray vest",
+        45 => "Child in a purple cap",
+        46 => "Brown-haired person in a green shirt",
+        48 or 49 or 52 => "Person with a blue scarf",
+        51 => "Person with a green hood and blue scarf",
+        58 => "Person in a gray hood and orange cloak",
+        60 => "Person in a purple hooded cloak",
+        69 => "Short-haired person in gray",
+        70 => "Long-haired person in gray",
+        71 => "Person in a purple hat and gray tunic",
+        76 => "Blond person in a green dress",
+        77 => "Person in a tan hat and blue scarf",
+        80 => "Blond person in gray",
+        81 => "Figure in blue armor and an orange cape",
+        82 => "Figure in gray armor and a red cape",
+        86 or 87 => "Red-haired person in green",
+        89 or 90 => "Person with a green hood and blue scarf",
+        _ => "Person",
+    };
 }

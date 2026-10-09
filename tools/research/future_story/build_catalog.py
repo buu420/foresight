@@ -58,6 +58,13 @@ def build(game):
             touch = walk(code, [functions[2]])
             loads = sorted({(op-0x7e, int.from_bytes(a[:2] if op==0x83 else a[:1], 'little'))
                             for op,a in init.values() if op in (0x81,0x82,0x83)})
+            npc_loads = loads
+            # 80 loads a named playable character, assigning its current
+            # party-slot class (0..2), or 3 when outside the active party. Keep
+            # only verified Confirm dialogue below; ordinary followers still
+            # have no selectable interaction.
+            party_loads = {(c, a[0]) for op,a in init.values() if op == 0x80 and a[0] < 7 for c in range(4)}
+            loads = sorted(set(loads) | party_loads)
             # Party loads are never generic invisible scenery markers.
             has_load = any(op in (0x57,0x5c,0x62,0x68,0x6a,0x6c,0x6d,0x80,0x81,0x82,0x83) for op,a in init.values())
             positioned = any(op in (0x8b,0x8d) for op,a in init.values())
@@ -82,6 +89,10 @@ def build(game):
             for action in audited_bonus_actions(scene, actor):
                 if action not in actions:
                     actions.append(action)
+            if party_loads and not any(a['Kind'] == 'Talk' and not a['Touch'] for a in actions):
+                loads = npc_loads
+                if not loads:
+                    continue
             # Some scenery handlers delegate the interaction to another script
             # function. Follow the audited calls before classifying the marker.
             talk_action |= any(not a['Touch'] for a in actions)

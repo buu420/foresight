@@ -8,6 +8,20 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
     private nuint fieldManager;
     private int fieldBank = -1;
 
+    /// <summary>The saved name used by native 14830 substitutions, indexed by
+    /// character identity, never by a field actor's current party slot.</summary>
+    public string? CharacterName(nuint imageBase, int character)
+    {
+        try
+        {
+            if (imageBase == 0 || character is < 0 or > 6 || !Word(imageBase + 0x41B4C4u, out var actors) ||
+                !new MsvcStringReader(memory).TryReadName(actors + 0x1908u + (nuint)(character * 24), out var name, out _) ||
+                string.IsNullOrWhiteSpace(name) || !Word(imageBase + 0x41B4C4u, out var again) || again != actors) return null;
+            return name;
+        }
+        catch { return null; }
+    }
+
     /// <summary>294550 requests file 46 hex, then substitutes saved character names
     /// via 14830. Read the same loaded text and names without invoking game code.</summary>
     public string? WorldName(nuint imageBase, int index)
@@ -21,8 +35,8 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
                 ("<NAME_MAG>", 6), ("<NAME_AYL>", 5) })
             {
                 if (!text.Contains(token, StringComparison.Ordinal)) continue;
-                if (!Word(imageBase + 0x41B4C4u, out var actors) ||
-                    !new MsvcStringReader(memory).TryReadName(actors + 0x1908u + (nuint)(character * 24), out var name, out _)) return null;
+                var name = CharacterName(imageBase, character);
+                if (name is null) return null;
                 text = text.Replace(token, name, StringComparison.Ordinal);
             }
             return text.Contains('<') || text.Contains('>') ? null : text.Trim();

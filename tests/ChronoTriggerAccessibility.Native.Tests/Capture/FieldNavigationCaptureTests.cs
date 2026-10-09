@@ -25,6 +25,21 @@ public sealed class FieldNavigationCaptureTests
     private const int SceneId = 0x2A;
     private const nuint Actors = ActorBase + FieldNavigationCapture.ActorArrayOffset;
 
+    [Theory]
+    [InlineData(0xB0)]
+    [InlineData(0x12)]
+    [InlineData(0)]
+    public void CapturesTheCurrentOpcodeFromTheNativePcRatherThanTheFollowingByte(int opcode)
+    {
+        var memory = CreateValidMemory().AddInt32(Actors + 0x48u, 0x100)
+            .AddByte(ScriptData + 0x12101u, (byte)opcode).AddByte(ScriptData + 0x12102u, 0xB0);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out var snapshot, out var error), error);
+        Assert.Equal(opcode, snapshot.Actors[0].CurrentScriptOpcode);
+        memory.Remove(ScriptData + 0x12101u);
+        Assert.True(FieldNavigationCapture.TryCapture(memory, Engine, out snapshot, out error), error);
+        Assert.Null(snapshot.Actors[0].CurrentScriptOpcode);
+    }
+
     [Fact]
     public void ConstantsMatchTheAuditedNativeLayout()
     {

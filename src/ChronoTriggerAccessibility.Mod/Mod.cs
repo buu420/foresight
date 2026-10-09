@@ -164,7 +164,7 @@ public sealed class Mod : ModBase
         {
             var name = navigationText.FieldName(navigationImageBase, scene);
             return string.IsNullOrWhiteSpace(name) || name.StartsWith('(') ? "Local area" : name;
-        });
+        }, character => navigationText.CharacterName(navigationImageBase, character));
         NavigationFrame? Field(nint engine) => areas.Observe(navigationSource.Capture(engine));
         NavigationFrame? World(nint context) => areas.Observe(worldSource.Capture(context));
         NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));

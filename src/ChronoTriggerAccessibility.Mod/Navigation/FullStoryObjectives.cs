@@ -146,7 +146,7 @@ public static class FullStoryObjectives
             [Pillar(PillarPrehistory), With(273, 6)])),
 
         Upto(0x72, Tail("soup", "Take part in the feast at Ioka Village", [With(280, 6)],
-            "Press Confirm repeatedly for the drinking contest.")),
+            "Speak with your companions and Ayla at the feast. Follow the dialogue to begin the contest.")),
 
         Upto(0x75, Tail("ioka-morning", "Return to the Ioka meeting grounds", [At(279)])),
 

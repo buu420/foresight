@@ -9,6 +9,37 @@ public sealed class NavigationTextCaptureTests
     private const nuint Image = 0x400000, Manager = 0x100000, Banks = 0x110000, World = 0x120000,
         Lines = 0x130000, Actors = 0x200000;
 
+    [Theory]
+    [InlineData(0, "Alex")]
+    [InlineData(1, "Amy")]
+    [InlineData(2, "Jen")]
+    [InlineData(3, "Bot")]
+    [InlineData(4, "Glenn")]
+    [InlineData(5, "Ria")]
+    [InlineData(6, "Janus")]
+    public void CharacterNamesReadTheSavedIdentityRatherThanAPartySlot(int character, string name)
+    {
+        var memory = Memory().String(Actors + 0x1908 + (nuint)(character * 24), name);
+        var capture = new NavigationTextCapture(memory);
+        Assert.Equal(name, capture.CharacterName(Image, character));
+        memory.String(Actors + 0x1908 + (nuint)(character * 24), "New");
+        Assert.Equal("New", capture.CharacterName(Image, character));
+    }
+
+    [Theory]
+    [InlineData(-1, "Amy")]
+    [InlineData(7, "Amy")]
+    [InlineData(1, "")]
+    [InlineData(1, "\n")]
+    [InlineData(1, "TooLong")]
+    public void InvalidCharacterIdentityOrUnreadableNameDoesNotInventAName(int character, string value)
+    {
+        var memory = Memory();
+        if (character is >= 0 and <= 6) memory.String(Actors + 0x1908 + (nuint)(character * 24), value);
+        Assert.Null(new NavigationTextCapture(memory).CharacterName(Image, character));
+        Assert.Null(new NavigationTextCapture(new NavigationMemory()).CharacterName(Image, 1));
+    }
+
     [Fact]
     public void WorldLabelsUseTheLoadedLocaleAndCurrentCharacterNames()
     {
