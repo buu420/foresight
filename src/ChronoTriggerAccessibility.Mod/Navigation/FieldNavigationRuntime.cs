@@ -58,8 +58,21 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 lastCall >= 0 && now >= lastCall && now - lastCall <= 250;
             try
             {
-                if (!available && (gamepad.IsOpen || controller.IsActive)) Suspend("controller input is unavailable");
-                var consumed = gamepad.Filter(buttons, neutral, available, deviceId: deviceId);
+                var nativePause = false;
+                if (!available && enabled && mode == NavigationMode.Field && engine != 0 && isForeground() && controller.HasPendingTransition)
+                {
+                    var frame = capture(engine);
+                    nativePause = frame is not null && controller.CanContinueTransition(frame, now);
+                    if (nativePause && !frame!.CanNavigate)
+                    {
+                        var result = controller.Update(frame, now);
+                        synchronizeFootsteps?.Invoke(null);
+                        resetMotion?.Invoke();
+                        Emit(result);
+                    }
+                }
+                if (!available && !nativePause && (gamepad.IsOpen || controller.IsActive)) Suspend("controller input is unavailable");
+                var consumed = gamepad.Filter(buttons, neutral, available, deviceId: deviceId, preserveOwner: nativePause);
                 if (gamepad.OwnsDevice(deviceId)) lastControllerPoll = clock();
                 return consumed;
             }
@@ -198,7 +211,13 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     lastCall = now;
                     return originalPad;
                 }
-                if (lastCall >= 0 && (now < lastCall || now - lastCall > 250)) Suspend("player input was paused");
+                NavigationFrame? transitionFrame = null;
+                if (lastCall >= 0 && (now < lastCall || now - lastCall > 250))
+                {
+                    if (current == NavigationMode.Field && mode == NavigationMode.Field && engine == currentEngine && controller.HasPendingTransition)
+                        transitionFrame = capture(currentEngine);
+                    if (transitionFrame is null || !controller.CanContinueTransition(transitionFrame, now)) Suspend("player input was paused");
+                }
                 if (gamepad?.HasOwner == true && (lastControllerPoll < 0 || now < lastControllerPoll ||
                     now - lastControllerPoll > 250)) Suspend("controller disconnected");
                 if (engine != 0 && (engine != currentEngine || mode != current))
@@ -235,8 +254,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     }
                     return originalPad;
                 }
-                var frame = CaptureFrame(currentEngine, current);
-                if (frame is null || !frame.CanNavigate)
+                var frame = transitionFrame ?? CaptureFrame(currentEngine, current);
+                if (frame is null || !frame.CanNavigate && !controller.CanContinueTransition(frame, now))
                 {
                     Suspend("navigation state is unavailable");
                     if (commands.Count != 0 || padActions.Count != 0) speak("Navigation is unavailable here.");
@@ -256,6 +275,17 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 if (current == NavigationMode.Field && controller.AllowsConfirmWhileFollowing(frame))
                     manualPad &= ~0x80u;
                 var result = controller.Update(frame, now, manualPad != 0);
+                if (!frame.CanNavigate)
+                {
+                    controllerInputAllowed = false;
+                    keyboard.Suspend();
+                    synchronizeFootsteps?.Invoke(null);
+                    resetMotion?.Invoke();
+                    Emit(result);
+                    // The native script owns movement. No navigation input is
+                    // delivered until this context returns to a verified landing.
+                    return originalPad;
+                }
                 var speech = new List<string>(result.Speech);
                 var processedCommands = new List<NavigationCommand>();
                 void Handle(NavigationCommand command)

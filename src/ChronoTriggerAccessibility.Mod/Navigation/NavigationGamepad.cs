@@ -37,7 +37,7 @@ public sealed class NavigationGamepad
     /// Neutral means every button is released and the game's movement axes are in
     /// their native dead zone. It is independent of our command subset.</summary>
     public bool Filter(NavigationPadButtons buttons, bool neutral, bool available, bool foreground = true,
-        bool connected = true, uint deviceId = 0)
+        bool connected = true, uint deviceId = 0, bool preserveOwner = false)
     {
         lock (gate)
         {
@@ -59,7 +59,16 @@ public sealed class NavigationGamepad
             if (neutral) pad.SuppressUntilNeutral = false;
             if (!available || !foreground)
             {
-                Suspend();
+                if (preserveOwner && foreground)
+                {
+                    // A verified native jump temporarily removes player-input
+                    // callbacks. Retain the device for disconnect checks while
+                    // discarding commands that cannot run at that boundary.
+                    open = false;
+                    pending.Clear();
+                    pad.Armed = false;
+                }
+                else Suspend();
                 return pad.SuppressUntilNeutral;
             }
             pad.Armed = true;

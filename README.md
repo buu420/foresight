@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.48 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
+**Foresight 0.3.49 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.48 stops queued menu stats when the menu closes. Selected allies in battle read their visible HP/MP; knocked-out characters are described as knocked out. Reserve party members use their saved names, and unchanged combo lists no longer repeat with each party selection. Holding the game's Dash control keeps field and world automatic walking active. See [this build's changes and testing notes](docs/releases/v0.3.48.md).
+Version 0.3.49 identifies verified drops and paths between levels in the Denadoro Mountains. Manual guidance and automatic walking can reach an exit through the native drop, wait for the party to land, and continue from its actual position. Repeated slides and level crossings have distinct labels. See [this build's changes and testing notes](docs/releases/v0.3.49.md).
 
 ## Install the beta download
 

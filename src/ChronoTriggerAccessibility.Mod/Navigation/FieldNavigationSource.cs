@@ -11,6 +11,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
     private readonly FullStoryTargets fullStory = new();
     private readonly NavigationExitLabels exitLabels = new();
+    private readonly FieldLevelCrossings levelCrossings = new();
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
@@ -459,13 +460,27 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             targets.AddRange(fullStory.Build(field.SceneId, story, available, player, fieldDestinations: map.ExitDestinations));
         }
         exitLabels.Apply(targets);
+        var transitions = guideActive ? FieldTransitions.Find(field, map, story) : [];
+        if (guideActive)
+            targets.AddRange(levelCrossings.Find(field.SceneId, map).Select(t => t with
+                { Visible = t.ApproachPoints.Any(p => TileVisible(p.X / 256, p.Y / 256)) }));
+        foreach (var entry in transitions)
+        {
+            var t = entry.Transition;
+            targets.Add(new(t.Id, t.Label, NavigationCategory.Objects, t.Approach, [t.Approach],
+                TileVisible(t.Approach.X / 256, t.Approach.Y / 256), false)
+            {
+                GuideAvailable = entry.Available || entry.Active, Transition = t,
+                Instruction = "Continue down at this point to take the drop. This drop is one-way.",
+            });
+        }
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), guideActive
-                ? FieldLandingGraph.Create(
+                ? FieldTransitionGraph.Create(FieldLandingGraph.Create(
                     FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals, collisions, touchGoals),
-                    map, GameNavigationCatalog.ForScene(field.SceneId))
+                    map, GameNavigationCatalog.ForScene(field.SceneId)), transitions)
                 : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
             {
                 AreaName = field.SceneId == 464 ? GameNavigationCatalog.AreaName(field.SceneId)
@@ -474,6 +489,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
                 MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
                     ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null,
+                ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
             };
 
         void ReportInventory()

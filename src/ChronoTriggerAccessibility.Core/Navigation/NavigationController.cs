@@ -21,6 +21,10 @@ public sealed class NavigationController
     private long instructionRevision;
     private string? intermediateId;
     private NavigationPoint? intermediateContact;
+    private NavigationTransition? transition;
+    private long? transitionContactStarted;
+    private long? nativeTransitionStarted;
+    private bool transitionLanded;
     private IReadOnlyList<NavigationPoint> plannedGoals = [];
     private long? passageWaitStarted;
     private long nextPassageCheck;
@@ -38,6 +42,17 @@ public sealed class NavigationController
     private int plannedApproaches;
 
     public bool IsActive => guiding;
+    public bool HasPendingTransition => guiding && transition is not null;
+    /// <summary>Only the route's audited script may own a temporary input pause.
+    /// A fresh landing may finish it; ordinary input gaps remain cancellations.</summary>
+    public bool CanContinueTransition(NavigationFrame frame, long now) => HasPendingTransition && scene == frame.Scene &&
+        now >= (nativeTransitionStarted ?? (walking ? transitionContactStarted ?? lastProgress : lastManualActivity)) &&
+        now - (nativeTransitionStarted ?? (walking ? transitionContactStarted ?? lastProgress : lastManualActivity)) < 20000 &&
+        (frame.ActiveTransitions.Contains(transition!.Id) && (nativeTransitionStarted is not null || NearTransition(observedPosition)) ||
+         frame.CanNavigate && (transitionLanded || transition!.HasLanded(frame.Player)) &&
+         (nativeTransitionStarted is not null || transitionContactStarted is not null || NearTransition(observedPosition)));
+    private bool NearTransition(NavigationPoint point) => transition is not null && point.Layer == transition.Approach.Layer &&
+        Math.Abs((long)point.X - transition.Approach.X) <= unitsPerTile && Math.Abs((long)point.Y - transition.Approach.Y) <= unitsPerTile;
     public bool AllowsConfirmWhileFollowing(NavigationFrame frame) => walking &&
         destination?.FollowUntilInteraction == true && scene == frame.Scene && frame.CanNavigate &&
         Eligible(frame).Any(t => t.Id == destination.Id && t.FollowUntilInteraction && !t.IsStoryNote);
@@ -60,7 +75,7 @@ public sealed class NavigationController
     public NavigationResult Handle(NavigationCommand command, NavigationFrame frame, long nowMilliseconds)
     {
         var speech = new List<string>();
-        Refresh(frame, speech);
+        Refresh(frame, speech, nowMilliseconds);
         if (!frame.CanNavigate) return Result(speech);
         var targets = Eligible(frame);
         switch (command)
@@ -130,7 +145,7 @@ public sealed class NavigationController
     public NavigationResult Update(NavigationFrame frame, long nowMilliseconds, bool manualInput = false)
     {
         var speech = new List<string>();
-        Refresh(frame, speech);
+        Refresh(frame, speech, nowMilliseconds);
         if (walking && manualInput)
         {
             Stop();
@@ -143,7 +158,7 @@ public sealed class NavigationController
     private static string Arrival(NavigationTarget target) => $"Arrived at {target.Label}." +
         (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? "" : " " + target.ArrivalInstruction);
 
-    private void Refresh(NavigationFrame frame, List<string> speech)
+    private void Refresh(NavigationFrame frame, List<string> speech, long now)
     {
         ArgumentNullException.ThrowIfNull(frame);
         if (frame.UnitsPerTile is < 1 or > 65536) throw new ArgumentOutOfRangeException(nameof(frame));
@@ -155,12 +170,12 @@ public sealed class NavigationController
             selection = null;
             scene = frame.Scene;
         }
-        if (!frame.CanNavigate && guiding)
+        if (!frame.CanNavigate && guiding && !CanContinueTransition(frame, now))
         {
             Stop();
             speech.Add("Navigation stopped: player control is unavailable.");
         }
-        if (guiding && !Eligible(frame).Any(target => target.Id == destination?.Id))
+        if (guiding && !CanContinueTransition(frame, now) && !Eligible(frame).Any(target => target.Id == destination?.Id))
         {
             Stop();
             speech.Add("Navigation stopped: destination is no longer available.");
@@ -183,6 +198,16 @@ public sealed class NavigationController
         var index = targets.FindIndex(target => target.Id == selection);
         if (index < 0) { speech.Add(EmptyCategory()); return; }
         var target = targets[index];
+        if (nativeTransitionStarted is not null)
+        {
+            speech.Add($"{transition!.Label}. Waiting for the drop to finish.");
+            return;
+        }
+        if (transitionContactStarted is not null)
+        {
+            speech.Add(TransitionInstruction());
+            return;
+        }
         if (contactStarted is not null)
         {
             speech.Add(target.Label + ". " + ContactInstruction());
@@ -241,8 +266,17 @@ public sealed class NavigationController
         planRevision++;
         plannedApproaches = goals.Length;
         route = search.Route;
-        if (intermediateId != search.IntermediateId) passageWaitStarted = null;
-        intermediateId = search.IntermediateId;
+        var nextTransition = search.Transition ??
+            (search.IntermediateId is null || search.IntermediateId == destination.Transition?.Id ? destination.Transition : null);
+        if (transition?.Id != nextTransition?.Id)
+        {
+            transitionContactStarted = nativeTransitionStarted = null;
+            transitionLanded = false;
+        }
+        transition = nextTransition;
+        var nextIntermediate = search.IntermediateId ?? transition?.Id;
+        if (intermediateId != nextIntermediate) passageWaitStarted = null;
+        intermediateId = nextIntermediate;
         intermediateContact = search.IntermediateContact;
         plannedGoals = goals;
         nextPoint = 1;
@@ -254,9 +288,16 @@ public sealed class NavigationController
 
     private void Follow(NavigationFrame frame, long now, List<string> speech, bool manualInput = false)
     {
-        if (!walking && (manualInput || frame.Player != observedPosition || now < lastManualActivity))
-            lastManualActivity = now;
-        observedPosition = frame.Player;
+        // A keyboard-only player has no callback during native movement. Check
+        // the prior approach before replacing it with the first landed position.
+        var continueTransition = CanContinueTransition(frame, now);
+        if (frame.CanNavigate)
+        {
+            if (!walking && (manualInput || frame.Player != observedPosition || now < lastManualActivity))
+                lastManualActivity = now;
+            observedPosition = frame.Player;
+        }
+        if (FollowTransition(frame, now, speech, continueTransition)) return;
         var currentTarget = Eligible(frame).Find(target => target.Id == destination?.Id);
         if (currentTarget is null)
         {
@@ -448,6 +489,94 @@ public sealed class NavigationController
         }
     }
 
+    private bool FollowTransition(NavigationFrame frame, long now, List<string> speech, bool owned)
+    {
+        if (transition is null) return false;
+        if (owned && frame.CanNavigate && transition.HasLanded(frame.Player)) transitionLanded = true;
+        if (frame.ActiveTransitions.Contains(transition.Id) && owned)
+        {
+            if (nativeTransitionStarted is null)
+            {
+                nativeTransitionStarted = now;
+                speech.Add($"{transition.Label}. Waiting for the drop to finish.");
+            }
+            // E3 01 may precede AD/77 cleanup. Wait for the actual return before
+            // capturing the next route; its native busy flag can still be set.
+            return true;
+        }
+        if (frame.CanNavigate && transitionLanded && owned)
+        {
+            var completed = transition;
+            transition = null;
+            transitionContactStarted = nativeTransitionStarted = null;
+            transitionLanded = false;
+            intermediateId = null;
+            intermediateContact = null;
+            passageWaitStarted = null;
+            if (destination!.Id == completed.Id)
+            {
+                speech.Add(Arrival(destination));
+                Stop();
+                return true;
+            }
+            speech.Add($"{completed.Label} complete. Continuing to {destination!.Label}.");
+            announcedDirection = NavigationDirection.None;
+            lastProgress = now;
+            lastPosition = observedPosition = frame.Player;
+            lastManualActivity = now;
+            return !Plan(frame, speech);
+        }
+        if (nativeTransitionStarted is not null)
+        {
+            speech.Add("Navigation stopped: the drop did not reach its landing.");
+            Stop();
+            return true;
+        }
+        if (!walking && transitionContactStarted is not null && !NearTransition(frame.Player))
+        {
+            // Manual movement can leave an armed contact. Restore the normal
+            // approach leg rather than telling the player to drop from elsewhere.
+            transitionContactStarted = null;
+            announcedDirection = NavigationDirection.None;
+            return !Plan(frame, speech);
+        }
+        if (transitionContactStarted is not null || route is { Count: > 0 } && route[^1] == transition.Approach &&
+            AtTransitionContact(frame.Player))
+        {
+            nextPoint = route!.Count;
+            if (transitionContactStarted is null)
+            {
+                transitionContactStarted = now;
+                speech.Add(TransitionInstruction());
+            }
+            else if (walking && (now < transitionContactStarted || now - transitionContactStarted >= 3000))
+            {
+                speech.Add("Navigation stopped: the drop did not start.");
+                Stop();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private string TransitionInstruction() => $"{transition!.Label}. Continue {DirectionName(transition.Direction)} to take the drop.";
+
+    private bool AtTransitionContact(NavigationPoint point)
+    {
+        if (transition is null || point.Layer != transition.Approach.Layer) return false;
+        var dx = (long)point.X - transition.Approach.X;
+        var dy = (long)point.Y - transition.Approach.Y;
+        var (forward, across) = transition.Direction switch
+        {
+            NavigationDirection.North => (-dy, dx), NavigationDirection.South => (dy, dx),
+            NavigationDirection.East => (dx, dy), NavigationDirection.West => (-dx, dy),
+            _ => (long.MinValue, long.MaxValue),
+        };
+        // South-moving floor can skip the exact approach between input ticks.
+        // Stay aligned with the native contact column, allowing one tile ahead.
+        return Math.Abs(across) <= unitsPerTile / 8 && forward >= -unitsPerTile / 8 && forward <= unitsPerTile;
+    }
+
     /// <summary>At a confirmed destination, arrival is the position plus a facing that the
     /// native confirm test accepts. Automatic walking turns with the ordinary direction pad
     /// (the player may shuffle toward the actor, which stays in reach); manual guidance names
@@ -547,12 +676,15 @@ public sealed class NavigationController
     }
 
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
-        new(speech.AsReadOnly(), walking && facingStarted is not null ? facingDirection :
+        new(speech.AsReadOnly(), nativeTransitionStarted is not null ? NavigationDirection.None :
+            walking && transitionContactStarted is not null ? transition!.Direction :
+            walking && facingStarted is not null ? facingDirection :
             walking && contactStarted is not null ? contactDirection :
             walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
-            ManualLeg = guiding && !walking && !waitingForManualStop && route is not null && nextPoint < route.Count
+            ManualLeg = guiding && !walking && nativeTransitionStarted is null && transitionContactStarted is null &&
+                !waitingForManualStop && route is not null && nextPoint < route.Count
                 ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision) : null
         };
 
@@ -638,6 +770,9 @@ public sealed class NavigationController
         waitingForManualStop = false;
         intermediateId = null;
         intermediateContact = null;
+        transition = null;
+        transitionContactStarted = nativeTransitionStarted = null;
+        transitionLanded = false;
         plannedGoals = [];
         passageWaitStarted = null;
         contactStarted = null;

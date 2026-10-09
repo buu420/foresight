@@ -31,6 +31,8 @@
     <EmbeddedResource Include="Navigation\guardia-forest-19-map.json" />
     <EmbeddedResource Include="Navigation\guardia-forest-119-map.json" />
     <EmbeddedResource Include="Navigation\denadoro-146-map.json" />
+    <EmbeddedResource Include="Navigation\denadoro-143-map-0349.json" />
+    <EmbeddedResource Include="Navigation\denadoro-144-map-0349.json" />
     <EmbeddedResource Include="Navigation\tyranno-301-map.json" />
     <EmbeddedResource Include="Navigation\death-peak-265-map.json" />
     <EmbeddedResource Include="Navigation\mammon-415-map.json" />

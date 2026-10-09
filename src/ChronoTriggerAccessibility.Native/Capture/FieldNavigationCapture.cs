@@ -44,6 +44,8 @@ public sealed record FieldActorSnapshot(
     /// preempt it only when it exceeds 1. Null means unreadable in a live capture;
     /// constructed snapshots default to the native idle slot, 7.</summary>
     public int? ScriptPriority { get; init; } = 7;
+    /// <summary>Current script PC at actor+48 (161560 / 164D10). Optional when unreadable.</summary>
+    public int? ScriptAddress { get; init; }
     /// <summary>Actor+30 bit80 alone: opcode 0B sets it and 0C clears it (stubs 161C0B /
     /// 161C61), and the script runner stops the actor's own loop while it is set. Unlike
     /// <see cref="ScriptCallsEnabled"/> it ignores +E8 (opcodes 08/09), which blocks only
@@ -568,6 +570,7 @@ public static class FieldNavigationCapture
         {
             ScriptCallsEnabled = scriptDisabled == 0 && (callFlags & 0x80) == 0,
             ScriptPriority = Int32(memory, address + ActorScriptPriorityOffset, out var priority) ? priority : null,
+            ScriptAddress = Int32(memory, address + 0x48u, out var pc) && pc is >= 0 and <= 65535 ? pc : null,
             ScriptProcessingEnabled = (callFlags & 0x80) == 0,
             CollisionOffsetX = collisionOffsetX,
         };

@@ -30,6 +30,16 @@ public interface IStagedNavigationGraph : INavigationGraph
     NavigationSearchResult FindStage(NavigationPoint start, IReadOnlyList<NavigationPoint> goals, int maximumVisited);
 }
 
+/// <summary>An audited one-way native movement script. A0 finishes on entering
+/// the landing tile, rather than at its centre.</summary>
+public sealed record NavigationTransition(string Id, string Label, NavigationPoint Approach,
+    NavigationPoint Landing, NavigationDirection Direction, IReadOnlyList<int> LandingLayers)
+{
+    public bool HasLanded(NavigationPoint point) => LandingLayers.Contains(point.Layer) &&
+        point.X / NavigationUnits.LocalStep == Landing.X / NavigationUnits.LocalStep &&
+        point.Y / NavigationUnits.LocalStep == Landing.Y / NavigationUnits.LocalStep;
+}
+
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,
     NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered)
 {
@@ -43,6 +53,7 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// not a destination for the mod's guidance or automatic walking.</summary>
     public string? GuidanceRestriction { get; init; }
     public string? ArrivalInstruction { get; init; }
+    public NavigationTransition? Transition { get; init; }
     /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
     /// in Confirm range and follow again when it moves. Only the player's own Confirm
     /// input is permitted alongside automatic movement; never synthesize the catch.</summary>
@@ -93,6 +104,8 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public NavigationDirection PlayerFacing { get; init; }
     /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
     public NavigationFloor? MovingFloor { get; init; }
+    /// <summary>Fresh native script identity, not merely loss of player control.</summary>
+    public IReadOnlySet<string> ActiveTransitions { get; init; } = new HashSet<string>();
 }
 
 public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision);
