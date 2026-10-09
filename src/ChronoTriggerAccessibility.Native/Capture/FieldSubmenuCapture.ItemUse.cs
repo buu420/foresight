@@ -13,7 +13,7 @@ public sealed partial class FieldSubmenuCapture
         {
             var lines = rendered.Read(card);
             if (lines is null || lines.Count == 0 || lines.Count > MaximumPanelLines) return null;
-            parts.Add(JoinRenderedLines(lines));
+            parts.Add(RenderedCharacterCardSpeech.Format(lines));
         }
         if (!TryReadItemUseFrame(image, node, state, out var again) || frame.Signature != again.Signature)
             return null;

@@ -5,6 +5,15 @@ namespace ChronoTriggerAccessibility.Native.Tests.Capture;
 
 public sealed partial class FieldSubmenuCaptureTests
 {
+    [Fact]
+    public void ItemTargetUsesKnockedOutForVisibleHpZeroAndPreservesVisibleMp()
+    {
+        var world = ItemUseScreen();
+        ControlOf(world, ["Crono", ":", "HP", "0/", "70", ":", "MP", "0/", "8"], UseFirstCard);
+        world.Pointer(UseFirstCard + 0x16C, UseCards);
+        Assert.Equal("Target, 1 of 1. Crono. Knocked out. MP 0/8.",
+            new FieldSubmenuCapture(world).Capture(ImageBase, Node)!.Text);
+    }
     private const nuint UseManager = 0x25000000, UseMap = 0x25100000, UseSentinel = 0x25101000;
     private const nuint UsePanel = 0x25200000, UseCards = 0x25300000, UseCardVector = 0x25400000;
     private const nuint UseIcons = 0x25500000, UseFirstCard = 0x26000000, UseSecondCard = 0x26100000;

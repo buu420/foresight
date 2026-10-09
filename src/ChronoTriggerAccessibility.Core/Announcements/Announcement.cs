@@ -4,4 +4,5 @@ public sealed record Announcement(
     string Text,
     AnnouncementPriority Priority,
     bool Interrupt,
-    int? Generation = null);
+    int? Generation = null,
+    bool StopSpeech = false);

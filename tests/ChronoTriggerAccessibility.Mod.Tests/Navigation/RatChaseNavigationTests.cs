@@ -50,20 +50,22 @@ public sealed class RatChaseNavigationTests
         Assert.NotNull(moved.ManualLeg);
     }
 
-    [Fact]
-    public void ConfirmIsPassedThroughWhilePursuitContinues()
+    [Theory]
+    [InlineData(0x80u, 0x180u)]
+    [InlineData(0x88u, 0x188u)] // Native Dash can be held together with the player's Confirm.
+    public void ConfirmIsPassedThroughWhilePursuitContinues(uint input, uint expected)
     {
         var h = new Harness();
         Assert.Equal(0x100u, h.Start());
         for (var i = 0; i < 30; i++)
-            Assert.Equal(0x180u, h.Tick(0x80));
+            Assert.Equal(expected, h.Tick(input));
         Assert.DoesNotContain(h.Speech, s => s.Contains("manual control"));
         Assert.Equal(0x100u, h.Tick());
     }
 
     [Theory]
     [InlineData(0x800u)] // movement
-    [InlineData(0x88u)] // Confirm plus Cancel
+    [InlineData(0xC0u)] // Confirm plus Warp
     [InlineData(0x1u)] // game menu
     public void OtherPhysicalActionsStillCancelPursuit(uint pad)
     {

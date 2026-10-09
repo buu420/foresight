@@ -43,7 +43,7 @@ public sealed class MenuNoticeNarratorTests
 
         Assert.Empty(narrator.Apply(new MenuContentChanged(SaveList, "File 2 of 3.")));
         Assert.Empty(narrator.Apply(new MenuExited(SaveList)));
-        Assert.Empty(narrator.Apply(new MenuExited(Ending)));
+        Assert.True(Assert.Single(narrator.Apply(new MenuExited(Ending))).StopSpeech);
         // Closed: a stale list update for the old owner stays silent.
         Assert.Empty(narrator.Apply(new MenuContentChanged(SaveList, "File 3 of 3.")));
     }
@@ -126,7 +126,7 @@ public sealed class MenuNoticeNarratorTests
 
         Assert.Empty(narrator.Apply(new MenuExited(SaveList)));
         Assert.Single(narrator.Apply(new MenuConfirmationFocused("Yes", 0, 2)));
-        Assert.Empty(narrator.Apply(new MenuExited(Ending)));
+        Assert.True(Assert.Single(narrator.Apply(new MenuExited(Ending))).StopSpeech);
         Assert.Empty(narrator.Apply(new MenuContentChanged(SaveList, "File 2 of 3.")));
     }
 

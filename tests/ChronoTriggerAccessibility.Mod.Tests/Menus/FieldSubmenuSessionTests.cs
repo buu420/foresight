@@ -8,6 +8,26 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Menus;
 
 public sealed class FieldSubmenuSessionTests
 {
+    [Fact]
+    public void PartyFocusDoesNotRepeatUnchangedCombosButPreviewAndCommittedChangesRemainReadable()
+    {
+        var events = new List<AccessibilityEvent>();
+        FieldSubmenuSnapshot Party(string key, string focus, string combos) =>
+            new("Formation", "Party", key, focus + " " + combos, focus, combos);
+        var snapshot = Party("current:0", "Crono. HP 43/70.", "Usable Combos. Aura Whirl.");
+        var s = new FieldSubmenuSession(_ => snapshot, _ => "Party", _ => false, () => true, events.Add, _ => { });
+        s.Enter(1); s.Refresh();
+        Assert.Equal(snapshot.Text, Assert.IsType<MenuContentPresented>(Assert.Single(events)).Text);
+        snapshot = Party("reserve:10", "Lulu. HP 280/295.", snapshot.SupplementalText!); s.Refresh();
+        Assert.Equal(snapshot.FocusText, Assert.IsType<MenuContentChanged>(events[^1]).Text);
+        snapshot = Party("reserve:10", snapshot.FocusText!, "Usable Combos. Fire Whirl."); s.Refresh();
+        Assert.Equal(snapshot.SupplementalText, Assert.IsType<MenuContentChanged>(events[^1]).Text);
+        snapshot = Party("current:1", "Marle. HP 50/80.", "Usable Combos. Aura Whirl."); s.Refresh();
+        Assert.Equal(snapshot.Text, Assert.IsType<MenuContentChanged>(events[^1]).Text);
+        s.Refresh(); Assert.Equal(4, events.Count);
+        s.Close(); s.Enter(1);
+        Assert.Equal(snapshot.Text, Assert.IsType<MenuContentPresented>(events[^1]).Text);
+    }
     [Fact] public void SelectionUpdatesAndQuantityChangesSpeakOnceAndOldOwnerUpdatesAreIgnored()
     {
         var events = new List<AccessibilityEvent>();

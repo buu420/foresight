@@ -74,6 +74,16 @@ public sealed class PrismSession : IDisposable
         }
     }
 
+    public void Stop()
+    {
+        lock (sync)
+        {
+            ThrowIfDisposed();
+            var error = native.Stop(backend);
+            if (error != PrismError.Ok) throw new PrismException(error, native.ErrorString(error));
+        }
+    }
+
     public void Dispose()
     {
         lock (sync)

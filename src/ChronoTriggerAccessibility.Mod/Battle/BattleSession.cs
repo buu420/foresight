@@ -52,7 +52,9 @@ public sealed class BattleSession
                 {
                     identity = "targets:" + string.Join(",", targets.Slots);
                     text = (targets.Slots.Count == 1 ? "Target. " : "Targets. ") +
-                        string.Join(", ", targets.Slots.Select(s => names.GetValueOrDefault(s) ?? BattleIdentity.Unnamed(s))) + ".";
+                        string.Join(" ", targets.Slots.Select(s => party.FirstOrDefault(p => p.Slot == s) is { } member
+                            ? BattleRuntime.Describe(member)
+                            : (names.GetValueOrDefault(s) ?? BattleIdentity.Unnamed(s)) + "."));
                 }
             }
             // The legacy single-target fallback must not escape a failed renderer read.

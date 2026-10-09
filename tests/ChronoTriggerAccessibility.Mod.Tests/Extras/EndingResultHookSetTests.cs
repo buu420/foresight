@@ -194,7 +194,7 @@ public sealed class EndingResultHookSetTests
         Assert.Equal(AnnouncementPriority.Queued, announcements[^1].Priority);
 
         harness.DestroyScene(Scene);
-        Assert.Empty(state.Apply(Assert.IsType<MenuExited>(harness.Dispatcher.Events[^1])));
+        Assert.True(Assert.Single(state.Apply(Assert.IsType<MenuExited>(harness.Dispatcher.Events[^1]))).StopSpeech);
     }
 
     [Fact]
@@ -892,7 +892,15 @@ public sealed class EndingResultHookSetTests
         harness.PrepareAndActivate();
         var state = new AccessibilityState();
         var spoken = new List<string>();
-        void Hear() => spoken.AddRange(state.Apply(harness.Dispatcher.Events[^1]).Select(item => item.Text));
+        var cancellations = 0;
+        void Hear()
+        {
+            foreach (var item in state.Apply(harness.Dispatcher.Events[^1]))
+            {
+                if (item.StopSpeech) cancellations++;
+                else spoken.Add(item.Text);
+            }
+        }
 
         harness.ShowMessage(Compose(FirstLine, SecondLine));
         Hear();
@@ -922,6 +930,7 @@ public sealed class EndingResultHookSetTests
             ],
             spoken);
         Assert.IsType<MenuExited>(harness.Dispatcher.Events[^1]);
+        Assert.Equal(1, cancellations);
         Assert.Empty(harness.Dispatcher.Failures);
     }
 

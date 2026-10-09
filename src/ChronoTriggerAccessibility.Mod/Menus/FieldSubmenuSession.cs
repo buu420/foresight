@@ -79,8 +79,16 @@ public sealed class FieldSubmenuSession(
         }
         if (last is null || paused || failedSelection)
             publish(new MenuContentPresented(owner, next.Title, next.Text));
-        else if (next.FocusIdentity != last.FocusIdentity || next.Text != last.Text)
-            publish(new MenuContentChanged(owner, next.Text));
+        else
+        {
+            var focus = next.FocusText ?? next.Text;
+            var focusChanged = next.FocusIdentity != last.FocusIdentity || focus != (last.FocusText ?? last.Text);
+            var detailsChanged = next.SupplementalText != last.SupplementalText;
+            var parts = new List<string>();
+            if (focusChanged) parts.Add(focus);
+            if (detailsChanged && next.SupplementalText is { } details) parts.Add(details);
+            if (parts.Count > 0) publish(new MenuContentChanged(owner, string.Join(" ", parts)));
+        }
         last = next; paused = false; failedSelection = false; failureStarted = null;
     }
 }

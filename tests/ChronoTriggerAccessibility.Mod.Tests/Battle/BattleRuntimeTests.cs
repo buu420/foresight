@@ -8,6 +8,17 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Battle;
 
 public sealed class BattleRuntimeTests
 {
+    [Fact]
+    public void KnockoutIsAnnouncedOnceAndInspectionsUseKnockedOutInsteadOfHpZero()
+    {
+        var events = new List<AccessibilityEvent>(); var runtime = Runtime(events);
+        runtime.Observe(100, Frame()); runtime.Observe(100, Frame(0)); runtime.Observe(100, Frame(0));
+        Assert.Equal("Marle was knocked out.", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+        runtime.Handle(BattleCommand.SelectSecond); runtime.Handle(BattleCommand.ReadHp);
+        Assert.Equal(["Marle. Knocked out. MP 7 of 12.", "Marle. Knocked out."], Inspections(events));
+        runtime.Observe(100, Frame(20)); runtime.Observe(100, Frame(0));
+        Assert.Equal(2, events.OfType<BattleFeedbackPresented>().Count());
+    }
     private static BattleFrame Frame(int marleHp = 50, string? focus = "Crono. Attack") => new(
         [new(0, "Crono", 43, 70, 8, 8, ""), new(1, "Marle", marleHp, 80, 7, 12, "")],
         focus is null ? null : "command:0:0", focus, new Dictionary<int,string> { [0] = "Crono", [1] = "Marle", [3] = "Blue Imp 1", [4] = "Blue Imp 2" });
@@ -44,7 +55,7 @@ public sealed class BattleRuntimeTests
         runtime.Handle(BattleCommand.SelectSecond);
         runtime.Handle(BattleCommand.ReadHp);
         runtime.Handle(BattleCommand.ReadMp);
-        Assert.Equal(["Marle.", "Marle. HP 50 of 80.", "Marle. MP 7 of 12."], Inspections(events));
+        Assert.Equal(["Marle. HP 50 of 80. MP 7 of 12.", "Marle. HP 50 of 80.", "Marle. MP 7 of 12."], Inspections(events));
         runtime.Observe(100, Frame(32, "Marle. Tech"));
         runtime.Handle(BattleCommand.ReadHp);
         Assert.Equal("Marle. HP 32 of 80.", Inspections(events)[^1]);

@@ -1,5 +1,7 @@
 using ChronoTriggerAccessibility.Core.Events;
 using ChronoTriggerAccessibility.Core.NewGame;
+using ChronoTriggerAccessibility.Core.Menus;
+using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using Xunit;
@@ -8,6 +10,59 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Startup;
 
 public sealed class SemanticEventDispatcherTests
 {
+    [Fact]
+    public void ClosingAnOwnedConfirmationStopsItsQueuedChoice()
+    {
+        var session = new RecordingPrismSession();
+        var dispatcher = new SemanticEventDispatcher(new RecordingLog(), new RecordingFatal()); dispatcher.Attach(session);
+        var owner = new MenuOwner("confirmation", 2);
+        dispatcher.Publish(new MenuConfirmationPresented(owner, "Save?", ["Yes", "No"], 0));
+        dispatcher.Publish(new MenuExited(owner));
+        Assert.Equal(1, session.Stops);
+    }
+
+    [Fact]
+    public void AMenuTeardownDoesNotSilenceANewerCoverageFailure()
+    {
+        var session = new RecordingPrismSession();
+        var dispatcher = new SemanticEventDispatcher(new RecordingLog(), new RecordingFatal()); dispatcher.Attach(session);
+        var owner = new MenuOwner("TopMenu", 1);
+        dispatcher.Publish(new MenuContentPresented(owner, "Menu", "Crono. HP 43/70."));
+        dispatcher.ReportCoverageFailure("Native selection is unavailable.");
+        dispatcher.Publish(new MenuExited(owner));
+        Assert.Equal(0, session.Stops);
+        Assert.Contains("Native selection is unavailable", session.Outputs[^1].Text);
+    }
+    [Fact]
+    public void AMenuTeardownDoesNotCancelNewerFieldOrBattleSpeech()
+    {
+        var session = new RecordingPrismSession();
+        var dispatcher = new SemanticEventDispatcher(new RecordingLog(), new RecordingFatal()); dispatcher.Attach(session);
+        var owner = new MenuOwner("TopMenu", 1);
+        dispatcher.Publish(new MenuContentPresented(owner, "Menu", "Crono. HP 43/70."));
+        dispatcher.Publish(new NavigationAnnouncement("Door nearby."));
+        dispatcher.Publish(new MenuExited(owner));
+        Assert.Equal(0, session.Stops);
+        Assert.Equal("Door nearby.", session.Outputs[^1].Text);
+    }
+    [Fact]
+    public void ClosingTheOwningMenuStopsQueuedStatsButAStaleParentCloseKeepsChildSpeech()
+    {
+        var session = new RecordingPrismSession();
+        var dispatcher = new SemanticEventDispatcher(new RecordingLog(), new RecordingFatal());
+        dispatcher.Attach(session);
+        var parent = new MenuOwner("TopMenu", 1);
+        var child = new MenuOwner("field-submenu", 2);
+        dispatcher.Publish(new MenuContentPresented(parent, "Menu", "Crono. HP 43/70. MP 8/8."));
+        dispatcher.Publish(new MenuContentPresented(child, "Party", "Marle. HP 50/80."));
+        dispatcher.Publish(new MenuExited(parent));
+        Assert.Equal(0, session.Stops);
+        dispatcher.Publish(new MenuExited(child));
+        Assert.Equal(1, session.Stops);
+        dispatcher.Publish(new MenuExited(child));
+        Assert.Equal(1, session.Stops);
+        Assert.DoesNotContain(session.Outputs, output => string.IsNullOrWhiteSpace(output.Text));
+    }
     [Fact]
     public void CaptureDiagnosticIsLoggedWithoutSpeechStateChangesOrFatalWindow()
     {
@@ -125,6 +180,8 @@ public sealed class SemanticEventDispatcherTests
     {
         public string BackendName => "Test backend";
         public List<(string Text, bool Interrupt)> Outputs { get; } = [];
+        public int Stops { get; private set; }
+        public void Stop() => Stops++;
         public void Output(string text, bool interrupt) => Outputs.Add((text, interrupt));
         public void Dispose() { }
     }

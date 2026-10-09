@@ -1,6 +1,7 @@
 using ChronoTriggerAccessibility.Core.Events;
 using ChronoTriggerAccessibility.Core.State;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Core.Menus;
 
 namespace ChronoTriggerAccessibility.Mod.Runtime;
 
@@ -13,6 +14,7 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
     private readonly HashSet<string> reportedCoverageFailures = new(StringComparer.Ordinal);
     private IRuntimePrismSession? session;
     private bool fatalCoverageWindowShown;
+    private MenuOwner? speechMenuOwner;
 
     public SemanticEventDispatcher(IModLog log, IAccessibleFatalError fatalError)
     {
@@ -68,7 +70,26 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
             {
                 var activeSession = session ?? throw new InvalidOperationException(
                     "A semantic announcement was produced without an attached Prism session.");
+                if (announcement.StopSpeech)
+                {
+                    if (accessibilityEvent is MenuExited exit && speechMenuOwner == exit.Owner)
+                    {
+                        activeSession.Stop();
+                        speechMenuOwner = null;
+                        log.Info("Announcement: speech stopped for the closed menu.");
+                    }
+                    continue;
+                }
                 activeSession.Output(announcement.Text, announcement.Interrupt);
+                speechMenuOwner = accessibilityEvent switch
+                {
+                    MenuPresented presented => presented.Owner,
+                    MenuContentPresented presented => presented.Owner,
+                    MenuNoticePresented presented => presented.Owner,
+                    MenuConfirmationPresented presented => presented.Owner ?? speechMenuOwner,
+                    MenuAccessibilityEvent => speechMenuOwner,
+                    _ => null,
+                };
                 log.Info(
                     $"Announcement: interrupt={announcement.Interrupt}; text={announcement.Text}");
             }
@@ -107,6 +128,7 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
                 }
                 log.Error(accessibleMessage);
                 session?.Output(accessibleMessage, interrupt: true);
+                speechMenuOwner = null;
             }
         }
         catch (Exception exception)

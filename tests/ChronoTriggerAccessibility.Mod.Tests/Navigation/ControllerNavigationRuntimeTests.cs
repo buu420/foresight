@@ -7,6 +7,21 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 
 public sealed class ControllerNavigationRuntimeTests
 {
+    [Theory]
+    [InlineData(NavigationMode.Field, 0x108u)]
+    [InlineData(NavigationMode.World, 0x108u)]
+    [InlineData(NavigationMode.Epoch, 8u)]
+    [InlineData(NavigationMode.Dactyl, 8u)]
+    public void NativeDashDoesNotCancelWalkingButVehicleActionsStillTakeManualControl(NavigationMode mode, uint expected)
+    {
+        var h = new Harness(mode); h.Press(NavigationPadButtons.RightStick); h.Press(NavigationPadButtons.West);
+        h.Filter(0);
+        Assert.Equal(expected, h.Tick(8));
+        if (mode == NavigationMode.World) Assert.Equal(expected, h.Runtime.ApplyWorldPad(h.Engine, 8));
+        Assert.Equal(mode is NavigationMode.Field or NavigationMode.World ? 0x100u : 0u, h.Tick());
+        Assert.Equal(0x808u, h.Tick(0x808));
+        Assert.Equal(0u, h.Tick());
+    }
     [Fact]
     public void OpeningReadsTheCategoryAndSelectionAndBrowsingUsesTheExistingTargets()
     {
@@ -214,17 +229,17 @@ public sealed class ControllerNavigationRuntimeTests
                 vehicleCapture: (_, _) => Frame(), vehicleActive: (_, _) => true, gamepad: Pad);
             Runtime.Enable(); Tick(); Release();
         }
-        public uint Tick()
+        public uint Tick(uint input = 0)
         {
             Now += 16;
             inTick = true;
             try
             {
-            if (mode == NavigationMode.Field) return Runtime.OnInput(Engine, 0);
-            if (mode == NavigationMode.World) return Runtime.OnWorldInput(Engine, 0);
+            if (mode == NavigationMode.Field) return Runtime.OnInput(Engine, input);
+            if (mode == NavigationMode.World) return Runtime.OnWorldInput(Engine, input);
             var kind = mode == NavigationMode.Epoch ? VehicleKind.Epoch : VehicleKind.Dactyl;
-            Runtime.OnVehicleInput(Engine, 0, kind);
-            return Runtime.ApplyVehiclePad(Engine, 0, kind);
+            Runtime.OnVehicleInput(Engine, input, kind);
+            return Runtime.ApplyVehiclePad(Engine, input, kind);
             }
             finally { inTick = false; }
         }

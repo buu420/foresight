@@ -163,13 +163,14 @@ public sealed class MenuNarrator
             return NoAnnouncements;
         }
 
+        var stopSpeech = active;
         active = false;
         activeOwner = null;
         lastFocusText = null;
         lastConfirmationPrompt = null;
         lastConfirmationText = null;
         confirmationChoices = null;
-        return NoAnnouncements;
+        return stopSpeech ? [new("", AnnouncementPriority.Interrupt, true, StopSpeech: true)] : NoAnnouncements;
     }
 
     private static bool IsIdentified(MenuOwner? owner) =>

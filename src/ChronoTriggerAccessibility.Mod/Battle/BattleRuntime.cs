@@ -55,11 +55,15 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
             }
             wasForeground = true;
             var nextFocus = (current?.FocusIdentity, current?.FocusText);
-            if (lastFocus != nextFocus)
+            // Active battles can update HP while the same targets stay selected.
+            // Keep Repeat current without interrupting the player for every HUD tick.
+            var sameTargets = nextFocus.Item1?.StartsWith("targets:", StringComparison.Ordinal) == true &&
+                lastFocus.Identity == nextFocus.Item1;
+            if (lastFocus != nextFocus && !sameTargets)
             {
-                lastFocus = nextFocus;
                 publish(new BattleFocusChanged(battleId, nextFocus.Item1, nextFocus.Item2));
             }
+            lastFocus = nextFocus;
             if (current is not null)
             {
                 foreach (var member in current.Party)
@@ -74,7 +78,7 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
                         statuses[member.Slot] = (member.Name, status);
                     }
                     var before = previous?.Party.FirstOrDefault(x => x.Slot == member.Slot && x.Name == member.Name);
-                    if (before?.Hp > 0 && member.Hp == 0) Feedback($"{member.Name}. HP zero.");
+                    if (before?.Hp > 0 && member.Hp == 0) Feedback($"{member.Name} was knocked out.");
                 }
             }
             foreach (var command in commands) Handle(command);
@@ -99,7 +103,7 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
                 };
                 var member = current.Party.FirstOrDefault(x => x.Slot == slot);
                 if (member is null) Inspect($"Party slot {slot + 1} is empty.");
-                else { selectedSlot = slot; Inspect($"{member.Name}."); }
+                else { selectedSlot = slot; Inspect(Describe(member)); }
                 return;
             }
             if (command == BattleCommand.Repeat)
@@ -110,7 +114,7 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
             }
             var selected = current.Party.FirstOrDefault(x => x.Slot == selectedSlot);
             if (selected is null) { Inspect($"Party slot {selectedSlot + 1} is empty."); return; }
-            if (command == BattleCommand.ReadHp) Inspect($"{selected.Name}. HP {selected.Hp} of {selected.MaximumHp}.");
+            if (command == BattleCommand.ReadHp) Inspect($"{selected.Name}. {DescribeHp(selected)}.");
             else if (command == BattleCommand.ReadMp) Inspect($"{selected.Name}. MP {selected.Mp} of {selected.MaximumMp}.");
         }
     }
@@ -180,5 +184,9 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
     public void Disable() { lock (gate) End(currentOwner); }
     private void EnsureAnnounced() { if (!announced) { publish(new BattleStarted(battleId)); announced = true; } }
     private void Inspect(string text) => publish(new BattleInspectionRequested(battleId, text));
+    public static string Describe(BattlePartyMember member) =>
+        $"{member.Name}. {DescribeHp(member)}. MP {member.Mp} of {member.MaximumMp}.";
+    private static string DescribeHp(BattlePartyMember member) =>
+        member.Hp == 0 ? "Knocked out" : $"HP {member.Hp} of {member.MaximumHp}";
     private void Feedback(string text) => publish(new BattleFeedbackPresented(battleId, ++serial, text));
 }

@@ -11,7 +11,8 @@ public sealed partial class FieldSubmenuCapture
     private const int FormationInstructionMessageId = 0x95;
     private const int FormationCombosMessageId = 0x83;
 
-    private sealed record FormationMember(uint Key, int CharacterId, bool Locked, nuint Card);
+    private const uint CharaAnimeVtableRva = 0x3AC0B8;
+    private sealed record FormationMember(uint Key, int CharacterId, bool Locked, nuint Card, string? Name);
     private sealed record FormationFrame(
         uint FocusKey, int HeldKey, nuint ComboPanel,
         FormationMember[] Current, FormationMember[] Reserve, string Signature);
@@ -102,13 +103,14 @@ public sealed partial class FieldSubmenuCapture
         // traversal with no Labels therefore means none; an unreadable Label still fails capture.
         var combos = rendered.Read(frame.ComboPanel);
         if (combos is null || combos.Count > MaximumRenderedLines) return null;
-        parts.Add(comboCaption);
-        parts.Add(combos.Count == 0 ? "None" : JoinRenderedLines(combos));
+        var focusText = string.Join(". ", parts.Select(p => p.TrimEnd().TrimEnd('.'))) + ".";
+        var comboText = comboCaption.TrimEnd('.') + ". " +
+            (combos.Count == 0 ? "None" : JoinRenderedLines(combos)).TrimEnd('.') + ".";
 
         if (!TryReadFormationFrame(imageBase, node, out var again) || again.Signature != frame.Signature)
             return null;
-        var body = string.Join(". ", parts.Select(p => p.TrimEnd().TrimEnd('.'))) + ".";
-        return new(FormationKind, caption, $"formation:{frame.Signature}", body);
+        return new(FormationKind, caption, $"formation:{frame.Signature}", focusText + " " + comboText,
+            focusText, comboText);
     }
 
     private bool TryReadFormationCard(FormationMember member, out string card, out string name)
@@ -116,9 +118,11 @@ public sealed partial class FieldSubmenuCapture
         card = name = string.Empty;
         var lines = rendered.Read(member.Card);
         if (lines is null || lines.Count == 0 || lines.Count > MaximumRenderedLines) return false;
-        // The card builder 23B210 renders the character name first, followed by level, HP and MP.
-        name = lines[0];
-        card = JoinRenderedLines(lines);
+        // 23B210 renders a name Label for current members. 23B3D0 renders
+        // only stats for reserve members; their visible CharaAnime proves identity.
+        name = member.Name ?? lines[0];
+        card = (member.Name is null ? "" : member.Name + ". ") +
+            RenderedCharacterCardSpeech.Format(lines, member.Name is null);
         return !string.IsNullOrWhiteSpace(card);
     }
 
@@ -168,7 +172,8 @@ public sealed partial class FieldSubmenuCapture
         }
         else if (!members.Any(m => m.Key == focus)) return false;
 
-        frame = new(focus, held, comboPanel, current, reserve, string.Join(":", version));
+        frame = new(focus, held, comboPanel, current, reserve,
+            string.Join(":", version) + ":" + string.Join("|", reserve.Select(m => m.Name)));
         return true;
     }
 
@@ -187,7 +192,7 @@ public sealed partial class FieldSubmenuCapture
         {
             var record = records + (nuint)(index * 8);
             var key = (uint)((current ? 0 : 10) + index);
-            if (!Int32(record, out var id) || id is < 0 or >= 0x80 ||
+            if (!Int32(record, out var id) || id is < 0 or >= 9 ||
                 !Byte(record + 4, out var side) || side != (current ? 1 : 0) ||
                 !Byte(record + 5, out var locked) || locked > 1 ||
                 !Pointer(cards + (nuint)(index * 4), out var card) || !HasAncestor(card, cardOwner) ||
@@ -199,8 +204,35 @@ public sealed partial class FieldSubmenuCapture
                 !Byte(state + 0x11, out var stateLocked) || stateLocked != locked) return false;
 
             version.AddRange([(uint)id, side, locked, (ulong)card, (ulong)button, (ulong)state]);
-            members[index] = new(key, id, locked != 0, card);
+            string? name = null;
+            if (!current && !TryReadReserveIdentity(imageBase, card, id, version, out name)) return false;
+            members[index] = new(key, id, locked != 0, card, name);
         }
+        return true;
+    }
+
+    private bool TryReadReserveIdentity(nuint image, nuint card, int id, List<ulong> version, out string? name)
+    {
+        name = null;
+        // 23DA10 stores the character ID at CharaAnime+280. 1BEAC0 adds
+        // that sprite directly to its reserve card. 414830 uses this saved-name table.
+        if (!TryReadBoundedVector(card + ChildrenBeginOffset, 4, 64, version, out var children, out var count))
+            return false;
+        nuint sprite = 0;
+        for (var i = 0; i < count; i++)
+        {
+            if (!Pointer(children + (nuint)(i * 4), out var child) || !Pointer(child, out var vt)) return false;
+            if (vt != image + CharaAnimeVtableRva) continue;
+            if (sprite != 0 || !Pointer(child + NodeParentOffset, out var parent) || parent != card ||
+                !HasAncestor(child, card) || !Int32(child + 0x280, out var character) || character != id) return false;
+            sprite = child;
+        }
+        if (sprite == 0 || !Pointer(image + 0x41B4C4, out var global) ||
+            !new ChronoTriggerAccessibility.Native.Memory.MsvcStringReader(memory)
+                .TryReadName(global + 0x1908u + (nuint)(id * 24), out var saved, out _) ||
+            string.IsNullOrWhiteSpace(saved)) return false;
+        version.AddRange([(ulong)sprite, (ulong)global, (uint)id]);
+        name = saved;
         return true;
     }
 

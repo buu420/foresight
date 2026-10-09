@@ -71,7 +71,7 @@ public sealed class MenuNarratorTests
         var narrator = ActiveMenu();
         narrator.Apply(new MenuFocusChanged(new MenuFocus("Items", null, 1, 7, null, false)));
 
-        Assert.Empty(narrator.Apply(new MenuExited(TopMenuOwner)));
+        Assert.True(Assert.Single(narrator.Apply(new MenuExited(TopMenuOwner))).StopSpeech);
         var reopened = narrator.Apply(new MenuPresented(
             TopMenuOwner,
             "Menu", new MenuFocus("Items", null, 1, 7, null, false), []));
@@ -228,7 +228,7 @@ public sealed class MenuNarratorTests
             SettingsOwner, "Settings", new MenuFocus("Battle", null, 1, 6, null, false), []));
         narrator.Apply(new MenuExited(TopMenuOwner));
 
-        Assert.Empty(narrator.Apply(new MenuExited(SettingsOwner)));
+        Assert.True(Assert.Single(narrator.Apply(new MenuExited(SettingsOwner))).StopSpeech);
 
         var failure = Assert.Single(narrator.Apply(new MenuFocusChanged(
             new MenuFocus("Sound", null, 2, 6, null, false))));
@@ -247,7 +247,7 @@ public sealed class MenuNarratorTests
         Assert.Single(narrator.Apply(new MenuFocusChanged(
             new MenuFocus("Inventory", null, 2, 7, null, false))));
 
-        Assert.Empty(narrator.Apply(new MenuExited(TopMenuOwner)));
+        Assert.True(Assert.Single(narrator.Apply(new MenuExited(TopMenuOwner))).StopSpeech);
         var failure = Assert.Single(narrator.Apply(new MenuFocusChanged(
             new MenuFocus("Equipment", null, 1, 7, null, false))));
         Assert.StartsWith("Chrono Trigger accessibility stopped:", failure.Text, StringComparison.Ordinal);

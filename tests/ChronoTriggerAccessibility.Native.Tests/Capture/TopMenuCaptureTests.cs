@@ -8,6 +8,19 @@ namespace ChronoTriggerAccessibility.Native.Tests.Capture;
 
 public sealed class TopMenuCaptureTests
 {
+    [Fact]
+    public void VisibleZeroHpUsesKnockedOutWhileRawStatTokensAndMpRemainAvailable()
+    {
+        var fixture = new Fixture(TopMenuStyle.Classic, activeCount: 1, reserveCount: 0);
+        using var scope = fixture.Begin();
+        fixture.RecordClassicActive(scope, "Crono", false, currentHp: "0 /");
+        fixture.RecordRowsAndControls(scope); fixture.RecordStatus(scope, "Low HP"); fixture.RecordTimeAndCurrency(scope);
+        Assert.True(scope.TryCreateSnapshot(out var snapshot, out var diagnostic), diagnostic);
+        Assert.Contains("Knocked out", snapshot.FlattenedStatus);
+        Assert.DoesNotContain("0 /", snapshot.FlattenedStatus);
+        Assert.Contains("MP", snapshot.FlattenedStatus);
+        Assert.Equal(["0 /", "300"], snapshot.Members[0].Rows[1].ValueTokens);
+    }
     private const nuint ImageBase = 0x00400000;
 
     [Theory]
@@ -754,7 +767,8 @@ public sealed class TopMenuCaptureTests
             TopMenuCaptureScope scope,
             string name,
             bool usePlaceholder,
-            bool omitMaximum = false)
+            bool omitMaximum = false,
+            string currentHp = "250 /")
         {
             Record(scope, 0x23B1D0, name);
             Record(scope, 0x23A2F2, "LV");
@@ -767,7 +781,7 @@ public sealed class TopMenuCaptureTests
             }
             else
             {
-                Record(scope, 0x23A5EF, "250 /");
+                Record(scope, 0x23A5EF, currentHp);
                 if (!omitMaximum)
                 {
                     Record(scope, 0x23A697, "300");

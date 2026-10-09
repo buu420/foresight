@@ -5,6 +5,16 @@ namespace ChronoTriggerAccessibility.Prism.Tests;
 public sealed class PrismOutputTests
 {
     [Fact]
+    public void StopUsesNativeCancellationWithoutAnEmptySpeechMessageAndSurfacesFailure()
+    {
+        var native = new RecordingPrismNative();
+        using var session = new PrismSession(native);
+        session.Output(new PrismOutput("Crono. HP 43 of 70.")); session.Stop();
+        Assert.Equal("stop", native.Calls[^1]);
+        native.StopResult = PrismError.SpeakFailure;
+        Assert.Equal(PrismError.SpeakFailure, Assert.Throws<PrismException>(session.Stop).Error);
+    }
+    [Fact]
     public void SessionInitializesCreatesOutputsThenFreesBeforeShutdown()
     {
         var native = new RecordingPrismNative();
@@ -71,6 +81,8 @@ public sealed class PrismOutputTests
 
         public List<string> Calls { get; } = [];
         public PrismError OutputResult { get; init; } = PrismError.Ok;
+        public PrismError StopResult { get; set; } = PrismError.Ok;
+        public PrismError Stop(IntPtr backend) { Calls.Add("stop"); return StopResult; }
         public string? BackendNameValue { get; init; } = "test backend";
         public TimeSpan OutputDelay { get; init; }
         public int MaximumConcurrentOutputs => maximumConcurrentOutputs;

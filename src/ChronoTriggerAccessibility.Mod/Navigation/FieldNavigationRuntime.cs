@@ -128,7 +128,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 return originalPad;
             }
             if (gamepad?.IsOpen == true) return originalPad;
-            if (originalPad != 0)
+            if (ManualWalkingInput(originalPad, padMode) != 0)
             {
                 worldPadManual++;
                 worldPadLastReject = "physical input";
@@ -250,8 +250,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 // The rat catch uses the native held Confirm bit. Cancelling on that bit
                 // defeats pursuit precisely when the player tries to catch it. Every other
                 // action still takes manual control, and fresh frame/scene gates still apply.
-                var manualPad = current == NavigationMode.Field && controller.AllowsConfirmWhileFollowing(frame)
-                    ? originalPad & ~0x80u : originalPad;
+                // Dash is the remapped native action (175C90 tests bit 8), not a
+                // physical controller button. Keep it in the delivered input.
+                var manualPad = ManualWalkingInput(originalPad, current);
+                if (current == NavigationMode.Field && controller.AllowsConfirmWhileFollowing(frame))
+                    manualPad &= ~0x80u;
                 var result = controller.Update(frame, now, manualPad != 0);
                 var speech = new List<string>(result.Speech);
                 var processedCommands = new List<NavigationCommand>();
@@ -263,7 +266,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     // A new manual turn or recovery message also answers a repeat.
                     if (command == NavigationCommand.Repeat && result.Guiding &&
                         !result.AutoWalking && result.Speech.Count != 0) return;
-                    if (command == NavigationCommand.ToggleWalk && originalPad != 0)
+                    if (command == NavigationCommand.ToggleWalk && ManualWalkingInput(originalPad, current) != 0)
                     {
                         speech.Add("Release the movement and action buttons before starting automatic walking.");
                         return;
@@ -361,6 +364,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     {
         if (result.Speech.Count != 0) speak(string.Join(" ", result.Speech));
     }
+
+    private static uint ManualWalkingInput(uint pad, NavigationMode mode) =>
+        mode is NavigationMode.Field or NavigationMode.World ? pad & ~8u : pad;
 
     public static uint DirectionBits(NavigationDirection direction) => direction switch
     {

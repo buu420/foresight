@@ -128,11 +128,31 @@ public sealed class FieldSubmenuLiveCaptureTests
     {
         var (memory, image, node) = PartyWithSyntheticReserve();
         var capture = new FieldSubmenuCapture(memory);
-        Assert.Equal("Reserve, 1 of 1. Lucca. Usable Combos. None.", capture.Capture(image, node)!.Text);
+        Assert.Equal("Reserve, 1 of 1. Lulu. LV 14. HP 280/295. MP 30/32. Usable Combos. None.", capture.Capture(image, node)!.Text);
         memory.Word(node + 0x334, 0);
-        Assert.Equal("Reserve, 1 of 1. Lucca. Moving Crono. Usable Combos. None.", capture.Capture(image, node)!.Text);
+        Assert.Equal("Reserve, 1 of 1. Lulu. LV 14. HP 280/295. MP 30/32. Moving Crono. Usable Combos. None.", capture.Capture(image, node)!.Text);
         memory.Word(node + 0x334, 10);
-        Assert.Equal("Reserve, 1 of 1. Lucca. Picked up. Usable Combos. None.", capture.Capture(image, node)!.Text);
+        Assert.Equal("Reserve, 1 of 1. Lulu. LV 14. HP 280/295. MP 30/32. Picked up. Usable Combos. None.", capture.Capture(image, node)!.Text);
+        memory.Word(node + 0x334, 10).Word(0x2F13DD98 + 0x2C4, 0);
+        Assert.Contains("Moving Lulu.", capture.Capture(image, node)!.Text);
+    }
+
+    [Theory]
+    [InlineData("missing sprite")][InlineData("hidden sprite")][InlineData("wrong id")]
+    [InlineData("missing name")][InlineData("wrong parent")][InlineData("invalid id")]
+    public void ReserveIdentityRequiresTheVisibleOwnedSpriteAndTheNativeSavedName(string mutation)
+    {
+        var (memory, image, node) = PartyWithSyntheticReserve();
+        switch (mutation)
+        {
+            case "missing sprite": memory.Word(0x50004800, 0x50004C00); break;
+            case "hidden sprite": memory.Byte(0x50004900 + 0x1AD, 0); break;
+            case "wrong id": memory.Word(0x50004900 + 0x280, 2); break;
+            case "wrong parent": memory.Word(0x50004900 + 0x16C, node); break;
+            case "invalid id": memory.Word(0x50000000, 9); break;
+            case "missing name": memory.String(0x50006000 + 0x1908 + 24, ""); break;
+        }
+        Assert.Null(new FieldSubmenuCapture(memory).Capture(image, node));
     }
 
     [Fact]
@@ -249,7 +269,16 @@ public sealed class FieldSubmenuLiveCaptureTests
         memory.Word(node + 0x30C, 0x50002000).Word(node + 0x310, 0x50002004);
         memory.Word(0x50002000, 0x50004000);
         memory.Word(0x50003000, image + 0x3A4364).Word(0x50003000 + 0x16C, 0x1E610928).Byte(0x50003000 + 0x1AD, 1);
-        SyntheticLabel(memory, 0x50004000, 0x1E610928, "Lucca");
+        // The native reserve card has stats Labels and a CharaAnime sprite, with no name Label.
+        SyntheticLabel(memory, 0x50004000, 0x1E610928, "unused");
+        memory.Word(0x50004000 + 0x278, 0).Word(0x50004000 + 0x160, 0x50004800)
+            .Word(0x50004000 + 0x164, 0x50004808).Word(0x50004800, 0x50004900).Word(0x50004804, 0x50004C00);
+        SyntheticLabel(memory, 0x50004C00, 0x50004000, "LV 14. HP 280/295. MP 30/32");
+        memory.Word(0x50004C00, image + 0x3A4364); // a readable non-CharaAnime node vtable
+        memory.Word(0x50004900, image + 0x3AC0B8).Word(0x50004900 + 0x16C, 0x50004000)
+            .Byte(0x50004900 + 0x1AD, 1).Word(0x50004900 + 0x280, 1)
+            .Word(0x50004900 + 0x160, 0).Word(0x50004900 + 0x164, 0).Word(0x50004900 + 0x278, 0);
+        memory.Word(image + 0x41B4C4, 0x50006000).String(0x50006000 + 0x1908 + 24, "Lulu");
         var sentinel = ReadWord(memory, ReadWord(memory, 0x2F13DD98 + 0x294) + 4);
         var entry = ReadWord(memory, sentinel);
         while (ReadWord(memory, entry + 8) != 999) entry = ReadWord(memory, entry);

@@ -11,6 +11,7 @@ public sealed class PrismRuntimeFactory : IRuntimePrismFactory
         public string BackendName => session.BackendName;
         public void Output(string text, bool interrupt) =>
             session.Output(new PrismOutput(text, interrupt));
+        public void Stop() => session.Stop();
         public void Dispose() => session.Dispose();
     }
 }

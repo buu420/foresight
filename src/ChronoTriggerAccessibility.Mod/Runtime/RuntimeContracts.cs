@@ -31,6 +31,7 @@ public interface IRuntimePrismSession : IDisposable
     string BackendName { get; }
     void Output(string text, bool interrupt) =>
         throw new NotSupportedException("This Prism session does not expose announcement output.");
+    void Stop() => throw new NotSupportedException("This Prism session does not expose speech cancellation.");
 }
 
 public interface ISemanticEventDispatcher

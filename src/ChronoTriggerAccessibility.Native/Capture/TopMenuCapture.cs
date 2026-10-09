@@ -1114,8 +1114,13 @@ public sealed class TopMenuCaptureScope : IDisposable
             flattened.Add(new string(member.Name.AsSpan()));
             foreach (var row in member.Rows)
             {
-                flattened.Add(new string(row.Label.AsSpan()));
-                flattened.AddRange(row.ValueTokens.Select(token => new string(token.AsSpan())));
+                if (RenderedCharacterCardSpeech.IsKnockedOut(row.Label, row.ValueTokens))
+                    flattened.Add("Knocked out");
+                else
+                {
+                    flattened.Add(new string(row.Label.AsSpan()));
+                    flattened.AddRange(row.ValueTokens.Select(token => new string(token.AsSpan())));
+                }
                 if (row.Extra is not null)
                 {
                     flattened.Add(new string(row.Extra.AsSpan()));

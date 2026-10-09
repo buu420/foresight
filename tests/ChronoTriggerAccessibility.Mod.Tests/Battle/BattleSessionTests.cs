@@ -30,7 +30,7 @@ public sealed class BattleSessionTests
         session.Tick(Menu);
         keyboard.FilterGameKeyboardState(new byte[256], runtime.IsActive);
         keys.Add('M'); session.Tick(Menu);
-        Assert.Equal(["Marle.", "Marle. HP 27 of 80.", "Marle. MP 7 of 12."],
+        Assert.Equal(["Marle. HP 50 of 80. MP 7 of 12.", "Marle. HP 27 of 80.", "Marle. MP 7 of 12."],
             events.OfType<BattleInspectionRequested>().Select(e => e.Text));
 
         m.U32(Canvas + 0x140AC, 3); // displayed white damage, even if larger than remaining HP
@@ -96,11 +96,32 @@ public sealed class BattleSessionTests
         var runtime = new BattleRuntime(events.Add, new BattleKeyboard(_ => false, () => true), () => true, _ => { });
         var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
         session.Tick(Menu);
-        Assert.Equal("Targets. Crono, Enemy B, Marle.",
+        Assert.Equal("Targets. Crono. HP 43 of 70. MP 8 of 8. Enemy B. Marle. HP 50 of 80. MP 7 of 12.",
             Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
         session.Miss(Menu, 4); m.String(Menu + 0x34 + 4 * 24, "MISS!"); m.Bytes[Menu + 0x1B5 + 4] = 1;
         session.Render(Menu);
         Assert.Equal("Enemy B. MISS!", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+    }
+
+    [Fact]
+    public void AllyTargetsReadHpAndMpOncePerSelectionAndRepeatReadsTheCurrentHud()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        m.U32(Canvas + 0x19EEC, 1); m.Bytes[Menu + 0x538] = 1;
+        for (uint i = 0; i < 11; i++) m.U32(Canvas + 0x1ACD4 + i * 4, 255);
+        m.U32(Canvas + 0x1ACD4, 1);
+        var runtime = new BattleRuntime(events.Add, new BattleKeyboard(_ => false, () => true), () => true, _ => { });
+        var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
+        session.Tick(Menu);
+        Assert.Equal("Target. Marle. HP 50 of 80. MP 7 of 12.",
+            Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
+        m.U16(Canvas + 0x15BA3 + 0x80, 27); session.Tick(Menu);
+        Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null);
+        runtime.Handle(BattleCommand.Repeat);
+        Assert.Equal("Target. Marle. HP 27 of 80. MP 7 of 12.", Assert.Single(events.OfType<BattleInspectionRequested>()).Text);
+        m.U32(Canvas + 0x19EEC, 0); session.Tick(Menu);
+        m.U16(Canvas + 0x15BA3 + 0x80, 0); m.U32(Canvas + 0x19EEC, 1); session.Tick(Menu);
+        Assert.Equal("Target. Marle. Knocked out. MP 7 of 12.", events.OfType<BattleFocusChanged>().Last().Text);
     }
 
     private static Memory World()

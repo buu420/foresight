@@ -32,6 +32,7 @@ public sealed class PrismLibraryContractTests
                 "prism_shutdown",
                 "prism_registry_create_best",
                 "prism_backend_output",
+                "prism_backend_stop",
                 "prism_backend_free",
             });
     }

@@ -21,8 +21,7 @@ public sealed partial class FieldTechDetailsCapture
             ReadCharacterState(image, node) != state) return null;
         // Native character cards place colons after groups and split HP/MP
         // fractions across Labels. Preserve the finished card's displayed values.
-        var card = string.Join(" ", lines).Replace("/ ", "/", StringComparison.Ordinal)
-            .Replace(" :", ".", StringComparison.Ordinal).Trim().TrimEnd('.');
+        var card = RenderedCharacterCardSpeech.Format(lines).TrimEnd('.');
         return new("Tech", title, $"tech:character:{state.Key}:{state.Character}:{state.Category}",
             $"{card}. {category}. {prompt.TrimEnd('.')}");
     }

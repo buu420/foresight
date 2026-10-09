@@ -7,6 +7,16 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class FieldNavigationRuntimeTests
 {
     [Fact]
+    public void HeldNativeDashKeepsWalkingAndPreservesThePlayersDashBit()
+    {
+        var h = new Harness(); h.Enable(); h.Press('P');
+        Assert.Equal(0x108u, h.Tick(8));
+        Assert.Equal(0x108u, h.Tick(8));
+        Assert.Equal(0x100u, h.Tick());
+        Assert.Equal(0x88u, h.Tick(0x88)); // Confirm still cancels, including while Dash is held.
+        Assert.Equal(0u, h.Tick());
+    }
+    [Fact]
     public void GuidanceNeverInjectsInputAndWalkingOnlyAddsNativeDirectionBits()
     {
         var h = new Harness(); h.Enable();

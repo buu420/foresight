@@ -10,4 +10,5 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 /// <para>Every field is non-null and non-empty: a page that cannot produce all four is reported as
 /// no snapshot at all rather than as a partly filled one.</para>
 /// </summary>
-public sealed record FieldSubmenuSnapshot(string Kind, string Title, string FocusIdentity, string Text);
+public sealed record FieldSubmenuSnapshot(string Kind, string Title, string FocusIdentity, string Text,
+    string? FocusText = null, string? SupplementalText = null);
