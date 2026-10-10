@@ -83,7 +83,7 @@ public sealed class FieldContentCoverageTests
     {
         Assert.Equal(1973, Content.Actors.Length + Content.Excluded.Length);
         Assert.Equal(449, Content.Actors.Select(r => r.Scene).Concat(Content.Excluded.Select(e => e.Scene)).Distinct().Count());
-        Assert.Equal(new Dictionary<string, int> { ["encounter-only"] = 441, ["story-trigger"] = 4, ["audited-gate"] = 2, ["parked"] = 2, ["party-only"] = 1 },
+        Assert.Equal(new Dictionary<string, int> { ["encounter-only"] = 441, ["story-trigger"] = 4, ["audited-gate"] = 2, ["parked"] = 7, ["party-only"] = 1 },
             Content.Excluded.GroupBy(e => e.Reason).ToDictionary(g => g.Key, g => g.Count()));
         var missing = new List<string>();
         foreach (var row in Content.Actors)

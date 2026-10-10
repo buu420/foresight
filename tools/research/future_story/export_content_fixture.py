@@ -65,7 +65,10 @@ def main():
         where, (cls, visual) = positions[key]
         effects = set(r["confirm"]) | set(r["touch"])
         reason = "encounter-only" if effects <= {"Battle"} else "party-only" if effects <= {"Party"} else \
-            "parked" if where is not None and (where[0] >= 0x8000 or where[1] >= 0x8000) else \
+            "parked" if where is not None and (where[0] >= 0x8000 or where[1] >= 0x8000 or
+                # Reptite Lair holes wait at solid tile (0,0) until a burrow or event places them.
+                r["scene"] in (222, 284, 285, 286) and (cls, visual) == (4, 133) and
+                where[0] >> 8 == 0 and where[1] >> 8 == 0) else \
             "audited-gate" if key in AUDITED_GATES else "story-trigger" if key in STORY_TRIGGERS else None
         if reason:
             excluded.append(dict(Scene=r["scene"], Actor=r["actor"], Reason=reason))

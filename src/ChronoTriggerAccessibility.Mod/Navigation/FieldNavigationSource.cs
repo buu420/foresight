@@ -98,6 +98,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             var description = FieldVisualLabels.Describe(actor);
+            // A lair hole is a Confirm passage drawn as an open pit; a parked one has no contact.
+            var lairHole = field.SceneIdCoherent && ReptiteLairTargets.IsHole(field.SceneId, actor);
+            if (lairHole && ReptiteLairTargets.IsParked(actor)) continue;
+            if (lairHole) description = (ReptiteLairTargets.HoleLabel(field.SceneId, actor), NavigationCategory.Exits);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
             var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
@@ -144,13 +148,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 FieldContentFacts.Service(field.SceneId, actor.Index) is null && battles.Length != 0 &&
                 EncounterApproaches(actor, battles, out _).Count != 0;
             Add(id, label ?? (field.SceneIdCoherent ? FieldContentFacts.ActorLabel(field.SceneId, actor, description.Category) : null) ??
+                (field.SceneIdCoherent ? ReptiteLairTargets.CreatureAppearance(field.SceneId, actor) : null) ??
                 description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
                 storyOnly: encounterOnly,
                 storyCandidate: !conveyorRobot,
-                guideAvailable: !conveyorRobot && guideActive && (label is not null || actor.IsActivationCandidate || scriptedAction),
+                guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
+                    (label is not null || actor.IsActivationCandidate || scriptedAction),
                 instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
-                guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." : null,
-                arrivalInstruction: appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
+                guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
+                    lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
+                arrivalInstruction: lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
@@ -312,7 +319,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var approaches = EncounterApproaches(actor, encounters, out var touch);
             if (approaches.Count == 0) continue;
             if (touch) touchGoals.Add((actor.Index, approaches));
-            Add($"actor-encounter:{actor.Index}", "Encounter", NavigationCategory.Enemies,
+            Add($"actor-encounter:{actor.Index}", ReptiteLairTargets.CreatureAppearance(field.SceneId, actor) ?? "Encounter", NavigationCategory.Enemies,
                 position, approaches, actor.IsDrawn && viewport.Contains(position.X, position.Y) ||
                     metadata is { Marker: true } && TileVisible(actor.TileX, actor.TileY),
                 guideAvailable: guideActive, storyCandidate: true,

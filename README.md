@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.51 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
+**Foresight 0.3.52 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.51 fixes Forest Maze's forward passage selection and accounts for the game's sideways movement along diagonal walls. Manual guidance and auto-walk keep the correct direction through those movements. Verified level crossings have distinct navigation labels. The same movement pattern was checked in Reptite Lair, Giant's Claw and Death Peak. See [this build's changes and testing notes](docs/releases/v0.3.51.md).
+Version 0.3.52 adds a clear start cue, rapid Confirm instructions and visible-action feedback for Ioka's drinking contest. Reptite Lair holes have distinct labels under Exits, and its creatures have appearance names. See [this build's changes and testing notes](docs/releases/v0.3.52.md).
 
 ## Install the beta download
 

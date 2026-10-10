@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.Minigames;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Startup;
@@ -10,12 +11,15 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
 {
     private readonly IRuntimeNativeHookFactory factory;
     private readonly IntroTraceRecorder recorder;
+    private readonly IokaContestRuntime? contest;
     private bool prepared;
 
-    public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder)
+    public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder,
+        IokaContestRuntime? contest = null)
     {
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         this.recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
+        this.contest = contest;
         Registrations = Array.AsReadOnly<IHookRegistration>([this]);
     }
 
@@ -32,8 +36,12 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
 
         FieldOpcodeDispatcherDelegate? original = null;
         FieldOpcodeDispatcherDelegate detour = (context, opcode) => boundary.Run(Name, () =>
-            recorder.Dispatch(context, opcode, () =>
-                (original ?? throw new InvalidOperationException("Intro trace original is not bound."))(context, opcode)));
+        {
+            void TraceAndCall() => recorder.Dispatch(context, opcode, () =>
+                (original ?? throw new InvalidOperationException("Intro trace original is not bound."))(context, opcode));
+            if (contest is null) TraceAndCall();
+            else contest.Dispatch(context, opcode, TraceAndCall);
+        });
         // The factory only prepares an inactive hook. Bind the trampoline before
         // returning it to ReloadedHookInstaller, which owns the later activation.
         var hook = factory.CreateHook(contract.Id, detour, address);
@@ -46,6 +54,7 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
     {
         if (!prepared) throw new InvalidOperationException("Intro trace has not been prepared.");
         recorder.Enable();
+        contest?.Enable();
     }
-    public void AfterHooksDisabled() => recorder.Disable();
+    public void AfterHooksDisabled() { contest?.Disable(); recorder.Disable(); }
 }

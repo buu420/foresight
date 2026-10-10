@@ -6,6 +6,7 @@ using ChronoTriggerAccessibility.Mod.Battle;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Extras;
 using ChronoTriggerAccessibility.Mod.Intro;
+using ChronoTriggerAccessibility.Mod.Minigames;
 using ChronoTriggerAccessibility.Mod.NewGame;
 using ChronoTriggerAccessibility.Mod.Navigation;
 using ChronoTriggerAccessibility.Core.Navigation;
@@ -290,7 +291,13 @@ public sealed class Mod : ModBase
             [startupTitle, newGame, extras, steamSettings, touchSettings, topMenu, saveLoad, endingResult,
                 restartNotice]);
         var dialogue = new DialogueHookSet(sharedFanout, asmHookFactory, memory, dispatcher);
-        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder);
+        var contest = new IokaContestRuntime(
+            (context, opcode) => IokaContestCapture.TryCapture(memory, (nuint)context, opcode, out var before) ? before : null,
+            before => IokaContestCapture.TryComplete(memory, before),
+            NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
+            () => navigationText.CharacterName(navigationImageBase, 5),
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)

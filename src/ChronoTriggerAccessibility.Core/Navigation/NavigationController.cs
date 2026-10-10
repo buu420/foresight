@@ -309,6 +309,12 @@ public sealed class NavigationController
             Stop();
             return;
         }
+        if (!string.IsNullOrWhiteSpace(currentTarget.GuidanceRestriction))
+        {
+            speech.Add(currentTarget.GuidanceRestriction);
+            Stop();
+            return;
+        }
         // Rejected standing points belong to the actor's previous position, not to a
         // moving chase for its whole lifetime.
         if (currentTarget.FollowUntilInteraction && currentTarget.Position != destination?.Position)
