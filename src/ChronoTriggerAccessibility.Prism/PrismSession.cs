@@ -84,6 +84,16 @@ public sealed class PrismSession : IDisposable
         }
     }
 
+    public void Braille(string text)
+    {
+        lock (sync)
+        {
+            ThrowIfDisposed();
+            var error = native.Braille(backend, text);
+            if (error != PrismError.Ok) throw new PrismException(error, native.ErrorString(error));
+        }
+    }
+
     public void Dispose()
     {
         lock (sync)

@@ -12,6 +12,7 @@ public sealed class PrismRuntimeFactory : IRuntimePrismFactory
         public void Output(string text, bool interrupt) =>
             session.Output(new PrismOutput(text, interrupt));
         public void Stop() => session.Stop();
+        public void Braille(string text) => session.Braille(text);
         public void Dispose() => session.Dispose();
     }
 }

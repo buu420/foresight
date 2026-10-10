@@ -16,6 +16,7 @@ internal interface IPrismNative
     IntPtr CreateBest(IntPtr context);
     PrismError Output(IntPtr backend, string text, bool interrupt);
     PrismError Stop(IntPtr backend);
+    PrismError Braille(IntPtr backend, string text);
     string? BackendName(IntPtr backend);
     void Free(IntPtr backend);
     void Shutdown(IntPtr context);
@@ -35,6 +36,7 @@ internal sealed partial class PrismNative : IPrismNative
 
     public PrismError Output(IntPtr backend, string text, bool interrupt) => PrismBackendOutput(backend, text, interrupt ? 1 : 0);
     public PrismError Stop(IntPtr backend) => PrismBackendStop(backend);
+    public PrismError Braille(IntPtr backend, string text) => PrismBackendBraille(backend, text);
 
     public string? BackendName(IntPtr backend) => Marshal.PtrToStringUTF8(PrismBackendName(backend));
 
@@ -67,6 +69,10 @@ internal sealed partial class PrismNative : IPrismNative
     [LibraryImport("prism", EntryPoint = "prism_backend_stop")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     private static partial PrismError PrismBackendStop(IntPtr backend);
+
+    [LibraryImport("prism", EntryPoint = "prism_backend_braille", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    private static partial PrismError PrismBackendBraille(IntPtr backend, string text);
 
     [LibraryImport("prism", EntryPoint = "prism_backend_name")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

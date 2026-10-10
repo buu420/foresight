@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.53 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.54 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.53 adds spoken descriptions for reviewed gestures of the first six party characters, including appearances during the first prehistoric visit and beyond, and seven specific opening/fair scene actions. Descriptions use your screen reader and queue with dialogue. See [this build's changes and testing notes](docs/releases/v0.3.53.md).
+Version 0.3.54 gives the supported story descriptions Fish-generated narration using the creator's approved voice recording. The 124 clips cover named and appearance variants of the existing reviewed gestures and opening/fair actions. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.54.md).
 
 ## Install the beta download
 

@@ -32,6 +32,7 @@ public interface IRuntimePrismSession : IDisposable
     void Output(string text, bool interrupt) =>
         throw new NotSupportedException("This Prism session does not expose announcement output.");
     void Stop() => throw new NotSupportedException("This Prism session does not expose speech cancellation.");
+    void Braille(string text) { }
 }
 
 public interface ISemanticEventDispatcher

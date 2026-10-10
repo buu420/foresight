@@ -2,6 +2,9 @@ using ChronoTriggerAccessibility.Core.Events;
 using ChronoTriggerAccessibility.Core.State;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Core.Menus;
+using ChronoTriggerAccessibility.Core.Navigation;
+using ChronoTriggerAccessibility.Core.Dialogue;
+using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 
 namespace ChronoTriggerAccessibility.Mod.Runtime;
 
@@ -60,6 +63,15 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
     }
 
     public void Publish(AccessibilityEvent accessibilityEvent)
+        => Publish(accessibilityEvent, null);
+
+    public void PublishNarration(StoryNarration cue) => Publish(new NavigationAnnouncement(cue.Text), cue);
+    public void CancelNarration()
+    {
+        lock (gate) (session as StoryVoiceSession)?.CancelNarration();
+    }
+
+    private void Publish(AccessibilityEvent accessibilityEvent, StoryNarration? narration)
     {
         ArgumentNullException.ThrowIfNull(accessibilityEvent);
         lock (gate)
@@ -80,7 +92,11 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
                     }
                     continue;
                 }
-                activeSession.Output(announcement.Text, announcement.Interrupt);
+                if (narration is not null && activeSession is StoryVoiceSession recorded)
+                    recorded.Narrate(narration);
+                else if (accessibilityEvent is DialogueChoicesPresented && activeSession is StoryVoiceSession choices)
+                    choices.OutputAfterNarration(announcement.Text, announcement.Interrupt);
+                else activeSession.Output(announcement.Text, announcement.Interrupt);
                 speechMenuOwner = accessibilityEvent switch
                 {
                     MenuPresented presented => presented.Owner,

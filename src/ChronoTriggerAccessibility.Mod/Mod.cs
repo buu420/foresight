@@ -57,14 +57,16 @@ public sealed class Mod : ModBase
             new OpeningMovieTimeline(token => Task.Run(() =>
                 InstalledMovieDescriptions.HasOpeningNarrationAsync(
                     gameRoot, token, movieAudio.OpeningReady), token)), movieAudio,
-            storyAssetsReady: () => storyAssets.IsCompletedSuccessfully && storyAssets.Result);
+            storyAssetsReady: () => storyAssets.IsCompletedSuccessfully && storyAssets.Result,
+            narrate: dispatcher.PublishNarration, stopNarration: dispatcher.CancelNarration);
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
         runtime = new AccessibilityRuntime(
             new CurrentProcessExecutableVerifier(),
             new GameWindowWaiter(),
-            new PrismRuntimeFactory(),
+            new StoryVoiceRuntimeFactory(new PrismRuntimeFactory(), NavigationKeyboard.IsGameForeground,
+                dispatcher.RecordDiagnostic, coverageFailure: dispatcher.ReportCoverageFailure),
             composition.Installer,
             log,
             fatalError,
@@ -131,7 +133,9 @@ public sealed class Mod : ModBase
         ISemanticEventDispatcher dispatcher,
         OpeningMovieTimeline movieTimeline,
         IHookRegistration? movieAudio = null,
-        Func<bool>? storyAssetsReady = null)
+        Func<bool>? storyAssetsReady = null,
+        Action<StoryNarration>? narrate = null,
+        Action? stopNarration = null)
     {
         ArgumentNullException.ThrowIfNull(hookFactory);
         ArgumentNullException.ThrowIfNull(asmHookFactory);
@@ -313,7 +317,7 @@ public sealed class Mod : ModBase
             storyAssetsReady,
             before => StorySceneActionCapture.TryMatch(memory, before, out var candidate) ? candidate : null,
             candidate => StorySceneActionCapture.TryComplete(memory, candidate),
-            before => StoryActionCapture.TryProvePlayerControlRestored(memory, before));
+            before => StoryActionCapture.TryProvePlayerControlRestored(memory, before), narrate, stopNarration);
         var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)

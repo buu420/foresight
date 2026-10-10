@@ -5,6 +5,19 @@ namespace ChronoTriggerAccessibility.Prism.Tests;
 public sealed class PrismOutputTests
 {
     [Fact]
+    public void BrailleRetainsRecordedCaptionWithoutSpeakingItTwiceAndSurfacesFailure()
+    {
+        var native = new RecordingPrismNative();
+        var session = new PrismSession(native);
+        session.Braille("Crono nods.");
+        Assert.Equal("braille:Crono nods.", native.Calls[^1]);
+        Assert.DoesNotContain(native.Calls, x => x.StartsWith("output:"));
+        native.BrailleResult = PrismError.SpeakFailure;
+        Assert.Throws<PrismException>(() => session.Braille("Caption"));
+        session.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => session.Braille("Caption"));
+    }
+    [Fact]
     public void StopUsesNativeCancellationWithoutAnEmptySpeechMessageAndSurfacesFailure()
     {
         var native = new RecordingPrismNative();
@@ -82,6 +95,8 @@ public sealed class PrismOutputTests
         public List<string> Calls { get; } = [];
         public PrismError OutputResult { get; init; } = PrismError.Ok;
         public PrismError StopResult { get; set; } = PrismError.Ok;
+        public PrismError BrailleResult { get; set; } = PrismError.Ok;
+        public PrismError Braille(IntPtr backend, string text) { Calls.Add("braille:" + text); return BrailleResult; }
         public PrismError Stop(IntPtr backend) { Calls.Add("stop"); return StopResult; }
         public string? BackendNameValue { get; init; } = "test backend";
         public TimeSpan OutputDelay { get; init; }

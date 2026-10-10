@@ -9,6 +9,8 @@ public static class StoryActionCatalog
 {
     private static readonly Dictionary<(int Sprite, int Animation), string> Actions = Build();
     public static int ReviewedAnimationCount => Actions.Count;
+    public static IReadOnlyList<(int Sprite, int Animation)> ReviewedAnimations { get; } =
+        Array.AsReadOnly(Actions.Keys.OrderBy(key => key.Sprite).ThenBy(key => key.Animation).ToArray());
 
     public static string DescribeScene(StorySceneActionCandidate candidate, Func<int, string?> characterName)
     {

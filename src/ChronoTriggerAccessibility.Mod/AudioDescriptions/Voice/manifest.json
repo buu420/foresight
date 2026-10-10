@@ -1,0 +1,880 @@
+{
+  "schema": 1,
+  "voice": "Foresight narrator",
+  "provider": "Fish Audio",
+  "model": "s2.1-pro-free",
+  "referenceSha256": "66e41e7efeb37965426f45b54898007b85d44c1cb4ff5d67927f1d2b62191a6c",
+  "sampleRate": 24000,
+  "channels": 1,
+  "bits": 16,
+  "cues": [
+    {
+      "id": "party-00-10-named",
+      "text": "Crono raises their arms.",
+      "sha256": "0f35164e8441f455b49c4aee612a2e3cf3d2f6b166ff5df722d793868f330362",
+      "duration": 1.668875,
+      "bytes": 80150
+    },
+    {
+      "id": "party-00-10-appearance",
+      "text": "The red-haired boy raises their arms.",
+      "sha256": "90696271a2dcf62a1c1db03cb32de3e13cbed8892be1bed6ae91458b1ac969f3",
+      "duration": 2.133292,
+      "bytes": 102442
+    },
+    {
+      "id": "party-00-11-named",
+      "text": "Crono holds their arms up.",
+      "sha256": "d52ce6082958ae647f2a6d39dda2d3eb99423c0096ed0208e50110a7fd5fd8ea",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-00-11-appearance",
+      "text": "The red-haired boy holds their arms up.",
+      "sha256": "585acb1332ba701008c5fa82278c17b79dc669c5e52feb6f87bacf70d971a96b",
+      "duration": 2.690583,
+      "bytes": 129192
+    },
+    {
+      "id": "party-00-12-named",
+      "text": "Crono gets to their feet.",
+      "sha256": "3d69f4261567774708d71379f5759e80a61446fb43f0dfb1f64ed1df070f1f20",
+      "duration": 1.343792,
+      "bytes": 64546
+    },
+    {
+      "id": "party-00-12-appearance",
+      "text": "The red-haired boy gets to their feet.",
+      "sha256": "0fc77d278528d2b468c670a2e2c32f1e9faa43006aee29ce6c22d170c2fedf99",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-00-16-named",
+      "text": "Crono nods.",
+      "sha256": "a9d91812169938ab52c9369c5f315a3f6c1bd714247d4a16337b35226c809cef",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-00-16-appearance",
+      "text": "The red-haired boy nods.",
+      "sha256": "73c2d507ba8b009c05070f0bf51944c8c03937677e6f9cfc38aa3d557e5ab70f",
+      "duration": 1.901083,
+      "bytes": 91296
+    },
+    {
+      "id": "party-00-17-named",
+      "text": "Crono shakes their head.",
+      "sha256": "7a1f110d26c36cef61fab16dc301bc0aea09cb837f5055f42e6554aca42313e9",
+      "duration": 1.483125,
+      "bytes": 71234
+    },
+    {
+      "id": "party-00-17-appearance",
+      "text": "The red-haired boy shakes their head.",
+      "sha256": "234b1eb2aa617477dad75265f76c9f5114bd0cdb497bc9036b39eed97c9e71e4",
+      "duration": 2.411917,
+      "bytes": 115816
+    },
+    {
+      "id": "party-00-1a-named",
+      "text": "Crono laughs.",
+      "sha256": "b4a4ebaade793be3e2b190d66ecbdfc57eac0bec2a5f0f484bbce076aede9c13",
+      "duration": 1.158042,
+      "bytes": 55630
+    },
+    {
+      "id": "party-00-1a-appearance",
+      "text": "The red-haired boy laughs.",
+      "sha256": "dbae67ec95659d67d9e7d0f90a8b846686503f25f512d93a5fe4bf4a23ab9f04",
+      "duration": 1.529583,
+      "bytes": 73464
+    },
+    {
+      "id": "party-00-1b-named",
+      "text": "Crono covers their face.",
+      "sha256": "da795de074bb9149772f9a73975f5dd2d0bc7e713335e9cc261f52f668d67bbd",
+      "duration": 1.622458,
+      "bytes": 77922
+    },
+    {
+      "id": "party-00-1b-appearance",
+      "text": "The red-haired boy covers their face.",
+      "sha256": "ed84dc9622d8d009be6deaf41e2d61126d676764468c71aaca7ec2df48e133f1",
+      "duration": 2.411917,
+      "bytes": 115816
+    },
+    {
+      "id": "party-00-1d-named",
+      "text": "Crono is crouched on the ground.",
+      "sha256": "19e2a4a862252d5b5b9e7fd562ec7533f9973b1db417ddbd526662a19bc63708",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-00-1d-appearance",
+      "text": "The red-haired boy is crouched on the ground.",
+      "sha256": "d1a56a352b1bcff2ec597db47583cfe838e7a868cbf686c55b2e866d77dcfdfb",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-00-22-named",
+      "text": "Crono waves their arms.",
+      "sha256": "5a1d6f2289f11b7f18c0e1e6ee23b261ee03fe19e9817451c6fedd1bbe8285bc",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-00-22-appearance",
+      "text": "The red-haired boy waves their arms.",
+      "sha256": "004ce2effe750eb7c3251c600723b0350607333413426827167ed18e78aa06d1",
+      "duration": 2.319042,
+      "bytes": 111358
+    },
+    {
+      "id": "party-00-23-named",
+      "text": "Crono holds out their sword.",
+      "sha256": "5ee9eaeb61d1077083ddb637dccd7dbd21e245a957faf38c657255345a33ce12",
+      "duration": 2.226167,
+      "bytes": 106900
+    },
+    {
+      "id": "party-00-23-appearance",
+      "text": "The red-haired boy holds out their sword.",
+      "sha256": "2d7c2bb458e3558c5dbeec271b28d01cfd9383e2f3ef6fa589ed4ebdfc44ebbd",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "party-01-0b-named",
+      "text": "Marle jumps up.",
+      "sha256": "f97124b5f2eac84c03eb9ad4bd2c864badf8807f64528272c8066c6307bae153",
+      "duration": 1.343792,
+      "bytes": 64546
+    },
+    {
+      "id": "party-01-0b-appearance",
+      "text": "The blonde girl jumps up.",
+      "sha256": "971889ce9248e7290fbf02e7ac8b961f52398a862e3bd86bda798651ad5f596f",
+      "duration": 1.668875,
+      "bytes": 80150
+    },
+    {
+      "id": "party-01-10-named",
+      "text": "Marle raises their arms.",
+      "sha256": "762ba854e6cb654cfadcd9afef0a7fcdf80d7a00ff2985ac08aa6258a53c4042",
+      "duration": 2.040417,
+      "bytes": 97984
+    },
+    {
+      "id": "party-01-10-appearance",
+      "text": "The blonde girl raises their arms.",
+      "sha256": "e9884073be11b82fe73435b6983774cad01c22d761e67cecf59a179f62e244ea",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-01-11-named",
+      "text": "Marle holds their arms up.",
+      "sha256": "5301c6e4e7c7443a3e6a3d5c4727ec6b57e3e7ad85490e27cab594e126fa5dc9",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-01-11-appearance",
+      "text": "The blonde girl holds their arms up.",
+      "sha256": "7a312b68d70acf58c58dfac7231b91721361ed088ea49a525229c1ce449c2bb2",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-01-12-named",
+      "text": "Marle gets to their feet.",
+      "sha256": "a645011873a864d744dddc6fa6fa7e7ecd6ffc45eb8b2992b4bd0be05daab3bc",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-01-12-appearance",
+      "text": "The blonde girl gets to their feet.",
+      "sha256": "79fa9b2689b3e0a1e4836a2b4790683009432bba03064a3d50c9b4b0e767aad6",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "party-01-16-named",
+      "text": "Marle nods.",
+      "sha256": "e63f65cd911fea75fbf3ba1af154ff91b982694778326988287ae0fad15b2764",
+      "duration": 0.972292,
+      "bytes": 46714
+    },
+    {
+      "id": "party-01-16-appearance",
+      "text": "The blonde girl nods.",
+      "sha256": "365f3d679a1616a64566f77b5c0e02ae481f68f4822965fde5c9ac78756d8436",
+      "duration": 1.483125,
+      "bytes": 71234
+    },
+    {
+      "id": "party-01-17-named",
+      "text": "Marle shakes their head.",
+      "sha256": "728079511777f73f840c3d46f6e34f741bd5daf6a1c33bd5073e5e3d368a4f95",
+      "duration": 1.668875,
+      "bytes": 80150
+    },
+    {
+      "id": "party-01-17-appearance",
+      "text": "The blonde girl shakes their head.",
+      "sha256": "eecf4534299e78b7340ab9b1a499472babd656871f7abba8fc7e70362fa9455f",
+      "duration": 1.901083,
+      "bytes": 91296
+    },
+    {
+      "id": "party-01-1a-named",
+      "text": "Marle laughs.",
+      "sha256": "2a45f2937d65ba6bfae4db1de945d5d74884d943b860e5234a47ccaf52835b02",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-01-1a-appearance",
+      "text": "The blonde girl laughs.",
+      "sha256": "c95daef23b2f2b261f07da8b897bb19c9b0436204346c6a03ca4fd5c1df6cc61",
+      "duration": 1.436708,
+      "bytes": 69006
+    },
+    {
+      "id": "party-01-1b-named",
+      "text": "Marle covers their face.",
+      "sha256": "04e1a3d4dc3fea111c9e7115781c22af4965a8e557f77eaed4f7646029218e4a",
+      "duration": 1.76175,
+      "bytes": 84608
+    },
+    {
+      "id": "party-01-1b-appearance",
+      "text": "The blonde girl covers their face.",
+      "sha256": "bc0e50168cd725f317818b49ffdf21654f3386a6b1cddc4a23c576ecd3c33d6e",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-01-1d-named",
+      "text": "Marle is crouched on the ground.",
+      "sha256": "dd92ccdad53832f694574ce33757f4a236b5c40b292e4cc15fefdd4b058e4807",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-01-1d-appearance",
+      "text": "The blonde girl is crouched on the ground.",
+      "sha256": "301bc0eabe315aae9e4e2bf4d7c192b96c4247d1f605fe61296bdc2dac4ce6a6",
+      "duration": 2.597667,
+      "bytes": 124732
+    },
+    {
+      "id": "party-01-22-named",
+      "text": "Marle waves their arms.",
+      "sha256": "9490b74118c827bf013dd7156c42c7dcf2547145eac2f25d02ad8df9c9a37926",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-01-22-appearance",
+      "text": "The blonde girl waves their arms.",
+      "sha256": "fb60d3d350e9dac3fa5e15fb5d6c2801fb95c9e0bc89d8faee6c10c89c7a06e3",
+      "duration": 2.133292,
+      "bytes": 102442
+    },
+    {
+      "id": "party-01-23-named",
+      "text": "Marle raises their crossbow.",
+      "sha256": "8138c91b09214fd2bbd915ad9434b54028e56677bf85dab8fe3e7350d360b1ff",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-01-23-appearance",
+      "text": "The blonde girl raises their crossbow.",
+      "sha256": "9d93892d183fb2694f051d64189d504a3988f006978b469ee627015ceb306cfd",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-02-11-named",
+      "text": "Lucca raises a hand.",
+      "sha256": "a8c82d01dddff5a209088dc9f8657b06046631bb4172a071859f8d88ac2a865a",
+      "duration": 1.483125,
+      "bytes": 71234
+    },
+    {
+      "id": "party-02-11-appearance",
+      "text": "The girl in the purple helmet raises a hand.",
+      "sha256": "44f4e0f864a47b3ccdf9d1aff8d9269e1cb6668681b89a9a5071c43a99bd47a9",
+      "duration": 2.783458,
+      "bytes": 133650
+    },
+    {
+      "id": "party-02-12-named",
+      "text": "Lucca gets to their feet.",
+      "sha256": "310c42477504744f8d6031a2abe40c91579a50654e746d2e4de56da34c267ee0",
+      "duration": 1.483125,
+      "bytes": 71234
+    },
+    {
+      "id": "party-02-12-appearance",
+      "text": "The girl in the purple helmet gets to their feet.",
+      "sha256": "274769b830d820ff94304519d52e63d338e7da6c0c22e7ad0cf7bda2e7299322",
+      "duration": 2.55125,
+      "bytes": 122504
+    },
+    {
+      "id": "party-02-16-named",
+      "text": "Lucca nods.",
+      "sha256": "a098d0a18040d04230a02ca7f3f536d54af27879672f8326d15d1703a278cd39",
+      "duration": 0.972292,
+      "bytes": 46714
+    },
+    {
+      "id": "party-02-16-appearance",
+      "text": "The girl in the purple helmet nods.",
+      "sha256": "a7043953dbe2288b063e1267400c805524a348ed41ebd402988bd478365d3d25",
+      "duration": 1.901083,
+      "bytes": 91296
+    },
+    {
+      "id": "party-02-17-named",
+      "text": "Lucca shakes their head.",
+      "sha256": "6760568238692b1748b0ea8a3c85cf67d5168f38f8d23ccb0b3d0ed3a053dbad",
+      "duration": 1.39025,
+      "bytes": 66776
+    },
+    {
+      "id": "party-02-17-appearance",
+      "text": "The girl in the purple helmet shakes their head.",
+      "sha256": "b8cb5737a26b011629393a4becc9e79150adfee6cdf7a2dca471be1f958289fa",
+      "duration": 2.737,
+      "bytes": 131420
+    },
+    {
+      "id": "party-02-1a-named",
+      "text": "Lucca laughs.",
+      "sha256": "604f8bf00a8c7bc53fe34b5c142c21def244131c83537fb375e8a2cdd0913e49",
+      "duration": 1.111625,
+      "bytes": 53402
+    },
+    {
+      "id": "party-02-1a-appearance",
+      "text": "The girl in the purple helmet laughs.",
+      "sha256": "25cd76b8eacb233b09066a31790104ef99c5c3824a3de86c22f96cc0ee107e7c",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "party-02-1b-named",
+      "text": "Lucca covers their face.",
+      "sha256": "f7d124a1625cd874f5bb5cb5728fa7f4bbb1a9f8a0727ab6ce36c3fc9d631f1c",
+      "duration": 1.576,
+      "bytes": 75692
+    },
+    {
+      "id": "party-02-1b-appearance",
+      "text": "The girl in the purple helmet covers their face.",
+      "sha256": "778e778f98209a224dfce386a867cd2255e01c32efe3fc3237aac27a35538638",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "party-02-1d-named",
+      "text": "Lucca is crouched on the ground.",
+      "sha256": "cef2b1a62ffd56ea3ca715c1571d6ce3f50385f363a3ea67c052269cb987ce3f",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-02-1d-appearance",
+      "text": "The girl in the purple helmet is crouched on the ground.",
+      "sha256": "ca177dba3f4bf3c180db0bc58cad03989d6b67060d2584fd7d00fbe4fa5fca7e",
+      "duration": 2.737,
+      "bytes": 131420
+    },
+    {
+      "id": "party-02-20-named",
+      "text": "Lucca raises their arms overhead.",
+      "sha256": "1460a5a3e0c4be24681192013bef6665c1102558912d220051457d5c23d27db7",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-02-20-appearance",
+      "text": "The girl in the purple helmet raises their arms overhead.",
+      "sha256": "40c82f4be7dc45441212b20373cf15ed333c0da071195ab59900484dc1b2d7fe",
+      "duration": 3.247833,
+      "bytes": 155940
+    },
+    {
+      "id": "party-02-23-named",
+      "text": "Lucca raises their gun.",
+      "sha256": "c5cec580b7fe4b9a41198bd9041c79401884283b0f18e6ffe9d3460ce62ab258",
+      "duration": 1.576,
+      "bytes": 75692
+    },
+    {
+      "id": "party-02-23-appearance",
+      "text": "The girl in the purple helmet raises their gun.",
+      "sha256": "38f84453ca86bcb2684ca79fc274ce934bdede20e527f9e39b60daba1222e08d",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "party-03-10-named",
+      "text": "Robo raises their arms.",
+      "sha256": "65c76cb8ddf36c52a0be363e0ef23293b510fe0fc6f8c7770b1fee5845ee6b53",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-03-10-appearance",
+      "text": "The robot raises their arms.",
+      "sha256": "426bb3257b2cc0043d0feaec86e65a969c5ff31831736e3060fdf747ebe2190f",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "party-03-12-named",
+      "text": "Robo gets to their feet.",
+      "sha256": "1cbf61d243bf2bbfc9cde4c0809943635674ebe539365fed2a8081b4b7f0f45f",
+      "duration": 1.715333,
+      "bytes": 82380
+    },
+    {
+      "id": "party-03-12-appearance",
+      "text": "The robot gets to their feet.",
+      "sha256": "36bf65d26258a7467eaa87af9b877be4ea4f8fbff61f8e3e37bcff931608d818",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-03-16-named",
+      "text": "Robo nods.",
+      "sha256": "f2e8d6b511f5c11cb831fb8b64d423ee52b95a4163c0549ad0ce2493aefedc46",
+      "duration": 1.2045,
+      "bytes": 57860
+    },
+    {
+      "id": "party-03-16-appearance",
+      "text": "The robot nods.",
+      "sha256": "83e3b775aeb418d33b8d0a914b3eb95c93bb01824ec85da193fc7de9a68aee42",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-03-17-named",
+      "text": "Robo shakes their head.",
+      "sha256": "44683cd9aa3c5292ac7f3cb25f3cf0f0a471262b6da3f217b19217ae3b817e1c",
+      "duration": 1.436708,
+      "bytes": 69006
+    },
+    {
+      "id": "party-03-17-appearance",
+      "text": "The robot shakes their head.",
+      "sha256": "7eef4398edfca54ddefc225f3c9ce59648d13d11967ea9229093c8c3b4277031",
+      "duration": 1.343792,
+      "bytes": 64546
+    },
+    {
+      "id": "party-03-1a-named",
+      "text": "Robo rocks their upper body.",
+      "sha256": "fa392dfeba6651939bb9c753ce67602c223389b7a63c58d65581afd9c9154d2d",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-03-1a-appearance",
+      "text": "The robot rocks their upper body.",
+      "sha256": "bc47899723e93796830b685db5f7d22add19caa038a5c782f9e3800997d5ecd6",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-03-1b-named",
+      "text": "Robo covers their face.",
+      "sha256": "6c7def7e2ec6ec504a42696f9dae32faa394b61e16f8f265a08891ff623c4414",
+      "duration": 1.622458,
+      "bytes": 77922
+    },
+    {
+      "id": "party-03-1b-appearance",
+      "text": "The robot covers their face.",
+      "sha256": "4aacc75ad17506dbec50e6bc5c0d460ec85591e826eae53f0cfada98fc1cb864",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "party-03-1d-named",
+      "text": "Robo is crouched on the ground.",
+      "sha256": "cad7a30b34c1aff7826eff6794ad6ff0711bbbd9e568fa490557d5a9c5a72bca",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-03-1d-appearance",
+      "text": "The robot is crouched on the ground.",
+      "sha256": "be1921f6fa7a08b04e793a73c1f03ebfc5c883c2349e58d354a19ee3b8bdf493",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-03-22-named",
+      "text": "Robo waves their arms.",
+      "sha256": "d433cf3ec9b1424feea5f6c7be817739f093942ab9f7ac7e607f254d11c44bfd",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-03-22-appearance",
+      "text": "The robot waves their arms.",
+      "sha256": "8a1abba6b897c00766ce8e4f059df70c2cbffa7b10a0350252871e9e3f8fa825",
+      "duration": 1.854667,
+      "bytes": 89068
+    },
+    {
+      "id": "party-04-10-named",
+      "text": "Frog spreads their arms.",
+      "sha256": "d25e3e8a187b1a680b92089ba93e887ea39fc2151ef5307f3d532ddeffe2592c",
+      "duration": 1.854667,
+      "bytes": 89068
+    },
+    {
+      "id": "party-04-10-appearance",
+      "text": "The frog knight spreads their arms.",
+      "sha256": "ddcab8736d21643ede71d6dff86f5332b3b315de336c250a60f445bbe7b2d382",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "party-04-11-named",
+      "text": "Frog holds their arms out.",
+      "sha256": "dd3eb612d79dd126c876133d6557ded967c083d63db2369657489e55c38cfaab",
+      "duration": 1.622458,
+      "bytes": 77922
+    },
+    {
+      "id": "party-04-11-appearance",
+      "text": "The frog knight holds their arms out.",
+      "sha256": "85c740963f8e29ef3c41e05113bcac3ca67e0e7ab0a8d106c0a5c2e2792e1670",
+      "duration": 2.179708,
+      "bytes": 104670
+    },
+    {
+      "id": "party-04-12-named",
+      "text": "Frog gets to their feet.",
+      "sha256": "71a2ad9bea66841d7689962c94b72d47be8a859b3ceaecd60a067cfbed317d7f",
+      "duration": 1.622458,
+      "bytes": 77922
+    },
+    {
+      "id": "party-04-12-appearance",
+      "text": "The frog knight gets to their feet.",
+      "sha256": "d81c4585c3c3b3ab78dabf78660fd90b494730aec655485e4881f0b95fafb7fb",
+      "duration": 1.622458,
+      "bytes": 77922
+    },
+    {
+      "id": "party-04-16-named",
+      "text": "Frog nods.",
+      "sha256": "5fae78587387f202b904fbcb39d54e16d095f900be8b6d25dd3f6ff10ec23df7",
+      "duration": 1.158042,
+      "bytes": 55630
+    },
+    {
+      "id": "party-04-16-appearance",
+      "text": "The frog knight nods.",
+      "sha256": "2cb155a409821d514ca319fa8a00c768c3c121192fa0b2970adfa99609542aff",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-04-17-named",
+      "text": "Frog shakes their head.",
+      "sha256": "68274cb634fffa8bbfa5a2b34dc8a4964af13430f43b036ee1ee847480f315c3",
+      "duration": 1.39025,
+      "bytes": 66776
+    },
+    {
+      "id": "party-04-17-appearance",
+      "text": "The frog knight shakes their head.",
+      "sha256": "c73e19707b91db387ed86123639b6e7c2a4388b3d9582e0cd98392536b670e64",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-04-1a-named",
+      "text": "Frog laughs.",
+      "sha256": "c36eeef4387c86111558daa182b1810b1d8e977e6bc5f7106947f00df8168e2a",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-04-1a-appearance",
+      "text": "The frog knight laughs.",
+      "sha256": "e1ee013fb105bc4d554e06bb16fa53d9e93b11fd8c3c638d1bbe53fce7211a46",
+      "duration": 1.483125,
+      "bytes": 71234
+    },
+    {
+      "id": "party-04-1b-named",
+      "text": "Frog covers their face.",
+      "sha256": "ea0f4f8b4c31f6b94a1c8113ebabfbf03d6feedc5eb98dbd8f0d8036358b3680",
+      "duration": 2.086833,
+      "bytes": 100212
+    },
+    {
+      "id": "party-04-1b-appearance",
+      "text": "The frog knight covers their face.",
+      "sha256": "ebb10e19f0063e3d81f23b46511eb7157cc4920d92b8d4e563b1b0e6ffd4dc59",
+      "duration": 2.226167,
+      "bytes": 106900
+    },
+    {
+      "id": "party-04-1d-named",
+      "text": "Frog is crouched on the ground.",
+      "sha256": "0c34d1136874d69eda72ebfb4d476a6f0bd48aa615d7547112c33ab826a3d679",
+      "duration": 2.133292,
+      "bytes": 102442
+    },
+    {
+      "id": "party-04-1d-appearance",
+      "text": "The frog knight is crouched on the ground.",
+      "sha256": "d62b42d019650dcd4a35a16149c01fee00e19c2efe752f6919f9b03cc4f3c8fc",
+      "duration": 2.55125,
+      "bytes": 122504
+    },
+    {
+      "id": "party-04-22-named",
+      "text": "Frog waves their arms.",
+      "sha256": "9c64d956e51297ee48c416be704f9577b1bd5cc63ea22494cde0b1c73d35136c",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-04-22-appearance",
+      "text": "The frog knight waves their arms.",
+      "sha256": "5cc258cc028e253f6e7684ddadab0ca236d82b6748b9070ae0a0d2a71cc4c147",
+      "duration": 1.854667,
+      "bytes": 89068
+    },
+    {
+      "id": "party-04-23-named",
+      "text": "Frog holds out their sword.",
+      "sha256": "61012044af9258cf79501f968d8cd5a2d7100a2468f014b618635ed3c1e2c43e",
+      "duration": 1.854667,
+      "bytes": 89068
+    },
+    {
+      "id": "party-04-23-appearance",
+      "text": "The frog knight holds out their sword.",
+      "sha256": "6f68d65ca624f42518eca6bf6de77656b2fbd73ad176521a947d3d68a1864b6e",
+      "duration": 2.133292,
+      "bytes": 102442
+    },
+    {
+      "id": "party-05-10-named",
+      "text": "Ayla raises their arms.",
+      "sha256": "054b57203fe140979578e6ab71eda8b670290dda1d90ef8ea23e5fa398722b44",
+      "duration": 1.715333,
+      "bytes": 82380
+    },
+    {
+      "id": "party-05-10-appearance",
+      "text": "The blonde woman in furs raises their arms.",
+      "sha256": "7cba31206d5648d4f1724613859d75bd849aefc275cea1464f4311e9922b575d",
+      "duration": 2.690583,
+      "bytes": 129192
+    },
+    {
+      "id": "party-05-11-named",
+      "text": "Ayla raises their arms, then crouches.",
+      "sha256": "3ab9d7cbf4ba16caf9c49bd4c6e0693707c96979538f0e0be80e739c7ddfbb97",
+      "duration": 2.737,
+      "bytes": 131420
+    },
+    {
+      "id": "party-05-11-appearance",
+      "text": "The blonde woman in furs raises their arms, then crouches.",
+      "sha256": "f4a0e8efa091e0250d6f4b3d859bcc450051cb9eb8f90af9415e357503b76660",
+      "duration": 3.944458,
+      "bytes": 189378
+    },
+    {
+      "id": "party-05-12-named",
+      "text": "Ayla gets to their feet.",
+      "sha256": "2d941894b780d5c208faae739718bd10ed6e876a8f10c44d66611146821f28e4",
+      "duration": 1.76175,
+      "bytes": 84608
+    },
+    {
+      "id": "party-05-12-appearance",
+      "text": "The blonde woman in furs gets to their feet.",
+      "sha256": "c828103abe21019c766150cad65aa6028ee1e03e78cc68c51a6eccc46ff5ed8e",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "party-05-16-named",
+      "text": "Ayla nods.",
+      "sha256": "950674ec6340c9a2660182859241d83f31c3cd7c500b90ad1588bf9f300e6c65",
+      "duration": 1.065167,
+      "bytes": 51172
+    },
+    {
+      "id": "party-05-16-appearance",
+      "text": "The blonde woman in furs nods.",
+      "sha256": "e01f852dc81a6cc4f1a96f726253ac85f508f1edda43027b2ffa646af71dd4f5",
+      "duration": 2.783458,
+      "bytes": 133650
+    },
+    {
+      "id": "party-05-17-named",
+      "text": "Ayla shakes their head.",
+      "sha256": "d9f9243da422dc5717a8935c3845dbfaa27b68f06cb2fd46d00cc93e0860346f",
+      "duration": 1.297375,
+      "bytes": 62318
+    },
+    {
+      "id": "party-05-17-appearance",
+      "text": "The blonde woman in furs shakes their head.",
+      "sha256": "a04e0e266cf704f0528b55d0a18cf522c4df63bfe6505227b4551b42ec1e0f73",
+      "duration": 3.015625,
+      "bytes": 144794
+    },
+    {
+      "id": "party-05-1a-named",
+      "text": "Ayla laughs.",
+      "sha256": "a446fa9d3df442000281442c75cc6e2de0952df10603f1db5831786f0ddcb412",
+      "duration": 1.111625,
+      "bytes": 53402
+    },
+    {
+      "id": "party-05-1a-appearance",
+      "text": "The blonde woman in furs laughs.",
+      "sha256": "9ce89d4811ec07c3ba3d1145f8aa21e2ac9a0671955d0670c2473a6da83d7a7f",
+      "duration": 2.504792,
+      "bytes": 120274
+    },
+    {
+      "id": "party-05-1b-named",
+      "text": "Ayla covers their face.",
+      "sha256": "8b767ccc2af13103ce4db9fa95ac24ddbc1ab4baf12e2a017f697e1ea8324db4",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "party-05-1b-appearance",
+      "text": "The blonde woman in furs covers their face.",
+      "sha256": "f35d5fe00c69da276ca5d9f6592f6cef54b0c3f845377f7b5d43ecf8e496bea7",
+      "duration": 2.783458,
+      "bytes": 133650
+    },
+    {
+      "id": "party-05-1d-named",
+      "text": "Ayla is crouched on the ground.",
+      "sha256": "1eb795679ae4170b30e532a955750131046605be0b70643dcf2eff6d25d43653",
+      "duration": 2.226167,
+      "bytes": 106900
+    },
+    {
+      "id": "party-05-1d-appearance",
+      "text": "The blonde woman in furs is crouched on the ground.",
+      "sha256": "b10baba738cc6a283c10938006290fe6fcf9d776cec2dd9df7e747a467885a81",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "party-05-22-named",
+      "text": "Ayla waves their arms.",
+      "sha256": "a8d4c15d0e4435ac2342399dbbb8d6422df617de6660a36aacc3e9e0a36caf9c",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "party-05-22-appearance",
+      "text": "The blonde woman in furs waves their arms.",
+      "sha256": "84a51ed21d222214bd42f4651995f2435041c71e38aca77b71f7f901c80f2852",
+      "duration": 3.154958,
+      "bytes": 151482
+    },
+    {
+      "id": "scene-curtainsopen",
+      "text": "Mother opens the curtains, filling the room with sunlight.",
+      "sha256": "2015ee574daa45451b46b825a1d91de093528ee2cb81ed255955f56e48d36f90",
+      "duration": 3.572917,
+      "bytes": 171544
+    },
+    {
+      "id": "scene-motherheadsdownstairs",
+      "text": "Mother heads downstairs.",
+      "sha256": "9920572284f7308515352e8b3e58f95621e9790d0b5d1c32cac1f5120273e9a9",
+      "duration": 1.76175,
+      "bytes": 84608
+    },
+    {
+      "id": "scene-boygetsoutofbedandstretches-named",
+      "text": "Crono climbs out of bed and stretches.",
+      "sha256": "6a46ceaca1e0f792e8560d7a11f92d1630f8b42f4484975ce2a0bc2906805a42",
+      "duration": 2.876333,
+      "bytes": 138108
+    },
+    {
+      "id": "scene-boygetsoutofbedandstretches-appearance",
+      "text": "The red-haired boy climbs out of bed and stretches.",
+      "sha256": "a5d1e919f1aaeef7949bfb401c44aacd45a332243d003454d05385450dcf0a1c",
+      "duration": 2.783458,
+      "bytes": 133650
+    },
+    {
+      "id": "scene-faircollision-named",
+      "text": "Crono and a blonde girl bump into each other and fall to the ground.",
+      "sha256": "401c0af980a925c7dbf5ff96d297d0df164fd6e64d4072e6a2c3ec3f2a79577f",
+      "duration": 4.08375,
+      "bytes": 196064
+    },
+    {
+      "id": "scene-faircollision-appearance",
+      "text": "The red-haired boy and a blonde girl bump into each other and fall to the ground.",
+      "sha256": "ea5f8166df68ac963b4d476d1e69e7384270a3c3bfed1953e5c6d6222ea9715e",
+      "duration": 5.012542,
+      "bytes": 240646
+    },
+    {
+      "id": "scene-girlgetsup",
+      "text": "The blonde girl gets to her feet.",
+      "sha256": "e52575a2dc6a67b20d71d7f19ce56fdfd8d04c6e0fbd7eec61cc6fc4deb3e66d",
+      "duration": 2.086833,
+      "bytes": 100212
+    },
+    {
+      "id": "scene-boygetsup-named",
+      "text": "Crono gets to their feet.",
+      "sha256": "3d69f4261567774708d71379f5759e80a61446fb43f0dfb1f64ed1df070f1f20",
+      "duration": 1.343792,
+      "bytes": 64546
+    },
+    {
+      "id": "scene-boygetsup-appearance",
+      "text": "The red-haired boy gets to their feet.",
+      "sha256": "0fc77d278528d2b468c670a2e2c32f1e9faa43006aee29ce6c22d170c2fedf99",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "scene-girlhops",
+      "text": "The blonde girl hops up and down.",
+      "sha256": "8131a1c5ac85ad5cf38e29e73efcba25d60762a855bb973601713527ac62cf75",
+      "duration": 1.808208,
+      "bytes": 86838
+    }
+  ]
+}

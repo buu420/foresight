@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Audio\footstep-*.wav" />
+    <EmbeddedResource Include="AudioDescriptions\Voice\*.wav" />
+    <EmbeddedResource Include="AudioDescriptions\Voice\manifest.json" />
     <EmbeddedResource Include="Navigation\Data\*.json" />
     <Content Include="ModConfig.json" CopyToOutputDirectory="Always" />
     <None Include="..\..\native\prism\v0.17.3\win-x86\prism.dll"

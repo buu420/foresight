@@ -14,6 +14,8 @@ public sealed class StoryActionRuntime
     private readonly Func<int, string?> characterName;
     private readonly Action<string> say;
     private readonly Action<string> diagnostic;
+    private readonly Action<StoryNarration>? narrate;
+    private readonly Action? stopNarration;
     private readonly Func<bool> assetsReady;
     private readonly Func<StoryActionSnapshot, StorySceneActionCandidate?>? matchScene;
     private readonly Func<StorySceneActionCandidate, bool>? completeScene;
@@ -21,7 +23,7 @@ public sealed class StoryActionRuntime
     private readonly object gate = new();
     private readonly HashSet<(int Actor, uint Address, int Animation)> described = [];
     private readonly HashSet<StorySceneAction> describedScenes = [];
-    private readonly Queue<string> held = new();
+    private readonly Queue<StoryNarration> held = new();
     private string? lastHeld;
     private (uint Context, uint Data, uint Actors, uint Field, int Scene, int Script)? owner;
     private bool enabled;
@@ -34,7 +36,8 @@ public sealed class StoryActionRuntime
         Func<bool>? assetsReady = null,
         Func<StoryActionSnapshot, StorySceneActionCandidate?>? matchScene = null,
         Func<StorySceneActionCandidate, bool>? completeScene = null,
-        Func<StoryActionSnapshot, bool>? controlRestored = null)
+        Func<StoryActionSnapshot, bool>? controlRestored = null,
+        Action<StoryNarration>? narrate = null, Action? stopNarration = null)
     {
         this.capture = capture ?? throw new ArgumentNullException(nameof(capture));
         this.prove = prove ?? throw new ArgumentNullException(nameof(prove));
@@ -48,6 +51,8 @@ public sealed class StoryActionRuntime
         this.matchScene = matchScene;
         this.completeScene = completeScene;
         this.controlRestored = controlRestored;
+        this.narrate = narrate;
+        this.stopNarration = stopNarration;
     }
 
     public void Enable() { lock (gate) { Reset(); enabled = true; } }
@@ -132,6 +137,8 @@ public sealed class StoryActionRuntime
                 var nextOwner = (location.Context, location.Data, location.Actors, location.Field, location.Scene, location.ScriptId);
                 if (owner != nextOwner)
                 {
+                    StopNarration();
+                    if (!enabled || observedEpoch != epoch) return;
                     held.Clear(); lastHeld = null; described.Clear(); describedScenes.Clear(); owner = nextOwner;
                 }
                 lastControl = before.Control;
@@ -165,7 +172,7 @@ public sealed class StoryActionRuntime
                     describedScenes.Add(scene.Action);
                     Log($"Story scene action: scene={location.Scene}; script={location.ScriptId}; actor={location.Actor}; " +
                         $"pc=0x{location.Address:X}; action={scene.Action}; text={sceneText}");
-                    Queue(sceneText, before.TextboxOpen, observedEpoch);
+                    Queue(StoryVoiceCueCatalog.ForScene(scene, sceneText), before.TextboxOpen, observedEpoch);
                     return;
                 }
                 if (!before.ActorState.Drawn || before.ActorState.OnScreen != true) return;
@@ -187,36 +194,49 @@ public sealed class StoryActionRuntime
                 if (text is null || !described.Add((location.Actor, location.Address, applied.Value))) return;
                 Log($"Story action: scene={location.Scene}; script={location.ScriptId}; actor={location.Actor}; " +
                     $"pc=0x{location.Address:X}; animation=0x{applied.Value:X2}; text={text}");
-                Queue(text, before.TextboxOpen, observedEpoch);
+                Queue(StoryVoiceCueCatalog.ForAnimation(before, applied.Value, text), before.TextboxOpen, observedEpoch);
             }
         }
         catch (Exception exception) { Recover(exception, observedEpoch); }
     }
 
-    private void Queue(string text, bool textboxOpen, int observedEpoch)
+    private void Queue(StoryNarration cue, bool textboxOpen, int observedEpoch)
     {
         if (!enabled || observedEpoch != epoch) return;
         if (textboxOpen)
         {
-            if (lastHeld != text) held.Enqueue(text);
-            lastHeld = text;
+            if (lastHeld != cue.Text) held.Enqueue(cue);
+            lastHeld = cue.Text;
         }
         else
         {
             Flush(observedEpoch);
-            if (enabled && observedEpoch == epoch) say(text);
+            if (enabled && observedEpoch == epoch) Emit(cue);
         }
     }
 
     private void Flush(int observedEpoch)
     {
         lastHeld = null;
-        while (enabled && epoch == observedEpoch && held.TryDequeue(out var text)) say(text);
+        while (enabled && epoch == observedEpoch && held.TryDequeue(out var cue)) Emit(cue);
     }
 
     private void Reset()
     {
         epoch++; owner = null; lastControl = null; held.Clear(); lastHeld = null; described.Clear(); describedScenes.Clear();
+        StopNarration();
+    }
+
+    private void Emit(StoryNarration cue)
+    {
+        if (narrate is not null) narrate(cue);
+        else say(cue.Text);
+    }
+
+    private void StopNarration()
+    {
+        try { stopNarration?.Invoke(); }
+        catch (Exception exception) { Log($"Story voice cancellation failed: {exception.Message}"); }
     }
 
     private void Recover(Exception exception, int failedEpoch)

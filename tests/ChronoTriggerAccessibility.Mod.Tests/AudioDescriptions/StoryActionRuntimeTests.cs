@@ -25,6 +25,42 @@ public sealed class StoryActionRuntimeTests
         Assert.Empty(test.Speech); Assert.Equal(1, test.Originals);
     }
 
+    [Fact]
+    public void RecordedNarrationReplacesScreenReaderSpeechWithoutRepeatingTheNativeCall()
+    {
+        var speech = new List<string>(); var narration = new List<StoryNarration>(); var calls = 0;
+        var runtime = new StoryActionRuntime((_, _) => Frame(), _ => new(StoryAnimationKind.Looping, 0x16),
+            () => true, _ => "Crono", speech.Add, _ => { }, narrate: narration.Add);
+        runtime.Enable(); runtime.Dispatch(0x1000, 0xAA, () => calls++);
+        Assert.Empty(speech); Assert.Equal(1, calls);
+        Assert.Equal(new StoryNarration("Crono nods.", "party-00-16-named", "Crono nods."), Assert.Single(narration));
+    }
+
+    [Fact]
+    public void RecordedNarrationKeepsTheNativeDialogueBoundaryOrder()
+    {
+        var order = new List<string>();
+        var runtime = new StoryActionRuntime((_, _) => Frame() with { TextboxState = 1 },
+            _ => new(StoryAnimationKind.Looping, 0x16), () => true, _ => "Crono", _ => Assert.Fail("Duplicate screen-reader voice"),
+            _ => { }, narrate: cue => order.Add(cue.CueId));
+        runtime.Enable(); runtime.Dispatch(0x1000, 0xAA, () => { }); Assert.Empty(order);
+        runtime.Observe(new DialogueLinePresented(0, 1, "Next dialogue.")); order.Add("Next dialogue.");
+        Assert.Equal(["party-00-16-named", "Next dialogue."], order);
+    }
+
+    [Fact]
+    public void BattleAndDisableCancelRecordedPlaybackAndHeldCues()
+    {
+        var narration = new List<StoryNarration>(); var stops = 0;
+        var runtime = new StoryActionRuntime((_, _) => Frame() with { TextboxState = 1 },
+            _ => new(StoryAnimationKind.Looping, 0x16), () => true, _ => "Crono", _ => { }, _ => { },
+            narrate: narration.Add, stopNarration: () => stops++);
+        runtime.Enable(); var before = stops;
+        runtime.Dispatch(0x1000, 0xAA, () => { });
+        runtime.Observe(new BattleStarted(1)); runtime.Observe(new DialogueClosed()); runtime.Disable();
+        Assert.Empty(narration); Assert.True(stops >= before + 2);
+    }
+
     [Theory]
     [InlineData(false, true, 0)]
     [InlineData(true, false, 0)]
@@ -267,6 +303,28 @@ public sealed class StoryActionRuntimeTests
         runtime.Enable(); runtime.Dispatch(0x1000, 0xAA, () => originals++);
         runtime.Observe(new DialogueClosed());
         Assert.Equal(["Cinder nods."], speech); Assert.Equal(2, originals);
+    }
+
+    [Fact]
+    public void AReentrantNarrationStopCannotDiscardOrReplaceTheNewLifetimeAction()
+    {
+        StoryActionRuntime? runtime = null;
+        var frame = Frame() with { TextboxState = 1 }; var armed = false;
+        var originals = 0; var speech = new List<string>();
+        runtime = new StoryActionRuntime((_, _) => frame,
+            before => new(StoryAnimationKind.Looping, before.Location.Scene == 282 ? 0x17 : 0x16),
+            () => true, _ => "Crono", speech.Add, _ => { }, stopNarration: () =>
+            {
+                if (!armed) return;
+                armed = false; runtime!.Disable(); runtime.Enable();
+                frame = frame with { Location = frame.Location with { Scene = 282 }, Bytes = "AA17000000000000" };
+                runtime.Dispatch(0x1000, 0xAA, () => originals++);
+            });
+        runtime.Enable(); runtime.Dispatch(0x1000, 0xAA, () => originals++);
+        frame = frame with { Location = frame.Location with { Scene = 281 } }; armed = true;
+        runtime.Dispatch(0x1000, 0xAA, () => originals++);
+        runtime.Observe(new DialogueClosed());
+        Assert.Equal(["Crono shakes their head."], speech); Assert.Equal(3, originals);
     }
 
     internal static StoryActorState Actor() => new(1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 160, 160, true, true);
