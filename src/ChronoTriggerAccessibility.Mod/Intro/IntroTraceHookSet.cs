@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
+using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Mod.Minigames;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -12,14 +13,16 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
     private readonly IRuntimeNativeHookFactory factory;
     private readonly IntroTraceRecorder recorder;
     private readonly IokaContestRuntime? contest;
+    private readonly StoryActionRuntime? storyActions;
     private bool prepared;
 
     public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder,
-        IokaContestRuntime? contest = null)
+        IokaContestRuntime? contest = null, StoryActionRuntime? storyActions = null)
     {
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         this.recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
         this.contest = contest;
+        this.storyActions = storyActions;
         Registrations = Array.AsReadOnly<IHookRegistration>([this]);
     }
 
@@ -39,8 +42,13 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         {
             void TraceAndCall() => recorder.Dispatch(context, opcode, () =>
                 (original ?? throw new InvalidOperationException("Intro trace original is not bound."))(context, opcode));
-            if (contest is null) TraceAndCall();
-            else contest.Dispatch(context, opcode, TraceAndCall);
+            void ContestAndCall()
+            {
+                if (contest is null) TraceAndCall();
+                else contest.Dispatch(context, opcode, TraceAndCall);
+            }
+            if (storyActions is null) ContestAndCall();
+            else storyActions.Dispatch(context, opcode, ContestAndCall);
         });
         // The factory only prepares an inactive hook. Bind the trampoline before
         // returning it to ReloadedHookInstaller, which owns the later activation.
@@ -55,6 +63,7 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         if (!prepared) throw new InvalidOperationException("Intro trace has not been prepared.");
         recorder.Enable();
         contest?.Enable();
+        storyActions?.Enable();
     }
-    public void AfterHooksDisabled() { contest?.Disable(); recorder.Disable(); }
+    public void AfterHooksDisabled() { storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
 }

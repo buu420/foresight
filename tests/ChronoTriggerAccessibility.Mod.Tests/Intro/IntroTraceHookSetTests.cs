@@ -1,6 +1,8 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Intro;
 using ChronoTriggerAccessibility.Mod.Minigames;
+using ChronoTriggerAccessibility.Mod.AudioDescriptions;
+using ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Startup;
 using ChronoTriggerAccessibility.Native.Capture;
@@ -35,6 +37,26 @@ public sealed class IntroTraceHookSetTests
     }
 
     private sealed record Build(nuint ImageBaseAddress, IReadOnlyDictionary<HookId, nuint> HookAddresses) : IVerifiedGameBuild;
+
+    [Fact]
+    public void StoryActionsShareTheOpcodeHookAndWorkWhenIntroTracingIsNotRecording()
+    {
+        var factory = new Factory(); var errors = new Errors(); var speech = new List<string>();
+        var recorder = new IntroTraceRecorder(new NoMemory(), _ => { });
+        var story = new StoryActionRuntime((_, _) => StoryActionRuntimeTests.Frame(),
+            _ => factory.Originals > 0 ? new(StoryAnimationKind.Looping, 0x16) : null,
+            () => true, _ => "Cinder", speech.Add, _ => { });
+        var contest = new IokaContestRuntime((_, _) => null, _ => false,
+            () => true, () => 0, () => "Ayla", speech.Add, _ => { });
+        var hooks = new IntroTraceHookSet(factory, recorder, contest, story);
+        var build = new Build(0x400000, GameVersionCatalog.Hooks.ToDictionary(x => x.Id, x => (nuint)(0x400000 + x.Rva)));
+        hooks.Prepare(build, new(errors, errors)); hooks.AfterHooksActivated();
+        Assert.False(recorder.IsRecording);
+        factory.Detour!(0x1000, 0xAA);
+        Assert.Equal(["Cinder nods."], speech); Assert.Equal(1, factory.Created); Assert.Equal(1, factory.Originals);
+        hooks.AfterHooksDisabled(); factory.Detour(0x1000, 0xAA);
+        Assert.Equal(2, factory.Originals); Assert.Single(speech); Assert.Empty(errors.Messages);
+    }
     private sealed class NoMemory : IReadableMemory
     { public bool TryRead(nuint address, Span<byte> destination) => false; }
     private sealed class Errors : IModLog, IAccessibleFatalError

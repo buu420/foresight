@@ -26,6 +26,7 @@ public sealed class IntroTraceRecorderTests
 
         Assert.Equal(2, originals);
         Assert.Contains(log, line => line.Contains("pc=0x0460") && line.Contains("control=0->1"));
+        Assert.Contains(log, line => line.Contains("script=4; actor=1;"));
         Assert.True(recorder.IsRecording); // A control edge alone is not proof the intro ended.
     }
 
@@ -221,7 +222,7 @@ public sealed class IntroTraceRecorderTests
         public Memory()
         {
             Word(0x1000, 0xA0000); Word(0x1024, 0x460); Word(0x1850, 0x5000);
-            Word(0x1BB4, 4); Word(0x608C, 0);
+            Word(0x1BB4, 4); Word(0x608C, 0); Word(0x6180, 2);
             Add(0xB2000, Convert.FromHexString("236004A204D504D6"));
             Add(0xB2461, Convert.FromHexString("E301001122334455"));
         }

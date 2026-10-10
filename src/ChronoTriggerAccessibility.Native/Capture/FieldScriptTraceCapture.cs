@@ -4,8 +4,10 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
+/// <summary><c>ScriptId</c> is the Atel number at ctx+0xBB4. <c>Actor</c> is the executing actor,
+/// <c>[field+0x1180] &gt;&gt; 1</c>, or -1 when that word is odd or past the header's actor count.</summary>
 public sealed record FieldScriptTraceSnapshot(uint Context, uint Data, uint FieldState,
-    uint Address, uint Actor, uint ControlBefore, string ScriptPrefix, string Bytes);
+    uint Address, uint ScriptId, int Actor, uint ControlBefore, string ScriptPrefix, string Bytes);
 
 public static class FieldScriptTraceCapture
 {
@@ -18,14 +20,16 @@ public static class FieldScriptTraceCapture
             if (!Fits(context, 0xBB8) ||
                 !Word(memory, context, out var data) || !Fits(data, 0x22010) ||
                 !Word(memory, context + 0x24, out var address) || address > 0xFFFF ||
-                !Word(memory, context + 0x850, out var field) || !Fits(field, 0x1090) ||
-                !Word(memory, context + 0xBB4, out var actor) ||
-                !Word(memory, field + 0x108Cu, out var control)) return false;
+                !Word(memory, context + 0x850, out var field) || !Fits(field, 0x1184) ||
+                !Word(memory, context + 0xBB4, out var script) ||
+                !Word(memory, field + 0x108Cu, out var control) ||
+                !Word(memory, field + 0x1180u, out var raw)) return false;
             Span<byte> prefix = stackalloc byte[8];
             Span<byte> bytes = stackalloc byte[8];
             if (!memory.TryRead(data + 0x12000u, prefix) ||
                 !memory.TryRead(data + 0x12001u + address, bytes)) return false;
-            snapshot = new((uint)context, data, field, address, actor, control,
+            var actor = (raw & 1) == 0 && raw < prefix[0] * 2u ? (int)(raw >> 1) : -1;
+            snapshot = new((uint)context, data, field, address, script, actor, control,
                 Convert.ToHexString(prefix), Convert.ToHexString(bytes));
             return true;
         }

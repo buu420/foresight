@@ -160,7 +160,7 @@ public sealed class IntroTraceRecorder(IReadableMemory memory, Action<string> lo
                 seen.Add(observation);
                 records++;
                 Add(ref messages, $"seq={sequence}; context=0x{before.Context:X8}; data=0x{before.Data:X8}; " +
-                    $"actor={before.Actor}; pc=0x{before.Address:X4}; opcode=0x{opcode:X2}; " +
+                    $"script={before.ScriptId}; actor={before.Actor}; pc=0x{before.Address:X4}; opcode=0x{opcode:X2}; " +
                     $"bytes={before.Bytes}; pcMatch={pcMatch}; " +
                     $"control={before.ControlBefore}->{after}; dialogue={dialogueOpen}");
             }

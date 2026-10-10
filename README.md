@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.52 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, and bike-race feedback.
+**Foresight 0.3.53 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.52 adds a clear start cue, rapid Confirm instructions and visible-action feedback for Ioka's drinking contest. Reptite Lair holes have distinct labels under Exits, and its creatures have appearance names. See [this build's changes and testing notes](docs/releases/v0.3.52.md).
+Version 0.3.53 adds spoken descriptions for reviewed gestures of the first six party characters, including appearances during the first prehistoric visit and beyond, and seven specific opening/fair scene actions. Descriptions use your screen reader and queue with dialogue. See [this build's changes and testing notes](docs/releases/v0.3.53.md).
 
 ## Install the beta download
 
@@ -32,7 +32,7 @@ The game loads Foresight through `winmm.dll` in its own folder. Removing that mo
 
 The mod reads startup/main menus, Settings, Extras, New Game/name entry, confirmations, dialogue, choices, classic Inventory/Equipment/Tech/Party/Save screens, shops and supported battle commands, targets, Items and Techs. Navigation covers fields, world maps, vehicles, people, exits, objects, save points, enemies and story/optional objectives. Native content data accounts for all 331 treasure records; this does not prove every pickup route has been successfully played through.
 
-Minigames are not comprehensively accessible. Some icons, battle effects and result states remain unverified. Silent scene actions and NPC gestures do not yet have comprehensive descriptions. Routes can fail or get stuck in live story states. Automatic walking does not fight, choose dialogue or press Confirm for you.
+Minigames are not comprehensively accessible. Some icons, battle effects and result states remain unverified. Story-action descriptions cover selected native character gestures and seven opening/fair actions; they are not a complete description of every scene or NPC. Routes can fail or get stuck in live story states. Automatic walking does not fight, choose dialogue or press Confirm for you.
 
 Movie-description playback works with a separately prepared local pack. **This public download does not include the development tester's voice pack, private recordings, game movies or replacement movie files.** It preserves an existing local pack; those descriptions play alongside the original soundtrack without ducking.
 

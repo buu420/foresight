@@ -47,6 +47,7 @@ public sealed class Mod : ModBase
         var gameRoot = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
         var movieAudio = new MovieAudioTracksHook(hooks, gameRoot, dispatcher.RecordDiagnostic,
             text => dispatcher.Publish(new NavigationAnnouncement(text)));
+        var storyAssets = StoryActionAssets.VerifyAsync(gameRoot, dispatcher.RecordDiagnostic);
         var composition = CreateCompleteAccessibilityComposition(
             nativeFactory,
             nativeFactory,
@@ -55,7 +56,8 @@ public sealed class Mod : ModBase
             dispatcher,
             new OpeningMovieTimeline(token => Task.Run(() =>
                 InstalledMovieDescriptions.HasOpeningNarrationAsync(
-                    gameRoot, token, movieAudio.OpeningReady), token)), movieAudio);
+                    gameRoot, token, movieAudio.OpeningReady), token)), movieAudio,
+            storyAssetsReady: () => storyAssets.IsCompletedSuccessfully && storyAssets.Result);
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
@@ -128,7 +130,8 @@ public sealed class Mod : ModBase
         IReadableMemory memory,
         ISemanticEventDispatcher dispatcher,
         OpeningMovieTimeline movieTimeline,
-        IHookRegistration? movieAudio = null)
+        IHookRegistration? movieAudio = null,
+        Func<bool>? storyAssetsReady = null)
     {
         ArgumentNullException.ThrowIfNull(hookFactory);
         ArgumentNullException.ThrowIfNull(asmHookFactory);
@@ -138,7 +141,8 @@ public sealed class Mod : ModBase
         ArgumentNullException.ThrowIfNull(movieTimeline);
 
         var introRecorder = new IntroTraceRecorder(memory, dispatcher.RecordDiagnostic);
-        dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder);
+        StoryActionRuntime? storyActions = null;
+        dispatcher = new IntroTraceDispatcher(dispatcher, introRecorder, value => storyActions?.Observe(value));
         var navigationSpeech = dispatcher;
         nuint navigationImageBase = 0;
         var navigationText = new NavigationTextCapture(memory);
@@ -297,7 +301,20 @@ public sealed class Mod : ModBase
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             () => navigationText.CharacterName(navigationImageBase, 5),
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
-        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest);
+        storyActions = new StoryActionRuntime(
+            (context, opcode) =>
+                StoryActionCapture.TryLocate(memory, (nuint)context, opcode, out var location) &&
+                (opcode is 0xAA or 0xAB or 0xE3 || StorySceneActionCapture.Watches(location)) &&
+                StoryActionCapture.TryCapture(memory, location, out var before) ? before : null,
+            before => StoryActionCapture.TryProveAnimation(memory, before, out var proof) ? proof : null,
+            NavigationKeyboard.IsGameForeground,
+            character => navigationText.CharacterName(navigationImageBase, character),
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
+            storyAssetsReady,
+            before => StorySceneActionCapture.TryMatch(memory, before, out var candidate) ? candidate : null,
+            candidate => StorySceneActionCapture.TryComplete(memory, candidate),
+            before => StoryActionCapture.TryProvePlayerControlRestored(memory, before));
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)

@@ -3,7 +3,8 @@ using ChronoTriggerAccessibility.Mod.Runtime;
 
 namespace ChronoTriggerAccessibility.Mod.Intro;
 
-public sealed class IntroTraceDispatcher(ISemanticEventDispatcher inner, IntroTraceRecorder recorder)
+public sealed class IntroTraceDispatcher(ISemanticEventDispatcher inner, IntroTraceRecorder recorder,
+    Action<AccessibilityEvent>? storyObserver = null)
     : ISemanticEventDispatcher
 {
     public int Generation => inner.Generation;
@@ -15,6 +16,8 @@ public sealed class IntroTraceDispatcher(ISemanticEventDispatcher inner, IntroTr
     {
         try { recorder.Observe(value); }
         catch (Exception) { /* Keep diagnostic observation independent of speech. */ }
+        try { storyObserver?.Invoke(value); }
+        catch (Exception) { /* Keep action narration independent of native dialogue delivery. */ }
         inner.Publish(value);
     }
 }
