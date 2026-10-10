@@ -92,6 +92,8 @@ public static class GameNavigationCatalog
     {
         var entry = ForScene(scene)?.Exits.FirstOrDefault(e => e.Id == exit);
         if (entry is null) return null;
+        if (scene == 282 && entry.Destination == 499)
+            return exit switch { 0 => "Outside, north side", 1 => "Outside, south side", _ => "Outside" };
         if (entry.Destination is >= 496 and <= 511) return "Outside";
         return AreaName(entry.Destination) is { } name ? "To " + name : "Passage";
     }

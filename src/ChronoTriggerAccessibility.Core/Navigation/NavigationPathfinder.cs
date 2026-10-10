@@ -2,6 +2,8 @@ namespace ChronoTriggerAccessibility.Core.Navigation;
 
 public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Route, bool LimitReached, string? IntermediateId = null)
 {
+    /// <summary>One verified input command per route edge, retained through staged plans.</summary>
+    public IReadOnlyList<NavigationDirection>? InputDirections { get; init; }
     /// <summary>A native touch target that must be approached with movement while
     /// waiting for the live terrain to change. Never authorizes Confirm.</summary>
     public NavigationPoint? IntermediateContact { get; init; }
@@ -50,7 +52,10 @@ public static class NavigationPathfinder
                 var path = new List<NavigationPoint> { current.Point };
                 while (current != first) { current = previous[current]; path.Add(current.Point); }
                 path.Reverse();
-                return new(path.AsReadOnly(), false);
+                return new(path.AsReadOnly(), false)
+                {
+                    InputDirections = path.Zip(path.Skip(1), graph.InputDirection).ToArray(),
+                };
             }
             if (current != first && graph.IsTerminal(current.Point) &&
                 !goals.Any(goal => graph.IsSameTerminal(current.Point, goal))) continue;

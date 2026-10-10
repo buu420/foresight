@@ -79,11 +79,12 @@ public sealed class CathedralRearNavigationTests
     [InlineData(9225, 4982, "story:inner-organ", NavigationCategory.StoryEvents)]
     public void AutomaticSteeringCompletesTheCorrectedGraphRoute(int x, int y, string id, NavigationCategory category)
     {
-        // Integration replay on the captured graph. Each commanded edge must
-        // exist, including layer changes. This is not a live movement replay.
+        // Integration replay with independent native walking frames on the
+        // captured collision map. This is not a live game or controller-hook test.
         var frame = Frame(x, y);
         var target = Assert.Single(frame.Targets, t => t.Id == id);
         frame = frame with { Targets = [target] };
+        var map = Map();
         var controller = new NavigationController();
         for (var i = 0; i < (int)category; i++) controller.Handle(NavigationCommand.NextCategory, frame, 0);
         var result = controller.Handle(NavigationCommand.ToggleWalk, frame, 0);
@@ -92,20 +93,11 @@ public sealed class CathedralRearNavigationTests
         {
             if (result.Direction != NavigationDirection.None)
             {
-                var next = frame.Graph.Neighbours(frame.Player).Where(p => result.Direction switch
-                {
-                    NavigationDirection.North => p.X == frame.Player.X && p.Y < frame.Player.Y,
-                    NavigationDirection.South => p.X == frame.Player.X && p.Y > frame.Player.Y,
-                    NavigationDirection.West => p.Y == frame.Player.Y && p.X < frame.Player.X,
-                    NavigationDirection.East => p.Y == frame.Player.Y && p.X > frame.Player.X,
-                    _ => false,
-                }).ToArray();
+                var next = NativeWalkingReplay.Move(map, frame.Player, result.Direction);
                 // A press into the organ turns the leader in place, as the native field does;
                 // every step also turns them. A missing edge on the route itself still ends in
                 // the "blocked" stop asserted below.
-                Assert.True(next.Length <= 1);
-                frame = next.Length == 0 ? frame with { PlayerFacing = result.Direction }
-                    : frame with { Player = next[0], PlayerFacing = result.Direction };
+                frame = frame with { Player = next, PlayerFacing = result.Direction };
             }
             result = controller.Update(frame, tick * 32);
             speech.AddRange(result.Speech);
@@ -115,7 +107,8 @@ public sealed class CathedralRearNavigationTests
                 frame = frame with { Targets = [Frame(frame.Player.X, frame.Player.Y).Targets.Single(t => t.Id == id)] };
         }
         Assert.False(result.AutoWalking);
-        Assert.Contains(speech, s => s.StartsWith("Arrived at ", StringComparison.Ordinal));
+        Assert.True(speech.Any(s => s.StartsWith("Arrived at ", StringComparison.Ordinal)),
+            $"Stopped at {frame.Player}, facing {frame.PlayerFacing}: {string.Join(" | ", speech)}");
         Assert.DoesNotContain(speech, s => s.Contains("blocked", StringComparison.OrdinalIgnoreCase));
         if (category == NavigationCategory.Exits)
             Assert.True(frame.Graph.IsSameTerminal(frame.Player, target.ApproachPoints[0]));

@@ -20,6 +20,11 @@ public interface INavigationGraph
     /// it requires a native contact that would block ordinary travel.</summary>
     INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) => this;
     IEnumerable<NavigationPoint> Neighbours(NavigationPoint point);
+    /// <summary>The input that produces a verified edge. Native corner slides
+    /// can move sideways during a cardinal command; displacement is not input.</summary>
+    NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) =>
+        to.X < from.X ? NavigationDirection.West : to.X > from.X ? NavigationDirection.East :
+        to.Y < from.Y ? NavigationDirection.North : to.Y > from.Y ? NavigationDirection.South : NavigationDirection.None;
     bool IsTerminal(NavigationPoint point) => false;
     bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => point == goal;
 }
@@ -108,7 +113,12 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public IReadOnlySet<string> ActiveTransitions { get; init; } = new HashSet<string>();
 }
 
-public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision);
+public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision)
+{
+    /// <summary>Whole audible steps promised by this instruction. Includes native
+    /// slide travel; stable until the instruction revision changes.</summary>
+    public int? ExpectedSteps { get; init; }
+}
 
 public sealed record NavigationResult(IReadOnlyList<string> Speech, NavigationDirection Direction,
     bool Guiding, bool AutoWalking)

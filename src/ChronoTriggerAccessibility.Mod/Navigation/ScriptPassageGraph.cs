@@ -10,6 +10,7 @@ public sealed class ScriptPassageGraph(INavigationGraph inner,
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new ScriptPassageGraph(inner.ForGoals(goals), passages);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
+    public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point) || At(point).Any();
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) =>
         inner.IsSameTerminal(point, goal) || At(point).Intersect(At(goal)).Any();

@@ -42,6 +42,16 @@ public sealed class SceneConnectionRouter
             foreach (var link in current)
             {
                 if (!distance.TryGetValue(link.To, out var remaining)) continue;
+                if (scene == 282 && link.To == 499)
+                {
+                    // The maze's exits land on different walking regions of the
+                    // same overworld. A scene-only link joins those regions and
+                    // sends the player back through the entrance. The native
+                    // map/Id data proves the local continuations below.
+                    var continuation = ForestMazeContinuation(link, goals, fieldOnly);
+                    if (continuation is null) continue;
+                    remaining = continuation.Value;
+                }
                 // Look-ahead may ignore room-local values. The current passage
                 // must satisfy every predicate and exist in the captured frame.
                 if (!CurrentlyAllowed(scene, link, state)) continue;
@@ -55,6 +65,24 @@ public sealed class SceneConnectionRouter
         return candidates.Where(c => c.Distance == best)
             .SelectMany(c => CastleTowerLandings(scene, c.Target, available, liveFieldDestinations))
             .DistinctBy(t => t.Id).ToArray();
+    }
+
+    private int? ForestMazeContinuation(Link link, int[] goals, bool fieldOnly)
+    {
+        var exit = GameNavigationCatalog.ForScene(282)!.Exits.FirstOrDefault(e => $"exit:{e.Id}" == link.Target);
+        // MapJump457 -> world3 (68,88); MapJump458 -> (68,95), in
+        // eight-pixel world coordinates. Native263150/25FDC0 load Map4's
+        // collision plane and Id3. 267E40/264C40 prove the two disconnected
+        // walking regions. Event3's tile changes are outside these paths.
+        int[] onward = exit is { Destination: 499, X: 68, Y: 88 }
+            ? [274, 275, 276, 277, 278, 279, 281, 282, 291, 293]
+            : exit is { Destination: 499, X: 68, Y: 95 } ? [282, 283] : [];
+        // Do not reconnect these regions through the abstract world node, or
+        // by leaving and re-entering this maze. This is passage look-ahead;
+        // actual movement still ends at the current captured field exit.
+        var distances = Distances(goals, fieldOnly, 282, 499);
+        var continuations = onward.Where(distances.ContainsKey).Select(s => distances[s] + 4).ToArray();
+        return continuations.Length == 0 ? null : continuations.Min();
     }
 
     private static IEnumerable<NavigationTarget> CastleTowerLandings(int scene, NavigationTarget target,
@@ -167,10 +195,10 @@ public sealed class SceneConnectionRouter
     }
 
     private IReadOnlyDictionary<int, int> Distances(IEnumerable<int> goals, bool fieldOnly = false,
-        int? avoidScene = null)
+        int? avoidScene = null, int? avoidWorld = null)
     {
         var goalArray = goals.Distinct().Order().ToArray();
-        var key = (fieldOnly ? "fields:" : "all:") + avoidScene + ":" + string.Join(',', goalArray);
+        var key = (fieldOnly ? "fields:" : "all:") + avoidScene + ":" + avoidWorld + ":" + string.Join(',', goalArray);
         if (distanceCache.TryGetValue(key, out var cached)) return cached;
         bool WithinEra(int node) => GameNavigationCatalog.IsFieldScene(node) ||
             node is 500 or 501 && stateKey is not null && antiquitySkyAvailable;
@@ -179,7 +207,7 @@ public sealed class SceneConnectionRouter
             !CrossesTimeGate(l.From, l.To) &&
             l.From is not (464 or 432 or 472 or 477) &&
             (l.To is not (464 or 432 or 472 or 477) || goalArray.Contains(l.To))) : links;
-        var reverse = eligible.Where(l => l.From != avoidScene).GroupBy(l => l.To)
+        var reverse = eligible.Where(l => l.From != avoidScene && l.From != avoidWorld).GroupBy(l => l.To)
             .ToDictionary(g => g.Key, g => g.ToArray());
         var distances = new Dictionary<int, int>();
         var pending = new PriorityQueue<int, int>();

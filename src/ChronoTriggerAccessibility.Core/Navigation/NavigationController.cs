@@ -7,6 +7,7 @@ public sealed class NavigationController
     private NavigationCategory category;
     private NavigationTarget? destination;
     private IReadOnlyList<NavigationPoint>? route;
+    private IReadOnlyList<NavigationDirection>? inputDirections;
     private int nextPoint;
     private bool guiding;
     private bool walking;
@@ -19,6 +20,7 @@ public sealed class NavigationController
     private NavigationPoint observedPosition;
     private long lastManualActivity;
     private long instructionRevision;
+    private int manualLegBeats;
     private string? intermediateId;
     private NavigationPoint? intermediateContact;
     private NavigationTransition? transition;
@@ -34,6 +36,7 @@ public sealed class NavigationController
     private long? facingStarted;
     private NavigationDirection facingDirection;
     private readonly HashSet<NavigationPoint> unreachableGoals = [];
+    private readonly HashSet<(int X, int Y, int Layer)> stallTiles = [];
     private long? pendingStarted;
     private bool chaseInReach;
     private long? lastChaseCue;
@@ -266,6 +269,7 @@ public sealed class NavigationController
         planRevision++;
         plannedApproaches = goals.Length;
         route = search.Route;
+        inputDirections = search.InputDirections;
         var nextTransition = search.Transition ??
             (search.IntermediateId is null || search.IntermediateId == destination.Transition?.Id ? destination.Transition : null);
         if (transition?.Id != nextTransition?.Id)
@@ -428,13 +432,27 @@ public sealed class NavigationController
         // Progress along a leg can pass multiple small graph waypoints. Only a
         // departure from the actual route or changed terrain requires a new plan.
         var previous = route[Math.Max(0, nextPoint - 1)];
-        if (!onRoute ||
+        // A held Dash covers 32 units a frame, but the graph proves legs at the 16-unit
+        // walking step, so a dash can run beside a proven line into a wall. Replan once
+        // per tile from the real position; a stall that persists still stops below.
+        // In guidance only a held press toward the spoken leg that does not move the
+        // player is a stall; the leader still turns to face a refused direction.
+        if (!walking && (!manualInput || Progressed(frame.Player)))
+        {
+            lastPosition = frame.Player;
+            lastProgress = now;
+        }
+        var stalled = (walking || manualInput && frame.PlayerFacing == LegDirection(nextPoint)) &&
+            now >= lastProgress && now - lastProgress >= 250 && !Progressed(frame.Player) &&
+            stallTiles.Add((frame.Player.X / unitsPerTile, frame.Player.Y / unitsPerTile, frame.Player.Layer));
+        if (!onRoute || stalled ||
             !frame.Graph.Neighbours(previous).Contains(route[nextPoint]))
         {
             // Human movement continues while a spoken turn finishes. Replanning
             // each animation tick creates alternating quarter-step corrections.
-            // Wait for both key release and the native step to settle first.
-            if (!walking && now - lastManualActivity < 200)
+            // Wait for both key release and the native step to settle first. A
+            // stalled press has already settled.
+            if (!walking && !stalled && now - lastManualActivity < 200)
             {
                 if (!waitingForManualStop)
                 {
@@ -467,7 +485,7 @@ public sealed class NavigationController
         }
         if (walking)
         {
-            if (SquaredDistance(frame.Player, lastPosition) >= Math.Pow(Math.Max(1, unitsPerTile / 8), 2) || frame.Player.Layer != lastPosition.Layer)
+            if (Progressed(frame.Player))
             {
                 lastPosition = frame.Player;
                 lastProgress = now;
@@ -685,32 +703,67 @@ public sealed class NavigationController
         {
             ManualLeg = guiding && !walking && nativeTransitionStarted is null && transitionContactStarted is null &&
                 !waitingForManualStop && route is not null && nextPoint < route.Count
-                ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision) : null
+                ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision)
+                    { ExpectedSteps = manualLegBeats } : null
         };
 
     private bool AdvanceAlongRoute(NavigationPoint player)
     {
         var found = false;
         var tolerance = Math.Max(1, unitsPerTile / 8);
+        var closest = double.PositiveInfinity;
         for (var i = nextPoint; i < route!.Count; i++)
         {
             var from = route[i - 1]; var to = route[i];
             if (player.Layer != from.Layer && player.Layer != to.Layer) continue;
+            var distance = SegmentDistanceSquared(player, from, to);
+            if (distance > closest) continue;
             var horizontal = from.Y == to.Y;
             var vertical = from.X == to.X;
-            if (!horizontal && !vertical) continue;
+            if (!horizontal && !vertical)
+            {
+                // Only a graph-proven edge may account for sideways progress.
+                // Stay within its short swept segment; departure still replans.
+                if (inputDirections?.Count != route.Count - 1 ||
+                    !OnSegment(player, from, to, tolerance)) continue;
+                found = true;
+                closest = distance;
+                nextPoint = Near(player, to) ? i + 1 : i;
+                continue;
+            }
             var cross = horizontal ? Math.Abs((long)player.Y - from.Y) : Math.Abs((long)player.X - from.X);
             var along = horizontal ? player.X : player.Y;
             var low = horizontal ? Math.Min(from.X, to.X) : Math.Min(from.Y, to.Y);
             var high = horizontal ? Math.Max(from.X, to.X) : Math.Max(from.Y, to.Y);
             if (cross > tolerance || along < (long)low - tolerance || along > (long)high + tolerance) continue;
             found = true;
+            closest = distance;
             nextPoint = Near(player, to) ? i + 1 : i;
         }
         return found;
     }
 
-    private NavigationDirection LegDirection(int index) => ExactBearing(route![index - 1], route[index]);
+    private NavigationDirection LegDirection(int index) => inputDirections?.Count == route!.Count - 1
+        ? inputDirections[index - 1] : ExactBearing(route[index - 1], route[index]);
+
+    private static bool OnSegment(NavigationPoint player, NavigationPoint from, NavigationPoint to, int tolerance)
+    {
+        if (player.X < (long)Math.Min(from.X, to.X) - tolerance || player.X > (long)Math.Max(from.X, to.X) + tolerance ||
+            player.Y < (long)Math.Min(from.Y, to.Y) - tolerance || player.Y > (long)Math.Max(from.Y, to.Y) + tolerance) return false;
+        var dx = (double)to.X - from.X; var dy = (double)to.Y - from.Y;
+        var cross = dx * ((double)player.Y - from.Y) - dy * ((double)player.X - from.X);
+        return cross * cross <= (double)tolerance * tolerance * (dx * dx + dy * dy);
+    }
+
+    private static double SegmentDistanceSquared(NavigationPoint player, NavigationPoint from, NavigationPoint to)
+    {
+        var dx = (double)to.X - from.X; var dy = (double)to.Y - from.Y;
+        var length = dx * dx + dy * dy;
+        var progress = length == 0 ? 0 : Math.Clamp(
+            (((double)player.X - from.X) * dx + ((double)player.Y - from.Y) * dy) / length, 0, 1);
+        var x = player.X - (from.X + progress * dx); var y = player.Y - (from.Y + progress * dy);
+        return x * x + y * y;
+    }
 
     private int LegEnd(int index)
     {
@@ -727,9 +780,18 @@ public sealed class NavigationController
         {
             var end = LegEnd(index);
             var direction = LegDirection(index);
-            var units = direction is NavigationDirection.West or NavigationDirection.East
+            double units = direction is NavigationDirection.West or NavigationDirection.East
                 ? Math.Abs((long)route[end].X - player.X) : Math.Abs((long)route[end].Y - player.Y);
+            if (Enumerable.Range(index, end - index + 1).Any(i =>
+                    route[i - 1].X != route[i].X && route[i - 1].Y != route[i].Y))
+            {
+                // Footsteps measure physical travel, including the native wall
+                // slide. A count based on just the commanded axis understates it.
+                units = Math.Sqrt(SquaredDistance(player, route[index]));
+                for (var i = index + 1; i <= end; i++) units += Math.Sqrt(SquaredDistance(route[i - 1], route[i]));
+            }
             var steps = Math.Ceiling(units * 4.0 / unitsPerTile) / 4;
+            if (!walking && instructions.Count == 0) manualLegBeats = (int)Math.Min(int.MaxValue, steps);
             var distance = steps < 0.25 ? "less than a quarter step" : steps == 0.25 ? "a quarter step" :
                 steps == 0.5 ? "half a step" : steps == 1 ? "1 step" :
                 $"{steps.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} steps";
@@ -746,28 +808,49 @@ public sealed class NavigationController
     {
         var target = route![nextPoint];
         var direction = LegDirection(nextPoint);
-        // The graph proves cardinal edges. Never turn a small perpendicular drift
-        // into a diagonal shortcut across a corner the route has not checked.
+        var from = route[nextPoint - 1];
+        // A native slide already owns its perpendicular displacement. Correcting
+        // toward the endpoint's other axis would fight the game's wall slide.
+        if (inputDirections?.Count == route.Count - 1 && from.X != target.X && from.Y != target.Y)
+            return direction;
+        // Ordinary edges keep cardinal correction for small movement drift. A held Dash
+        // can stop up to 31 units past a turn; steering back across the turn could leave
+        // the level crossing it just entered, so that drift is left to the stall replan.
+        var turn = nextPoint;
+        while (turn > 1 && LegDirection(turn - 1) == direction) turn--;
+        var into = turn > 1 ? LegDirection(turn - 1) : NavigationDirection.None;
         if (direction is NavigationDirection.West or NavigationDirection.East)
         {
-            var correction = Axis((long)target.Y - player.Y);
-            return correction < 0 ? NavigationDirection.North : correction > 0 ? NavigationDirection.South : direction;
+            var offset = (long)target.Y - player.Y;
+            var correction = Axis(offset) switch { < 0 => NavigationDirection.North, > 0 => NavigationDirection.South, _ => direction };
+            return Retraces(correction, into, offset) ? direction : correction;
         }
         if (direction is NavigationDirection.North or NavigationDirection.South)
         {
-            var correction = Axis((long)target.X - player.X);
-            return correction < 0 ? NavigationDirection.West : correction > 0 ? NavigationDirection.East : direction;
+            var offset = (long)target.X - player.X;
+            var correction = Axis(offset) switch { < 0 => NavigationDirection.West, > 0 => NavigationDirection.East, _ => direction };
+            return Retraces(correction, into, offset) ? direction : correction;
         }
         return NavigationDirection.None;
     }
+
+    private bool Retraces(NavigationDirection correction, NavigationDirection into, long offset) =>
+        Math.Abs(offset) < Math.Max(1, unitsPerTile / 8) && (correction, into) is
+            (NavigationDirection.North, NavigationDirection.South) or (NavigationDirection.South, NavigationDirection.North) or
+            (NavigationDirection.West, NavigationDirection.East) or (NavigationDirection.East, NavigationDirection.West);
+
+    private bool Progressed(NavigationPoint player) => player.Layer != lastPosition.Layer ||
+        SquaredDistance(player, lastPosition) >= Math.Pow(Math.Max(1, unitsPerTile / 8), 2);
 
     private void Stop()
     {
         guiding = walking = false;
         route = null;
+        inputDirections = null;
         destination = null;
         announcedDirection = NavigationDirection.None;
         waitingForManualStop = false;
+        manualLegBeats = 0;
         intermediateId = null;
         intermediateContact = null;
         transition = null;
@@ -781,6 +864,7 @@ public sealed class NavigationController
         facingDirection = NavigationDirection.None;
         pendingStarted = null;
         unreachableGoals.Clear();
+        stallTiles.Clear();
         chaseInReach = false;
         lastChaseCue = null;
     }

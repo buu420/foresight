@@ -13,7 +13,7 @@ public sealed class FieldLevelCrossings
 
     public IReadOnlyList<NavigationTarget> Find(int currentScene, FieldMapSnapshot map)
     {
-        if (currentScene is not (142 or 144 or 145)) return [];
+        if (!GameNavigationCatalog.IsFieldScene(currentScene)) return [];
         if (scene == currentScene && width == map.Width && height == map.Height &&
             exitWidth == map.ExitWidth && exitHeight == map.ExitHeight && exits.AsSpan().SequenceEqual(map.ExitCells) &&
             shapes.AsSpan().SequenceEqual(map.CollisionShapes) && flags.AsSpan().SequenceEqual(map.TerrainFlags) &&
@@ -21,6 +21,8 @@ public sealed class FieldLevelCrossings
         scene = currentScene; width = map.Width; height = map.Height;
         exitWidth = map.ExitWidth; exitHeight = map.ExitHeight; exits = map.ExitCells.ToArray();
         shapes = map.CollisionShapes.ToArray(); flags = map.TerrainFlags.ToArray(); layers = map.CollisionLayers.ToArray();
+        if (!layers.Any(l => (l & 3) == 1 || (l >> 3 & 3) == 1) ||
+            !layers.Any(l => (l & 3) == 2 || (l >> 3 & 3) == 2)) return targets = [];
         var graph = new FieldNavigationGraph(map);
         var cells = new Dictionary<(int X, int Y), NavigationPoint>();
         for (var y = 0; y < map.Height; y++)

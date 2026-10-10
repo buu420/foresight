@@ -12,6 +12,7 @@ public sealed class FieldTransitionGraph(INavigationGraph inner, IReadOnlyList<F
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new FieldTransitionGraph(inner.ForGoals(goals), transitions);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
+    public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point);
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => inner.IsSameTerminal(point, goal);
 

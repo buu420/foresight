@@ -51,7 +51,7 @@ public sealed class FootstepTracker
             {
                 var remaining = next.Direction is NavigationDirection.East or NavigationDirection.West
                     ? Math.Abs((long)current.X - next.End.X) : Math.Abs((long)current.Y - next.End.Y);
-                expectedLegBeats = (int)(Math.Ceiling(remaining * 4.0 / next.UnitsPerStep) / 4);
+                expectedLegBeats = next.ExpectedSteps ?? (int)(Math.Ceiling(remaining * 4.0 / next.UnitsPerStep) / 4);
             }
         }
         if (Steps > 0) State = "step";

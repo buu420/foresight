@@ -4,7 +4,8 @@ using ChronoTriggerAccessibility.Native.Capture;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 /// <summary>Cardinal edges checked against native terrain and captured actor
-/// contacts. Narrow passages retain pixel-sized boundary steps. The normal game
+/// contacts. Narrow passages retain pixel-sized boundary steps. A held direction
+/// that meets a diagonal wall follows the native one-corner slide. The normal game
 /// movement routine still performs movement.</summary>
 public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisionRules? actors = null,
     IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null,
@@ -21,17 +22,11 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point)
     {
         if (point.X < 0 || point.Y < 0) yield break;
-        var candidates = new[]
-        {
-            point with { Y = point.Y == 0 ? -1 : (point.Y - 1) / 64 * 64 },
-            point with { X = (point.X / 64 + 1) * 64 },
-            point with { Y = (point.Y / 64 + 1) * 64 },
-            point with { X = point.X == 0 ? -1 : (point.X - 1) / 64 * 64 },
-        };
-        foreach (var candidate in candidates)
+        foreach (var candidate in Candidates(point))
         {
             NavigationPoint? reached = null;
-            if (TryTraverse(point, candidate, out var next)) reached = next;
+            var whole = TryTraverse(point, candidate, out var next);
+            if (whole) reached = next;
             else
             {
                 // A seven-pixel body in an eight-pixel corridor can occupy only
@@ -52,6 +47,9 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
                 }
             }
             if (reached is { } boundary) yield return boundary;
+            // A blocked leading corner need not stop the held direction: the
+            // native movers slide the body sideways along a diagonal wall.
+            if (!whole && Slide(point, candidate) is { } slide) yield return slide;
 
             // Join precise native interaction/exit coordinates even when the
             // whole coarse edge is clear. One nearest alignment per direction
@@ -72,6 +70,37 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
         if (index < 0 || index >= coordinates.Length) return null;
         var value = coordinates[index];
         return finish > start ? value < finish ? value : null : value > finish ? value : null;
+    }
+
+    private static NavigationPoint[] Candidates(NavigationPoint point) =>
+    [
+        point with { Y = point.Y == 0 ? -1 : (point.Y - 1) / 64 * 64 },
+        point with { X = (point.X / 64 + 1) * 64 },
+        point with { Y = (point.Y / 64 + 1) * 64 },
+        point with { X = point.X == 0 ? -1 : (point.X - 1) / 64 * 64 },
+    ];
+
+    /// <summary>The held command that produces an edge. A slide drifts sideways, so
+    /// its displacement does not name its input. When two commands slide to the same
+    /// point, the larger commanded advance wins, then the horizontal command.</summary>
+    public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to)
+    {
+        var input = NavigationDirection.None;
+        var advance = 0;
+        if (from.X >= 0 && from.Y >= 0 && from.X != to.X && from.Y != to.Y)
+            foreach (var candidate in Candidates(from))
+            {
+                var horizontal = candidate.X != from.X;
+                if (TryTraverse(from, candidate, out _) || Slide(from, candidate) != to) continue;
+                var distance = Math.Abs(horizontal ? to.X - from.X : to.Y - from.Y);
+                if (distance < advance || distance == advance && !horizontal) continue;
+                advance = distance;
+                input = horizontal ? candidate.X < from.X ? NavigationDirection.West : NavigationDirection.East
+                    : candidate.Y < from.Y ? NavigationDirection.North : NavigationDirection.South;
+            }
+        if (input != NavigationDirection.None) return input;
+        return to.X < from.X ? NavigationDirection.West : to.X > from.X ? NavigationDirection.East :
+            to.Y < from.Y ? NavigationDirection.North : to.Y > from.Y ? NavigationDirection.South : NavigationDirection.None;
     }
 
     public bool IsTerminal(NavigationPoint point) => ExitAt(point.X, point.Y) >= 0;
@@ -126,6 +155,121 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
         }
         return distance > 0;
     }
+
+    /// <summary>Hold the command toward a coarse candidate for native walking frames.
+    /// The edge ends at the furthest slid frame with forward progress and no larger
+    /// sideways drift, every frame within a pixel of the straight segment that the
+    /// controller follows. Frames stop at the candidate line, a refusal, a new exit
+    /// tile or a reversed drift.</summary>
+    private NavigationPoint? Slide(NavigationPoint from, NavigationPoint candidate)
+    {
+        var dx = Math.Sign(candidate.X - from.X);
+        var dy = Math.Sign(candidate.Y - from.Y);
+        var exit = ExitAt(from.X, from.Y);
+        Span<NavigationPoint> path = stackalloc NavigationPoint[16];
+        var frames = 0;
+        var drift = 0;
+        for (var current = from; frames < path.Length && TryFrame(current, dx, dy, out var next);)
+        {
+            var side = dx != 0 ? next.Y - current.Y : next.X - current.X;
+            if (side != 0 && drift != 0 && Math.Sign(side) != Math.Sign(drift)) break;
+            drift += side;
+            path[frames++] = current = next;
+            if (ExitAt(next.X, next.Y) is var id && id >= 0 && id != exit) break;
+            if ((dx != 0 ? dx * (next.X - candidate.X) : dy * (next.Y - candidate.Y)) >= 0) break;
+        }
+        for (var end = frames - 1; end >= 0; end--)
+        {
+            var to = path[end];
+            var along = Math.Abs(dx != 0 ? to.X - from.X : to.Y - from.Y);
+            var across = Math.Abs(dx != 0 ? to.Y - from.Y : to.X - from.X);
+            if (along != 0 && across != 0 && across <= along && Follows(from, path[..end], to)) return to;
+        }
+        return null;
+    }
+
+    private static bool Follows(NavigationPoint from, ReadOnlySpan<NavigationPoint> frames, NavigationPoint to)
+    {
+        long dx = to.X - from.X, dy = to.Y - from.Y;
+        foreach (var frame in frames)
+        {
+            var cross = dx * (frame.Y - from.Y) - dy * (frame.X - from.X);
+            if (cross * cross > 16L * 16 * (dx * dx + dy * dy)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>One held walking frame of 16 units. 178980 tests actors at the
+    /// unslid probe before any nudge; 178FF0 then commits the foot with the stored
+    /// layer or refuses the whole frame.</summary>
+    private bool TryFrame(NavigationPoint from, int dx, int dy, out NavigationPoint next)
+    {
+        next = from;
+        if (OpposesStrongFloor(from.X, from.Y, dx, dy) ||
+            actors?.BlocksMove(from.X, from.Y, from.X + dx * 16, from.Y + dy * 16, contactDestinations) == true ||
+            Displacement(from, dx, dy) is not { } move) return false;
+        var x = from.X + move.X; var y = from.Y + move.Y;
+        if (OpposesStrongFloor(x, y, dx, dy)) return false;
+        // A floor push would change the slide; only slides on plain floor are claimed.
+        if (move != (dx * 16, dy * 16) && (MovingFloor(from.X, from.Y) || MovingFloor(x, y))) return false;
+        return TryPosition(x, y, from.Layer, out next);
+    }
+
+    /// <summary>175E90 sends a held frame to 1761C0 (left/right), 176AE0 (down) or
+    /// 176810 (up). Each probes the two leading corners of the moved body, 0x70 from
+    /// its foot, with the stored layer (175EE0). When exactly one is blocked, the body
+    /// is nudged 16 toward the clear side and probed again; when the nudged blocked
+    /// corner still fails, the forward step is given up for the nudge alone.</summary>
+    private (int X, int Y)? Displacement(NavigationPoint from, int dx, int dy)
+    {
+        int x = from.X, y = from.Y, layer = from.Layer;
+        Probe At(int px, int py) => Corner(px, py, layer);
+        if (dx != 0)
+        {
+            int ahead = x + dx * 128, beside = x + dx * 112;
+            var foot = At(ahead, y);
+            if (foot == Probe.Clear)
+            {
+                var head = At(ahead, y - 112);
+                if (head == Probe.Clear) return (dx * 16, 0);
+                // States 5, 7 and 10: the head corner pushes the body down.
+                if (head != Probe.Terrain || At(ahead, y + 16) != Probe.Clear) return null;
+                if (At(ahead, y - 96) == Probe.Clear) return (dx * 16, 16);
+                return At(beside, y + 16) == Probe.Clear ? (0, 16) : null;
+            }
+            // States 2, 3 and 8: the foot corner pushes the body up.
+            if (foot != Probe.Terrain || At(ahead, y - 112) != Probe.Clear) return null;
+            if (At(ahead, y - 16) == Probe.Clear) return At(ahead, y - 128) == Probe.Clear ? (dx * 16, -16) : null;
+            return At(beside, y - 128) == Probe.Clear ? (0, -16) : null;
+        }
+        int row = dy > 0 ? y + 16 : y - 128, still = dy > 0 ? y : y - 112;
+        var left = At(x - 112, row);
+        var right = At(x + 112, row);
+        if (left == Probe.Clear && right == Probe.Clear) return (0, dy * 16);
+        // 176810 shortens the head to 0x60 for scene 0x163 inside this box. The scene
+        // is not known here, so no slide is claimed there.
+        if (dy < 0 && x > 0xC8F && x < 0xD80 && y > 0x14DF && y < 0x1590) return null;
+        if (left == Probe.Terrain && right == Probe.Clear)
+            return At(x - 96, row) == Probe.Clear
+                ? At(x + 128, row) == Probe.Clear ? (16, dy * 16) : null
+                : At(x + 128, still) == Probe.Clear ? (16, 0) : null;
+        if (left != Probe.Clear || right != Probe.Terrain) return null;
+        // 176AE0 adds 0xFFF0 to X, then ADC #0x70 with that carry: X + 0x61.
+        return At(x + (dy > 0 ? 97 : 96), row) == Probe.Clear
+            ? At(x - 128, row) == Probe.Clear ? (-16, dy * 16) : null
+            : At(x - 128, still) == Probe.Clear ? (-16, 0) : null;
+    }
+
+    private enum Probe { Clear, Terrain, Unknown }
+
+    // 175EE0 sets bit 2 for a terrain or layer rejection, which the movers slide
+    // along. Off the map the native tile index wraps, so no result is claimed there.
+    private Probe Corner(int x, int y, int layer) =>
+        x < 0 || y < 0 || x / 256 >= map.Width || y / 256 >= map.Height ? Probe.Unknown :
+        TryPosition(x, y, layer, out _) ? Probe.Clear : Probe.Terrain;
+
+    private bool MovingFloor(int x, int y) => x >= 0 && y >= 0 && x / 256 < map.Width &&
+        y / 256 < map.Height && (map.TerrainFlags[y / 256 * map.Width + x / 256] & 12) != 0;
 
     private bool OpposesStrongFloor(int x, int y, int dx, int dy)
     {

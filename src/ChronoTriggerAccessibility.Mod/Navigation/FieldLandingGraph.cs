@@ -29,6 +29,7 @@ public sealed class FieldLandingGraph(INavigationGraph inner, FieldMapSnapshot m
             ? new FieldLandingGraph(inner, map, scene) : inner;
 
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
+    public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point);
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => inner.IsSameTerminal(point, goal);
 

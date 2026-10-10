@@ -26,6 +26,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                 c.Copy is { } copy && ActionAvailable(scene.Id, a.Index, c, story) && HasChanges(map, copy))))
             ? new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals) : Wrap(map, terminals, collisions, touchGoals);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => live.Neighbours(point);
+    public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => live.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => live.IsTerminal(point);
     public bool IsSameTerminal(NavigationPoint point, NavigationPoint goal) => live.IsSameTerminal(point, goal);
 
