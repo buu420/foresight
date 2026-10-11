@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using ChronoTriggerAccessibility.Core.Dialogue;
+using ChronoTriggerAccessibility.Core.Events;
+using ChronoTriggerAccessibility.Core.Startup;
 using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -10,6 +12,71 @@ namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 
 public sealed class StoryVoiceCompositionTests
 {
+    [Fact]
+    public async Task CurrentOpeningDescriptionUsesRecordedVoiceAndKeepsItsCaption()
+    {
+        var prism = new Prism(); var wave = new Wave(); var log = new Log();
+        using var session = new StoryVoiceRuntimeFactory(new Factory(prism), () => true, log.Info,
+            () => wave, cue => new([1, 2], 1, cue.VoiceText)).Create();
+        var dispatcher = new SemanticEventDispatcher(log, new Fatal()); dispatcher.Attach(session);
+        dispatcher.Publish(new ScreenEntered(ScreenKind.OpeningMovie));
+        var text = OpeningMovieTimeline.Entries[0].Text;
+        dispatcher.Publish(new TimedDescription(text, dispatcher.Generation));
+        await wave.Started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Empty(prism.Speech); Assert.Equal([text], prism.Captions.ToArray());
+        Assert.Contains(log.Messages, line => line.Contains($"text={text}"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StaleOrOutOfScreenOpeningDescriptionsCannotStartRecordings(bool stale)
+    {
+        var prism = new Prism(); var wave = new Wave(); var log = new Log();
+        using var session = new StoryVoiceRuntimeFactory(new Factory(prism), () => true, log.Info,
+            () => wave, cue => new([1, 2], 1, cue.VoiceText)).Create();
+        var dispatcher = new SemanticEventDispatcher(log, new Fatal()); dispatcher.Attach(session);
+        if (stale) dispatcher.Publish(new ScreenEntered(ScreenKind.OpeningMovie));
+        dispatcher.Publish(new TimedDescription(OpeningMovieTimeline.Entries[0].Text,
+            dispatcher.Generation + (stale ? 1 : 0)));
+        Assert.False(wave.Started.Task.IsCompleted); Assert.Empty(prism.Speech);
+        Assert.Empty(prism.Captions);
+    }
+
+    [Fact]
+    public void UnmatchedCurrentOpeningTextStillUsesPrism()
+    {
+        var prism = new Prism(); var wave = new Wave(); var log = new Log();
+        using var session = new StoryVoiceRuntimeFactory(new Factory(prism), () => true, log.Info,
+            () => wave, cue => new([1, 2], 1, cue.VoiceText)).Create();
+        var dispatcher = new SemanticEventDispatcher(log, new Fatal()); dispatcher.Attach(session);
+        dispatcher.Publish(new ScreenEntered(ScreenKind.OpeningMovie));
+        dispatcher.Publish(new TimedDescription("A newly described shot.", dispatcher.Generation));
+        Assert.Equal(["A newly described shot."], prism.Speech.ToArray());
+        Assert.False(wave.Started.Task.IsCompleted);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LeavingOpeningCancelsItsVoiceEvenWithoutAnAnnouncement(bool silentExit)
+    {
+        var prism = new Prism(); var wave = new Wave(); var log = new Log();
+        using var session = new StoryVoiceRuntimeFactory(new Factory(prism), () => true, log.Info,
+            () => wave, cue => new([1, 2], 1, cue.VoiceText)).Create();
+        var dispatcher = new SemanticEventDispatcher(log, new Fatal()); dispatcher.Attach(session);
+        dispatcher.Publish(new ScreenEntered(ScreenKind.OpeningMovie));
+        var generation = dispatcher.Generation;
+        dispatcher.PublishNarration(StoryVoiceCueCatalog.ForOpening(OpeningMovieTimeline.Entries[0].Text)!);
+        await wave.Started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        dispatcher.PublishNarration(StoryVoiceCueCatalog.ForOpening(OpeningMovieTimeline.Entries[1].Text)!);
+        dispatcher.Publish(silentExit ? new ScreenExited(ScreenKind.OpeningMovie)
+            : new StartupSceneEntered(StartupSceneKind.Title));
+        Assert.False(wave.Playing); Assert.True(dispatcher.Generation > generation);
+        dispatcher.Publish(new TimedDescription(OpeningMovieTimeline.Entries[2].Text, generation));
+        Assert.DoesNotContain(OpeningMovieTimeline.Entries[2].Text, prism.Speech);
+    }
+
     [Fact]
     public async Task AVerifiedHeldActionIsHeardBeforeTheNativeDialogueChoices()
     {

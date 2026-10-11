@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.54 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.55 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.54 gives the supported story descriptions Fish-generated narration using the creator's approved voice recording. The 124 clips cover named and appearance variants of the existing reviewed gestures and opening/fair actions. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.54.md).
+Version 0.3.55 adds the 22 opening-movie descriptions to the recorded narrator voice. The opening uses these Fish-generated recordings when a working narrated movie pack is absent, keeping the existing timings. All 124 story recordings are retained, for 146 clips in total. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.55.md).
 
 ## Install the beta download
 
@@ -34,7 +34,7 @@ The mod reads startup/main menus, Settings, Extras, New Game/name entry, confirm
 
 Minigames are not comprehensively accessible. Some icons, battle effects and result states remain unverified. Story-action descriptions cover selected native character gestures and seven opening/fair actions; they are not a complete description of every scene or NPC. Routes can fail or get stuck in live story states. Automatic walking does not fight, choose dialogue or press Confirm for you.
 
-Movie-description playback works with a separately prepared local pack. **This public download does not include the development tester's voice pack, private recordings, game movies or replacement movie files.** It preserves an existing local pack; those descriptions play alongside the original soundtrack without ducking.
+The public download includes the recorded opening and supported story descriptions. It preserves a separately installed movie narration pack, whose descriptions play alongside the original soundtrack without ducking. A working opening movie pack suppresses the recorded fallback to avoid duplicate narration. Game movies, replacement movie files, the original voice recording and Fish credentials are excluded.
 
 Controller navigation was tested in game and reported working by the user. This does not verify every controller or Steam Input configuration. The keyboard layout used for testing is WASD or arrows to move, X to confirm, C to cancel and V for the game menu; those game bindings remain configurable. All mod hotkeys and controller buttons are listed below.
 

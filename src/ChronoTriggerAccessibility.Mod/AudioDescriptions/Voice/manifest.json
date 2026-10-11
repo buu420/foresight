@@ -875,6 +875,160 @@
       "sha256": "8131a1c5ac85ad5cf38e29e73efcba25d60762a855bb973601713527ac62cf75",
       "duration": 1.808208,
       "bytes": 86838
+    },
+    {
+      "id": "movie-opening-00",
+      "text": "Sunlight shines in a blue sky.",
+      "sha256": "8645948e25b0e9a74fb32f8c10adb1493b5500f4afa8023fd0f830cd21a0cac6",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "movie-opening-01",
+      "text": "Birds fly over the sea as the view pulls back through a window.",
+      "sha256": "00fad1ea2a8f351e381c035a550faec259a3ee0bcdd1fd77059b444776286469",
+      "duration": 3.898,
+      "bytes": 187148
+    },
+    {
+      "id": "movie-opening-02",
+      "text": "A hand picks up a framed photograph beside a vase.",
+      "sha256": "3dee7b4649e9b7730b4ba09e033b75e5024061d58f2cf6df4ecbfafb70245dcb",
+      "duration": 3.572917,
+      "bytes": 171544
+    },
+    {
+      "id": "movie-opening-03",
+      "text": "The adventurers pose together. Close-ups show the smiling faces of Marle, Frog, Lucca, Robo, Ayla, and Crono.",
+      "sha256": "67b46095474c7a94c7557d66ce508f8024c30c2c7a50fa01175e0a6d7bc85621",
+      "duration": 8.588417,
+      "bytes": 412288
+    },
+    {
+      "id": "movie-opening-04",
+      "text": "The title: Chrono Trigger.",
+      "sha256": "24b3ae5d01157a284029f63779bacfef9ae200d113482baa6900922cd17b7ec3",
+      "duration": 1.808208,
+      "bytes": 86838
+    },
+    {
+      "id": "movie-opening-05",
+      "text": "A spiked red shape glows. Dates spin around a clock, across castles, floating islands, and futuristic domes.",
+      "sha256": "bea64331547de3f8c3284f73bba3c686f55e558332f5ba5300278198b12f5789",
+      "duration": 9.238583,
+      "bytes": 443496
+    },
+    {
+      "id": "movie-opening-06",
+      "text": "A silver aircraft emerges.",
+      "sha256": "6e0cca63df978fb3876e64757399feddd3f735452f8abd347a1215d32cede402",
+      "duration": 2.133292,
+      "bytes": 102442
+    },
+    {
+      "id": "movie-opening-07",
+      "text": "Crono clashes swords with a green reptile, then a purple beast.",
+      "sha256": "771c376c57fedf65d957861792366a3e622a2511c81e28b7cd2548799734333b",
+      "duration": 4.269542,
+      "bytes": 204982
+    },
+    {
+      "id": "movie-opening-08",
+      "text": "Ayla runs through a forest and leaps onto a flying pterodactyl.",
+      "sha256": "8da6f1893f153a5a0bc2a1d18e4748de33ce3b616e65a26479c2c0bd169149d7",
+      "duration": 3.71225,
+      "bytes": 178232
+    },
+    {
+      "id": "movie-opening-09",
+      "text": "Lucca fires at surrounding robots. Robo blasts them, and she smiles.",
+      "sha256": "de55cac6043a6189b714f4184d762e427af17eea99117df4ec1d5f4b1c733f78",
+      "duration": 5.523417,
+      "bytes": 265168
+    },
+    {
+      "id": "movie-opening-10",
+      "text": "In a stone dungeon, Frog draws his sword.",
+      "sha256": "57d388919574b674f9eb5436e67ccea5fa78167fe12dde3c5ae66a99562b7d30",
+      "duration": 3.805125,
+      "bytes": 182690
+    },
+    {
+      "id": "movie-opening-11",
+      "text": "Under a full moon, Crono practices with a wooden sword, then wipes his brow.",
+      "sha256": "d13c9072cd8ab257b7c7141cfe19d3a7b179c74c95cf549c735d6038e7059635",
+      "duration": 4.919667,
+      "bytes": 236188
+    },
+    {
+      "id": "movie-opening-12",
+      "text": "Lucca pauses her work, screwdriver between her teeth, then takes off her glasses.",
+      "sha256": "844b52dfcd9d7e52951901f669b758a3ed49a6bb02ff4484e0b1825a7ecaa2b5",
+      "duration": 5.198333,
+      "bytes": 249564
+    },
+    {
+      "id": "movie-opening-13",
+      "text": "Marle clutches her glowing pendant. Colorful light ripples around her.",
+      "sha256": "ca8434eb886766fb7cabb6d541f4727f5c6c1bb626b27b075ebe83fb20f067e8",
+      "duration": 4.408833,
+      "bytes": 211668
+    },
+    {
+      "id": "movie-opening-14",
+      "text": "Magus's cape billows against the full moon.",
+      "sha256": "5236cf7aedb07c09622516c441e4b110efc108db0b43d6261b3c9a84dbe30736",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "movie-opening-15",
+      "text": "A huge green dinosaur smashes through a wall. Crono, Ayla, and Robo face it.",
+      "sha256": "9f1b76c3b11680719883028e4c94daac85893e879f135c9f91ca5a9761cabfc4",
+      "duration": 6.498625,
+      "bytes": 311978
+    },
+    {
+      "id": "movie-opening-16",
+      "text": "Crono charges. Robo launches his fist on a chain.",
+      "sha256": "893718fda61be132101acf2b46b68f5827e96484cce4d572c37e60b13bebfee0",
+      "duration": 3.572917,
+      "bytes": 171544
+    },
+    {
+      "id": "movie-opening-17",
+      "text": "In driving rain, a giant skeleton looms over Crono, Frog and Lucca, electricity crackling around it. Lucca fires.",
+      "sha256": "291cd0dcf8a2c7fde3a4137e9254a2a927a80dd414ea445b2921faf6336eb118",
+      "duration": 9.51725,
+      "bytes": 456872
+    },
+    {
+      "id": "movie-opening-18",
+      "text": "Crono leaps at a giant serpent. It bursts apart under sword strokes and fire.",
+      "sha256": "db264d5d51524559d2612ce0afb2097d874ab9b3305bedad9addfcec222d16d7",
+      "duration": 5.337625,
+      "bytes": 256250
+    },
+    {
+      "id": "movie-opening-19",
+      "text": "The heroes speed through the clouds in their silver aircraft, its engines blazing.",
+      "sha256": "91b57ee4658fe2d0c95bec8ea26fdad67fb99ab27bd74e3f4570ec2915ad582c",
+      "duration": 5.151875,
+      "bytes": 247334
+    },
+    {
+      "id": "movie-opening-20",
+      "text": "The Chrono Trigger logo appears.",
+      "sha256": "05a4634badb6bb6447fcb02ae4c38bee6be62aac5cf6e2249d0cfbeb42dfc58e",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "movie-opening-21",
+      "text": "Descriptions by ViddyScribe.",
+      "sha256": "ce3dae6423df5b4e87f52d63efce8f5673bd12e57188af5699b0ef4668b96519",
+      "duration": 1.947542,
+      "bytes": 93526
     }
   ]
 }

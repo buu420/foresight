@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Core.Startup;
 
 namespace ChronoTriggerAccessibility.Mod.AudioDescriptions;
 
@@ -7,6 +8,16 @@ public sealed record StoryVoiceCueDefinition(string Id, string Text);
 
 public static class StoryVoiceCueCatalog
 {
+    public static StoryNarration? ForOpening(string text)
+    {
+        for (var index = 0; index < OpeningMovieTimeline.Entries.Count; index++)
+            if (text == OpeningMovieTimeline.Entries[index].Text)
+            {
+                var id = $"movie-opening-{index:D2}";
+                return new(text, id, Texts[id]);
+            }
+        return null;
+    }
     private static readonly string[] Names = ["Crono", "Marle", "Lucca", "Robo", "Frog", "Ayla"];
     public static IReadOnlyList<StoryVoiceCueDefinition> All { get; } = Build();
     private static readonly IReadOnlyDictionary<string, string> Texts =
@@ -52,6 +63,8 @@ public static class StoryVoiceCueCatalog
             }
             else result.Add(new(id, StoryActionCatalog.DescribeScene(scene, Name)));
         }
+        for (var index = 0; index < OpeningMovieTimeline.Entries.Count; index++)
+            result.Add(new($"movie-opening-{index:D2}", OpeningMovieTimeline.Entries[index].Text));
         return result.AsReadOnly();
     }
 

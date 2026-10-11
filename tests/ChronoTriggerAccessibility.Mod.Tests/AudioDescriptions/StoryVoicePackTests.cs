@@ -1,4 +1,5 @@
 using ChronoTriggerAccessibility.Mod.AudioDescriptions;
+using ChronoTriggerAccessibility.Core.Startup;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
@@ -6,9 +7,24 @@ namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 public sealed class StoryVoicePackTests
 {
     [Fact]
+    public void EveryOpeningRecordingFitsBeforeTheNextShotOrMovieEnd()
+    {
+        var pack = StoryVoicePack.Load();
+        for (var index = 0; index < OpeningMovieTimeline.Entries.Count; index++)
+        {
+            var entry = OpeningMovieTimeline.Entries[index];
+            var end = index + 1 < OpeningMovieTimeline.Entries.Count
+                ? OpeningMovieTimeline.Entries[index + 1].Offset.TotalSeconds : 158.358208;
+            var clip = pack.Get(StoryVoiceCueCatalog.ForOpening(entry.Text)!);
+            Assert.True(clip.Duration <= end - entry.Offset.TotalSeconds,
+                $"Opening cue {index} lasts {clip.Duration}s beyond its {end - entry.Offset.TotalSeconds}s shot.");
+        }
+    }
+
+    [Fact]
     public void EveryNativeDescriptionHasItsVerifiedRecordedPcmInTheBuiltMod()
     {
-        var pack = StoryVoicePack.Load(); Assert.Equal(124, pack.Count);
+        var pack = StoryVoicePack.Load(); Assert.Equal(146, pack.Count);
         foreach (var cue in StoryVoiceCueCatalog.All)
         {
             var clip = pack.Get(new(cue.Text, cue.Id, cue.Text));

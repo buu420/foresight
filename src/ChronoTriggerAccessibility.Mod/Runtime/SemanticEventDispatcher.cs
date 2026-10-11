@@ -77,7 +77,10 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
         lock (gate)
         {
             log.Info($"Semantic event: {accessibilityEvent}");
+            var previousGeneration = state.Generation;
             var announcements = state.Apply(accessibilityEvent);
+            if (state.Generation != previousGeneration)
+                (session as StoryVoiceSession)?.CancelNarration();
             foreach (var announcement in announcements)
             {
                 var activeSession = session ?? throw new InvalidOperationException(
@@ -92,8 +95,12 @@ public sealed class SemanticEventDispatcher : ISemanticEventDispatcher
                     }
                     continue;
                 }
-                if (narration is not null && activeSession is StoryVoiceSession recorded)
-                    recorded.Narrate(narration);
+                // The state must approve the current movie and generation before
+                // an opening recording can be queued.
+                var voiceCue = narration ?? (accessibilityEvent is TimedDescription
+                    ? StoryVoiceCueCatalog.ForOpening(announcement.Text) : null);
+                if (voiceCue is not null && activeSession is StoryVoiceSession recorded)
+                    recorded.Narrate(voiceCue);
                 else if (accessibilityEvent is DialogueChoicesPresented && activeSession is StoryVoiceSession choices)
                     choices.OutputAfterNarration(announcement.Text, announcement.Interrupt);
                 else activeSession.Output(announcement.Text, announcement.Interrupt);

@@ -1,5 +1,6 @@
 using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Core.Startup;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
@@ -7,10 +8,22 @@ namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 public sealed class StoryVoiceCueCatalogTests
 {
     [Fact]
+    public void EveryExistingOpeningDescriptionHasAnExactVoiceCue()
+    {
+        foreach (var (entry, index) in OpeningMovieTimeline.Entries.Select((entry, index) => (entry, index)))
+        {
+            var cue = StoryVoiceCueCatalog.ForOpening(entry.Text);
+            Assert.NotNull(cue); Assert.Equal(entry.Text, cue.Text); Assert.Equal(entry.Text, cue.VoiceText);
+            Assert.Equal($"movie-opening-{index:D2}", cue.CueId);
+        }
+        Assert.Null(StoryVoiceCueCatalog.ForOpening("An unreviewed description."));
+    }
+    [Fact]
     public void EveryReviewedGestureAndSpecificSceneHasARecordedCue()
     {
-        Assert.Equal(124, StoryVoiceCueCatalog.All.Count);
-        Assert.Equal(124, StoryVoiceCueCatalog.All.Select(cue => cue.Id).Distinct().Count());
+        Assert.Equal(146, StoryVoiceCueCatalog.All.Count);
+        Assert.Equal(146, StoryVoiceCueCatalog.All.Select(cue => cue.Id).Distinct().Count());
+        Assert.Equal(124, StoryVoiceCueCatalog.All.Count(cue => !cue.Id.StartsWith("movie-opening-")));
         Assert.All(StoryVoiceCueCatalog.All, cue =>
         {
             Assert.Matches("^[a-z0-9-]+$", cue.Id);
