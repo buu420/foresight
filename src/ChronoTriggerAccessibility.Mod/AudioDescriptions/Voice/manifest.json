@@ -1030,5 +1030,34 @@
       "duration": 1.947542,
       "bytes": 93526
     }
+  ],
+  "movieNarration": [
+    {
+      "movie": "002.dat",
+      "decodedSha256": "ba85684dc8586665c0a78b0aa7e8b704622eca0a4993076ad319dfe84fdb1254",
+      "resource": "movie-narration-002.wav",
+      "sha256": "683a047c3590d4777cb94f7e77c0ae199ac937e8b5272da65631fe6aaab6e7d2",
+      "bytes": 1877116,
+      "sampleRate": 24000,
+      "samples": 938536
+    },
+    {
+      "movie": "003.dat",
+      "decodedSha256": "8f0fb77315d033d9b4c48831d4be89cd64aa2a935d540e967810ca8be32a58af",
+      "resource": "movie-narration-003.wav",
+      "sha256": "c0cb1507786f3ca8d4696c4cc58b5e5bec55c2b7450e8a83887fd98e0b70635a",
+      "bytes": 3143980,
+      "sampleRate": 24000,
+      "samples": 1571968
+    },
+    {
+      "movie": "004.dat",
+      "decodedSha256": "64734088fa2480b7559ff18c109d8d6a9b71662707a3a0aa3643b1f8f6854451",
+      "resource": "movie-narration-004.wav",
+      "sha256": "87c83ec768a9c79ea97811c272e66d313d862eff606d421af557c25aa6bb8d48",
+      "bytes": 2496936,
+      "sampleRate": 24000,
+      "samples": 1248446
+    }
   ]
 }

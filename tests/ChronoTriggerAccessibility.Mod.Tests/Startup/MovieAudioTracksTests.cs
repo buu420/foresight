@@ -74,6 +74,54 @@ public sealed class MovieAudioTracksTests
         Assert.Single(messages);
     }
 
+    [Fact]
+    public void SeparatePackMovieKeepsBothTracksWithoutInjectedNarration()
+    {
+        var descriptor = new Descriptor(false, true);
+        var narrations = 0;
+        var playback = new MovieAudioPlayback(_ => { }, _ => { });
+        Assert.Equal(0, playback.Build(() => descriptor, () => "002.dat", () => 0, _ =>
+        {
+            narrations++;
+            return 0;
+        }));
+        Assert.Equal(0, narrations);
+        Assert.Equal(new[] { true, true, true }, descriptor.Selected);
+    }
+
+    [Fact]
+    public void NarratedOriginalMovieReplacesOnlyTheOriginalBuild()
+    {
+        var original = new Descriptor(true, true) { Types = [MovieStreamKind.Audio, MovieStreamKind.Video] };
+        var calls = 0;
+        var playback = new MovieAudioPlayback(_ => { }, _ => { });
+        Assert.Equal(5, playback.Build(() => original, () => null, () => { calls++; return 0; }, presentation =>
+        {
+            Assert.Same(original, presentation);
+            return 5;
+        }));
+        Assert.Equal(0, calls);
+        Assert.False(playback.OpeningReady);
+    }
+
+    [Fact]
+    public void DeclinedOrFailedNarrationBuildsTheOriginalTopologyOnce()
+    {
+        // The public opening and undeclared movies decline; a faulty narrator must not reach game code.
+        var original = new Descriptor(true, true) { Types = [MovieStreamKind.Audio, MovieStreamKind.Video] };
+        var messages = new List<string>();
+        var playback = new MovieAudioPlayback(_ => { }, messages.Add);
+        var calls = 0;
+        Assert.Equal(3, playback.Build(() => original, () => null, () => { calls++; return 3; }, _ => null));
+        Assert.Equal(1, calls);
+        Assert.Empty(messages);
+        Assert.Equal(3, playback.Build(() => original, () => null, () => { calls++; return 3; },
+            _ => throw new InvalidOperationException("narrator fault")));
+        Assert.Equal(2, calls);
+        Assert.Single(messages);
+        Assert.False(playback.OpeningReady);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -95,7 +143,7 @@ public sealed class MovieAudioTracksTests
             }
             // No game DLL or hook controller in the test host. This optional
             // registration must return inactive, rather than aborting the installer.
-            var registration = new MovieAudioTracksHook(null!, root, _ => { }, messages.Add);
+            var registration = new MovieAudioTracksHook(null!, root, _ => { }, messages.Add, () => []);
             var prepared = registration.Prepare(null!, null!);
             prepared.Activate();
             Assert.False(prepared.IsActive);
@@ -104,6 +152,35 @@ public sealed class MovieAudioTracksTests
             prepared.Disable();
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void PublicNarrationPreparesTheMovieHookWithoutASeparatePack()
+    {
+        // Public installs have no movie pack. Declared narration must still prepare the optional
+        // hook; this test host has no game DLL, so preparation reports and stays inactive.
+        var track = MovieNarrationTrack.Create(MovieNarrationCatalog.Originals[0],
+            MovieNarrationResourceTests.Wave(24000, 938536));
+        var messages = new List<string>();
+        var registration = new MovieAudioTracksHook(null!, Path.Combine(Path.GetTempPath(), "ct-no-pack-" + Guid.NewGuid()),
+            _ => { }, messages.Add, () => [track]);
+        var prepared = registration.Prepare(null!, null!);
+        prepared.Activate();
+        Assert.False(prepared.IsActive);
+        Assert.Equal([MovieNarrationInjector.UnavailableMessage], messages);
+        prepared.Disable();
+    }
+
+    [Fact]
+    public void BrokenNarrationResourcesAreReportedWithoutFailingPreparation()
+    {
+        var messages = new List<string>();
+        var registration = new MovieAudioTracksHook(null!, Path.Combine(Path.GetTempPath(), "ct-no-pack-" + Guid.NewGuid()),
+            _ => { }, messages.Add, () => throw new InvalidDataException("changed recording"));
+        var prepared = registration.Prepare(null!, null!);
+        prepared.Activate();
+        Assert.False(prepared.IsActive);
+        Assert.Equal([MovieNarrationInjector.UnavailableMessage], messages);
     }
 
     private sealed class Descriptor(bool first, bool second) : IMoviePresentation

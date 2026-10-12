@@ -11,6 +11,8 @@ public sealed class FieldTransitionGraph(INavigationGraph inner, IReadOnlyList<F
         transitions.Count == 0 ? inner : new FieldTransitionGraph(inner, transitions);
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new FieldTransitionGraph(inner.ForGoals(goals), transitions);
+    public INavigationGraph? WithoutCreatures => inner.WithoutCreatures is { } open ? new FieldTransitionGraph(open, transitions) : null;
+    public int? BlockingActor(NavigationPoint from, NavigationPoint to) => inner.BlockingActor(from, to);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
     public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point);

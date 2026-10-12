@@ -31,6 +31,34 @@ public sealed class FieldTechDetailsCaptureTests
     {
         Assert.Equal("Cyclone. Strike nearby enemies. MP 2", new FieldTechDetailsCapture(Fixture()).Capture(Image, Node)!.Text);
     }
+    [Theory]
+    [InlineData(0u, "HP MP Cost : 2")]
+    [InlineData(1u, "HP PM 20/30 MP Cost : 2")]
+    [InlineData(2u, "HP PM 20/30 MP Cost : 2")]
+    public void TechCostsOmitNamedBackgroundStatRowsButKeepParticipantsAndRelevantMp(uint category, string expectedCosts)
+    {
+        var m = Fixture();
+        m.Word(Node + 0x2FC, category).Word(Node + 0x318 + category * 12, Rows)
+            .Word(Node + 0x31C + category * 12, Rows + 24);
+        RenderedNodeTextCaptureTests.Node(m, Costs, Node)
+            .Word(Costs + 0x278, 0)
+            .Word(Costs + 0x160, 0x2600000).Word(Costs + 0x164, 0x2600014);
+        // Retail 23A140 names its stat-row subtrees lv/hp/mp. These are
+        // native identifiers, independent of translated labels or custom names.
+        var texts = new[] { "HP", "Niveau 20", "PV 175/221", "PM 20/30", "MP Cost : 2" };
+        var names = new[] { "", "lv", "hp", "mp", "" };
+        for (var i = 0; i < texts.Length; i++)
+        {
+            var child = 0x2700000u + (uint)i * 0x1000;
+            m.Word(0x2600000u + (uint)i * 4, child);
+            RenderedNodeTextCaptureTests.Text(m, child, texts[i], Costs).String(child + 0x178, names[i]);
+        }
+        var result = new FieldTechDetailsCapture(m).Capture(Image, Node);
+        Assert.NotNull(result);
+        // A character actually renamed "HP" remains audible; text filtering
+        // would wrongly remove it. Cost and selected Tech information survive.
+        Assert.Equal("Cyclone. Strike nearby enemies. " + expectedCosts, result.Text);
+    }
     [Fact] public void DisabledRowManagerCannotOverrideACharacterOrOtherModalSelection()
     {
         var m = Fixture().Byte(Manager + 0x290, 1);

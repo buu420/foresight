@@ -1291,7 +1291,10 @@ public sealed class TopMenuHookSet : IHookActivationObserver, ISharedNativeHookO
             activeContext = active;
             try
             {
-                dispatcher.Publish(new MenuPresented(OwnerOf(active), "Menu", focused, snapshot.FlattenedStatus));
+                // Reopening the native parent menu also rebuilds every party card.
+                // Those background cards are not the selection the player is reviewing.
+                dispatcher.Publish(new MenuPresented(OwnerOf(active), "Menu", focused,
+                    new[] { snapshot.Time, snapshot.Currency }.Concat(snapshot.ConditionalLines).ToArray()));
             }
             catch
             {

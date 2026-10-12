@@ -32,7 +32,28 @@ public sealed class FieldActorCollisionRulesTests
             };
             var rules = new FieldActorCollisionRules(field);
             foreach (var p in g.GetProperty("Probes").EnumerateArray())
+            {
                 Assert.Equal(p[2].GetBoolean(), rules.BlocksProbe(p[0].GetInt32(), p[1].GetInt32()));
+                Assert.Equal(p[2].GetBoolean(), rules.ContactProbe(p[0].GetInt32(), p[1].GetInt32()) is not null);
+            }
         }
+    }
+
+    [Fact]
+    public void TheContactSlotIsTheFirstMatchOnlyWhenThatMatchBlocks()
+    {
+        static FieldActorSnapshot Actor(int index, int loaded) =>
+            new(index, 20, 20 * 256, 0, 20, 20 * 256, 0, 0, 1, loaded, 80, 5, 0, 0, 128, false, true, true, true);
+        FieldActorCollisionRules Rules(params FieldActorSnapshot[] actors) =>
+            new(new FieldNavigationSnapshot(0, 0, 0, 0, 64, 1, true, 1, 0, 1, 1, null, actors) { ActorCollisionRadius = 160 });
+
+        // Slot 12 is tested before slot 7 and wins.
+        Assert.Equal(12, Rules(Actor(7, 1), Actor(12, 1)).ContactProbe(20 * 256, 20 * 256));
+        // An unloaded higher slot wins without blocking; the lower loaded slot is never reached.
+        Assert.Null(Rules(Actor(7, 1), Actor(12, 0)).ContactProbe(20 * 256, 20 * 256));
+        // A selected touch destination does not block, so it is not the blocker either.
+        Assert.Null(Rules(Actor(12, 1)).ContactProbe(20 * 256, 20 * 256, new HashSet<int> { 12 }));
+        Assert.Equal(12, Rules(Actor(12, 1)).ContactActor(20 * 256, 21 * 256, 20 * 256, 21 * 256 - 16));
+        Assert.Null(Rules(Actor(12, 1)).ContactProbe(30 * 256, 30 * 256));
     }
 }

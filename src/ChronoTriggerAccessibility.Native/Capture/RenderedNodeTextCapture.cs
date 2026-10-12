@@ -8,19 +8,31 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 /// getter is audited in BattleFeedbackCapture. This never searches the scene for a selection.</summary>
 public sealed class RenderedNodeTextCapture(IReadableMemory memory)
 {
-    public IReadOnlyList<string>? Read(nuint root)
+    // The audited Cocos2d Node::getName returns its string at +178.
+    // Optional exclusions select native row identities, never their displayed text.
+    public IReadOnlyList<string>? Read(nuint root, IReadOnlySet<string>? excludedSubtreeNames = null)
     {
         var seen = new HashSet<nuint>();
         var result = new List<string>();
-        return Visit(root, null, 0, seen, result) ? result.AsReadOnly() : null;
+        return Visit(root, null, 0, seen, result, excludedSubtreeNames) ? result.AsReadOnly() : null;
     }
 
-    private bool Visit(nuint node, nuint? parent, int depth, HashSet<nuint> seen, List<string> result)
+    private bool Visit(nuint node, nuint? parent, int depth, HashSet<nuint> seen, List<string> result,
+        IReadOnlySet<string>? excludedNames)
     {
         if (depth > 16 || seen.Count >= 512 || !seen.Add(node) || !Fits(node, 0x1AE) ||
             !Byte(node + 0x1AD, out var visible) ||
             (parent.HasValue && (!Word(node + 0x16C, out var p) || p != parent.Value))) return false;
         if (visible == 0) return true;
+
+        string? name = null;
+        if (excludedNames is not null)
+        {
+            if (!new MsvcStringReader(memory).TryRead(node + 0x178, out name, out _)) return false;
+            if (excludedNames.Contains(name))
+                return StableName(node, name) && Byte(node + 0x1AD, out var stillVisible) && stillVisible == visible &&
+                    (!parent.HasValue || (Word(node + 0x16C, out var stillParent) && stillParent == parent.Value));
+        }
 
         // Non-Label nodes have different secondary interfaces; do not cast them to Label.
         if (Word(node + 0x278, out var protocol) && Word(protocol + 8, out var getter))
@@ -40,14 +52,18 @@ public sealed class RenderedNodeTextCapture(IReadableMemory memory)
         for (var i = 0; i < children.Length; i += 4)
         {
             if (!Visit(BinaryPrimitives.ReadUInt32LittleEndian(children.AsSpan(i, 4)), node,
-                depth + 1, seen, result)) return false;
+                depth + 1, seen, result, excludedNames)) return false;
         }
         if (!Word(node + 0x160, out var b2) || b2 != begin || !Word(node + 0x164, out var e2) || e2 != end ||
             !Byte(node + 0x1AD, out var v2) || visible != v2 ||
-            (parent.HasValue && (!Word(node + 0x16C, out var p2) || p2 != parent.Value))) return false;
+            (parent.HasValue && (!Word(node + 0x16C, out var p2) || p2 != parent.Value)) ||
+            (name is not null && !StableName(node, name))) return false;
         var again = new byte[children.Length];
         return children.Length == 0 || (memory.TryRead(begin, again) && children.AsSpan().SequenceEqual(again));
     }
+
+    private bool StableName(nuint node, string name) =>
+        new MsvcStringReader(memory).TryRead(node + 0x178, out var again, out _) && again == name;
 
     private bool Word(nuint address, out uint value)
     {

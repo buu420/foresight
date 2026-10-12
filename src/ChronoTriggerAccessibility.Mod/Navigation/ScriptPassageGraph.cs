@@ -9,6 +9,8 @@ public sealed class ScriptPassageGraph(INavigationGraph inner,
 {
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new ScriptPassageGraph(inner.ForGoals(goals), passages);
+    public INavigationGraph? WithoutCreatures => inner.WithoutCreatures is { } open ? new ScriptPassageGraph(open, passages) : null;
+    public int? BlockingActor(NavigationPoint from, NavigationPoint to) => inner.BlockingActor(from, to);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
     public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point) || At(point).Any();

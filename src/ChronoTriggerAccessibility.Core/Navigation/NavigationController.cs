@@ -43,8 +43,15 @@ public sealed class NavigationController
     // Survives Stop(), which a failed plan performs before anyone can read the
     // destination back. Without it the one case this field explains reports zero.
     private int plannedApproaches;
+    // A route closed only by an enemy creature standing in the way (native contact 178980
+    // blocks while it is there). Guidance waits and rechecks instead of stopping.
+    private long? creatureBlockedSince;
+    private long nextCreatureCheck;
+    private long clock;
 
     public bool IsActive => guiding;
+    /// <summary>The destination being guided to, or else the selected one.</summary>
+    public string? TargetId => destination?.Id ?? selection;
     public bool HasPendingTransition => guiding && transition is not null;
     /// <summary>Only the route's audited script may own a temporary input pause.
     /// A fresh landing may finish it; ordinary input gaps remain cancellations.</summary>
@@ -78,6 +85,7 @@ public sealed class NavigationController
     public NavigationResult Handle(NavigationCommand command, NavigationFrame frame, long nowMilliseconds)
     {
         var speech = new List<string>();
+        clock = nowMilliseconds;
         Refresh(frame, speech, nowMilliseconds);
         if (!frame.CanNavigate) return Result(speech);
         var targets = Eligible(frame);
@@ -128,7 +136,7 @@ public sealed class NavigationController
                 var target = destination;
                 Stop();
                 destination = target;
-                if (!Plan(frame, speech)) break;
+                if (!Plan(frame, speech) && creatureBlockedSince is null) break;
                 guiding = true;
                 walking = command == NavigationCommand.ToggleWalk;
                 lastPosition = frame.Player;
@@ -148,6 +156,7 @@ public sealed class NavigationController
     public NavigationResult Update(NavigationFrame frame, long nowMilliseconds, bool manualInput = false)
     {
         var speech = new List<string>();
+        clock = nowMilliseconds;
         Refresh(frame, speech, nowMilliseconds);
         if (walking && manualInput)
         {
@@ -284,10 +293,53 @@ public sealed class NavigationController
         intermediateContact = search.IntermediateContact;
         plannedGoals = goals;
         nextPoint = 1;
-        if (route is not null) return true;
+        if (route is not null)
+        {
+            if (creatureBlockedSince is not null)
+            {
+                // Waiting for the creature was not a stall.
+                speech.Add("The way is clear.");
+                lastProgress = clock;
+                lastPosition = frame.Player;
+                announcedDirection = NavigationDirection.None;
+            }
+            creatureBlockedSince = null;
+            return true;
+        }
+        if (!search.LimitReached && frame.Graph.WithoutCreatures is { } open &&
+            NavigationPathfinder.Search(open, frame.Player, goals).Route is { } through)
+        {
+            if (creatureBlockedSince is null)
+            {
+                creatureBlockedSince = clock;
+                speech.Add(CreatureBlocking(frame, goals, through) is { } blocker
+                    ? $"{blocker} is blocking the way. Guidance continues when the way clears."
+                    : "The way is temporarily blocked. Guidance continues when it clears.");
+            }
+            nextCreatureCheck = clock + 500;
+            return false;
+        }
         speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." : $"No route to {destination.Label} is available.");
         Stop();
         return false;
+    }
+
+    /// <summary>Names the blocker only when the live graph reports the exact actor slot whose
+    /// native contact closes the first cut edge, and that same slot is a currently visible
+    /// People or Enemies row. Hidden or unlisted contacts, and bystanders, stay unnamed.</summary>
+    private string? CreatureBlocking(NavigationFrame frame, IReadOnlyList<NavigationPoint> goals,
+        IReadOnlyList<NavigationPoint> through)
+    {
+        // The same goal binding the failed search used, so touch destinations match.
+        var live = frame.Graph.ForGoals(goals);
+        for (var index = 0; index + 1 < through.Count; index++)
+        {
+            if (live.Neighbours(through[index]).Contains(through[index + 1])) continue;
+            if (live.BlockingActor(through[index], through[index + 1]) is not { } slot) return null;
+            return frame.Targets.FirstOrDefault(t => t.ActorSlot == slot && t.Visible && !t.IsStoryNote &&
+                t.Id != destination?.Id && t.Category is NavigationCategory.People or NavigationCategory.Enemies)?.Label;
+        }
+        return null;
     }
 
     private void Follow(NavigationFrame frame, long now, List<string> speech, bool manualInput = false)
@@ -338,6 +390,7 @@ public sealed class NavigationController
             chaseInReach = ready;
         }
         frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
+        if (creatureBlockedSince is not null && route is null && now < nextCreatureCheck) return;
         if (mustReplan)
         {
             if (contactStarted is not null)
@@ -869,6 +922,7 @@ public sealed class NavigationController
         facingStarted = null;
         facingDirection = NavigationDirection.None;
         pendingStarted = null;
+        creatureBlockedSince = null;
         unreachableGoals.Clear();
         stallTiles.Clear();
         chaseInReach = false;

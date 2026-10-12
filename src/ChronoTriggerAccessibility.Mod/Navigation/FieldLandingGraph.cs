@@ -23,11 +23,14 @@ public sealed class FieldLandingGraph(INavigationGraph inner, FieldMapSnapshot m
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new FieldLandingGraph(inner.ForGoals(goals), map, scene);
 
+    public INavigationGraph? WithoutCreatures => inner.WithoutCreatures is { } open ? new FieldLandingGraph(open, map, scene) : null;
+
     public static INavigationGraph Create(INavigationGraph inner, FieldMapSnapshot map,
         GameNavigationCatalog.Scene? scene) =>
         scene is not null && scene.Exits.Any(e => IsSameScene(e, map, scene.Id))
             ? new FieldLandingGraph(inner, map, scene) : inner;
 
+    public int? BlockingActor(NavigationPoint from, NavigationPoint to) => inner.BlockingActor(from, to);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => inner.Neighbours(point);
     public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => inner.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => inner.IsTerminal(point);

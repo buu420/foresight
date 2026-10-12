@@ -19,6 +19,35 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
         new FieldNavigationGraph(map, actors, touchGoals, goals);
 
+    public INavigationGraph? WithoutCreatures => actors?.WithoutCreatures() is { } open
+        ? new FieldNavigationGraph(map, open, touchGoals, selectedGoals) : null;
+
+    /// <summary>The actor whose native contact refuses the first frame of this edge, walked as
+    /// <see cref="TryTraverse"/> walks it (or the slide's one held frame). Terrain is not judged.</summary>
+    public int? BlockingActor(NavigationPoint from, NavigationPoint to)
+    {
+        if (actors is null || from == to) return null;
+        if (from.X != to.X && from.Y != to.Y)
+        {
+            // The slide is an edge of the creature-free view; its held input is judged there.
+            var view = WithoutCreatures as FieldNavigationGraph ?? this;
+            var (dx, dy) = view.InputDirection(from, to) switch
+            {
+                NavigationDirection.West => (-1, 0), NavigationDirection.East => (1, 0),
+                NavigationDirection.North => (0, -1), _ => (0, 1),
+            };
+            return actors.ContactActor(from.X, from.Y, from.X + dx * 16, from.Y + dy * 16, contactDestinations);
+        }
+        var distance = Math.Abs(to.X - from.X) + Math.Abs(to.Y - from.Y);
+        for (var done = 0; done < distance;)
+        {
+            done = Math.Min(distance, done + 16);
+            var x = from.X + Math.Sign(to.X - from.X) * done; var y = from.Y + Math.Sign(to.Y - from.Y) * done;
+            if (actors.ContactActor(from.X, from.Y, x, y, contactDestinations) is { } slot) return slot;
+        }
+        return null;
+    }
+
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point)
     {
         if (point.X < 0 || point.Y < 0) yield break;

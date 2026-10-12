@@ -21,6 +21,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     Func<NavigationFrame, NavigationResult, FieldNavigationPad>? adjustFieldInput = null)
 {
     private readonly NavigationController controller = new();
+    private readonly HashSet<string> routeEvidence = [];
     private readonly object gate = new();
     private bool enabled;
     private nint engine;
@@ -353,6 +354,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
                 {
                     if (controller.IsActive || processedCommands.Count != 0) lastRouteState = controller.DiagnosticState;
+                    LogRouteEvidence(frame, speech);
                     diagnostic($"Navigation: command={string.Join(",", processedCommands)}; mode={current}; scene={frame.Scene}; " +
                         $"player=({frame.Player.X},{frame.Player.Y},{frame.Player.Layer}); {lastRouteState}; " +
                         $"input=0x{originalPad:X}; pad=0x{movementPad:X}; " +
@@ -406,4 +408,25 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         NavigationDirection.SouthWest => 0x600, NavigationDirection.SouthEast => 0x500,
         _ => 0,
     };
+    /// <summary>Once per failing pose, target and kind, up to a session cap, log the captured
+    /// state the frame was built from. A diagnostic failure never affects movement.</summary>
+    private void LogRouteEvidence(NavigationFrame frame, IReadOnlyList<string> speech)
+    {
+        try
+        {
+            if (frame.RouteEvidence is null || routeEvidence.Count >= RouteFailureEvidence.MaximumSnapshots ||
+                RouteFailureEvidence.Kind(speech) is not { } kind) return;
+            var target = controller.TargetId;
+            var p = frame.Player;
+            var key = $"{frame.Scene}|{target}|{p.X / NavigationUnits.LocalStep}|{p.Y / NavigationUnits.LocalStep}|{p.Layer}|{kind}";
+            if (!routeEvidence.Add(key) || frame.RouteEvidence(kind, target) is not { } data) return;
+            diagnostic($"Navigation route evidence: kind={kind}; scene={frame.Scene}; target={target ?? "none"}; " +
+                $"player=({p.X},{p.Y},{p.Layer}); facing={frame.PlayerFacing}; floor={frame.MovingFloor?.ToString() ?? "none"}; " +
+                $"format=gzip-json-base64; bytes={data.Length}; data={data}");
+        }
+        catch (Exception exception)
+        {
+            diagnostic($"Navigation route evidence unavailable: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
 }

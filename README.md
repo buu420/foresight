@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.55 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.56 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.55 adds the 22 opening-movie descriptions to the recorded narrator voice. The opening uses these Fish-generated recordings when a working narrated movie pack is absent, keeping the existing timings. All 124 story recordings are retained, for 146 clips in total. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.55.md).
+Version 0.3.56 adds recorded descriptions for Ayla's rescue, Frog opening the Magic Cave, and the approach to Magus, using the same approved narrator voice as the opening and story actions. It also identifies verified Ozzie and Kino appearances, keeps guidance active during temporary creature blockage, and removes unwanted menu and Tech stat repetitions. The existing 146 opening and story recordings are retained. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.56.md).
 
 ## Install the beta download
 
@@ -34,7 +34,7 @@ The mod reads startup/main menus, Settings, Extras, New Game/name entry, confirm
 
 Minigames are not comprehensively accessible. Some icons, battle effects and result states remain unverified. Story-action descriptions cover selected native character gestures and seven opening/fair actions; they are not a complete description of every scene or NPC. Routes can fail or get stuck in live story states. Automatic walking does not fight, choose dialogue or press Confirm for you.
 
-The public download includes the recorded opening and supported story descriptions. It preserves a separately installed movie narration pack, whose descriptions play alongside the original soundtrack without ducking. A working opening movie pack suppresses the recorded fallback to avoid duplicate narration. Game movies, replacement movie files, the original voice recording and Fish credentials are excluded.
+The public download includes the recorded opening, supported story descriptions, and narration for movies 002–004: Ayla's rescue, the Magic Cave, and the approach to Magus. On verified original movie files, these three narration tracks play in the native movie session alongside the original soundtrack, without ducking. A verified separate movie narration pack takes precedence. A working opening movie pack suppresses the recorded opening fallback. Game movies, replacement movie files, the original voice recording and Fish credentials are excluded. The added movie tracks are audio only; they have no in-game braille transcript. See [movie narration details and scripts](docs/movie-narration-0356.md).
 
 Controller navigation was tested in game and reported working by the user. This does not verify every controller or Steam Input configuration. The keyboard layout used for testing is WASD or arrows to move, X to confirm, C to cancel and V for the game menu; those game bindings remain configurable. All mod hotkeys and controller buttons are listed below.
 
@@ -52,7 +52,7 @@ Foresight is unofficial and is not affiliated with or endorsed by Square Enix. I
 
 ## In-game menus
 
-Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the selected character or equipped slot, replacement item names and quantities, and the displayed stat preview with increases or decreases. Techs reads the selected character card and tech category, then the selected row and its rendered description, component names, and MP/requirements panel. Party reads the selected member's card and the displayed combinations. These readers follow native focus and do not select or change anything for you.
+Open the menu with V and use the game's normal direction keys, X to confirm, and C to cancel. Opening or returning to the main menu reads its selection, time and currency without repeating every character's stats. Inventory reads the selected item, quantity, and displayed help, including reordering state. Equipment reads the selected character or equipped slot, replacement item names and quantities, and the displayed stat preview with increases or decreases. Techs reads the selected character card and tech category, then the selected row and its rendered description, component names, and MP/requirements panel. Tech details omit repeated Level and HP rows; Single Techs also omit background current MP, while Dual and Triple Techs retain each rendered participant's MP and cost. Character and party-target selections still read their relevant stats. Party reads the selected member's card and the displayed combinations. These readers follow native focus and do not select or change anything for you.
 
 The classic party-change screen opened at the End of Time also uses the Party reader. Use the game's normal controls to choose and exchange members; the reader follows the visible roster, focus, locks and held member. See [party-change evidence and limits](docs/party-change-scene-0345.md).
 
@@ -60,7 +60,7 @@ Save/Load reads the selected file number, its displayed card text, and the visib
 
 The save list also reads its displayed instruction when the page opens or returns from a confirmation, including when saving is unavailable. Saving, completion, load-error, and other native notices are read when shown.
 
-Extras reads the Movies, Music, and Illustrations lists, their available controls and instructions, Music playback status, and ending-detail review controls. Returning from playback restores the list reader. Ending results read the displayed result and save question, then saving/completion notices. With the description pack installed, movies 001–003 use the same narrated audio when reached in the story or viewed in Extras. Other movies, illustrations, and ending-replay visuals remain undescribed.
+Extras reads the Movies, Music, and Illustrations lists, their available controls and instructions, Music playback status, and ending-detail review controls. Returning from playback restores the list reader. Ending results read the displayed result and save question, then saving/completion notices. Movies 002–004 use the included narration in both the story and Extras when the original movie is verified; installed separate tracks take precedence. Movie 001 keeps its opening fallback or installed pack. Movies 005–008, illustrations, and ending-replay visuals remain undescribed. If the native movie player fails, the mod reports it and directs you to the game's movie-skip control.
 
 The new submenu coverage applies to the classic keyboard interface and Steam Equipment/Save pages. Automated fixtures check selection changes, ownership, visible text, quantities, details, and confirmation transitions. Live keyboard and speech coverage is still unverified for these additions.
 
@@ -90,6 +90,8 @@ Acceleration is automatic. Use the game's **Up/Down** controls to steer and your
 Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. A tester reported completing the race on 0.3.44; broader timing and playability testing remains needed. **Interactable Objects → Jet bike** now tracks the native bike interaction in either Site 32 parking lot. Press Confirm yourself after arriving. See [race research and verification](docs/bike-race-research.md).
 
 ## Navigation
+
+Once their names have been introduced by the native story, verified Ozzie and Kino appearances use those names in People. The same sprites used for unrelated people retain their appearance labels. When creatures temporarily block an otherwise reachable route, both navigation modes wait and recheck, then continue when the way clears. Auto-walk stops moving while blocked; it does not fight or press Confirm. A blocker is named only when the native contact identifies the same visible navigation target.
 
 At the End of Time, **Exits → Pillar of light 1–9** distinguishes the lights currently drawn on the platform. Each light keeps its number as more appear. Complete the old man's introduction and Spekkio's lesson before using them; afterwards, press Confirm in the light to hear the game's destination prompt. Routes can approach the touch triggers that open the platform stairs and the room behind the old man, then continue after the game opens the floor. The door approach finishes by moving up, even if you started facing another direction. These changes still need live testing. See [End of Time navigation evidence](docs/end-of-time-navigation-0346.md).
 

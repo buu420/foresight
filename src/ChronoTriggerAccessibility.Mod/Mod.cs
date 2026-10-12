@@ -58,7 +58,8 @@ public sealed class Mod : ModBase
                 InstalledMovieDescriptions.HasOpeningNarrationAsync(
                     gameRoot, token, movieAudio.OpeningReady), token)), movieAudio,
             storyAssetsReady: () => storyAssets.IsCompletedSuccessfully && storyAssets.Result,
-            narrate: dispatcher.PublishNarration, stopNarration: dispatcher.CancelNarration);
+            narrate: dispatcher.PublishNarration, stopNarration: dispatcher.CancelNarration,
+            movies: movieAudio.Movies);
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
@@ -135,7 +136,8 @@ public sealed class Mod : ModBase
         IHookRegistration? movieAudio = null,
         Func<bool>? storyAssetsReady = null,
         Action<StoryNarration>? narrate = null,
-        Action? stopNarration = null)
+        Action? stopNarration = null,
+        IMovieLifecycle? movies = null)
     {
         ArgumentNullException.ThrowIfNull(hookFactory);
         ArgumentNullException.ThrowIfNull(asmHookFactory);
@@ -317,7 +319,7 @@ public sealed class Mod : ModBase
             storyAssetsReady,
             before => StorySceneActionCapture.TryMatch(memory, before, out var candidate) ? candidate : null,
             candidate => StorySceneActionCapture.TryComplete(memory, candidate),
-            before => StoryActionCapture.TryProvePlayerControlRestored(memory, before), narrate, stopNarration);
+            before => StoryActionCapture.TryProvePlayerControlRestored(memory, before), narrate, stopNarration, movies);
         var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)

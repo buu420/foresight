@@ -37,7 +37,8 @@ public sealed class StoryActionRuntime
         Func<StoryActionSnapshot, StorySceneActionCandidate?>? matchScene = null,
         Func<StorySceneActionCandidate, bool>? completeScene = null,
         Func<StoryActionSnapshot, bool>? controlRestored = null,
-        Action<StoryNarration>? narrate = null, Action? stopNarration = null)
+        Action<StoryNarration>? narrate = null, Action? stopNarration = null,
+        IMovieLifecycle? movies = null)
     {
         this.capture = capture ?? throw new ArgumentNullException(nameof(capture));
         this.prove = prove ?? throw new ArgumentNullException(nameof(prove));
@@ -45,7 +46,7 @@ public sealed class StoryActionRuntime
         this.characterName = characterName ?? throw new ArgumentNullException(nameof(characterName));
         this.say = say ?? throw new ArgumentNullException(nameof(say));
         this.diagnostic = diagnostic ?? throw new ArgumentNullException(nameof(diagnostic));
-        this.assetsReady = assetsReady ?? (() => true);
+        this.assetsReady = () => (assetsReady?.Invoke() ?? true) && movies?.ActiveMovie is null;
         if ((matchScene is null) != (completeScene is null))
             throw new ArgumentException("Scene matching and completion proof must be provided together.");
         this.matchScene = matchScene;
@@ -53,10 +54,28 @@ public sealed class StoryActionRuntime
         this.controlRestored = controlRestored;
         this.narrate = narrate;
         this.stopNarration = stopNarration;
+        if (movies is not null) movies.Changed += ObserveMovie;
     }
 
     public void Enable() { lock (gate) { Reset(); enabled = true; } }
     public void Disable() { lock (gate) { enabled = false; Reset(); } }
+
+    private void ObserveMovie(MovieLifecycleChange change)
+    {
+        var observedEpoch = -1;
+        try
+        {
+            lock (gate)
+            {
+                if (!enabled) return;
+                observedEpoch = epoch;
+                // A fullscreen native movie covers the field; discard held actions
+                // and stop their recording at its verified player boundary.
+                Reset();
+            }
+        }
+        catch (Exception exception) { Recover(exception, observedEpoch); }
+    }
 
     public void Observe(AccessibilityEvent value)
     {

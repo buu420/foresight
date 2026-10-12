@@ -122,6 +122,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? characterName?.Invoke(actor.VisualIndex) : null;
             var label = !string.IsNullOrWhiteSpace(currentName) ? currentName :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
+                StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 (IsCathedralOrgan(actor) ? "Organ" : null) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
@@ -165,7 +166,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 confirm: touchOnly || conveyorRobot ? null : ActorConfirm(Anchors(actor)),
                 followUntilInteraction: field.SceneIdCoherent && field.SceneId == 221 &&
                     actor.Index is 12 or 13 && actor.ClassTag == 5 && actor.VisualIndex == 134 &&
-                    story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false);
+                    story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false,
+                actorSlot: actor.Index);
             if (label is null) genericIds.Add(id);
             foreach (var (standIn, same) in InteractionProxies(actor))
                 if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
@@ -326,7 +328,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 arrivalInstruction: touch ? null : "Press Confirm to interact.",
                 contactPosition: touch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
-                confirm: touch ? null : ActorConfirm([actor]));
+                confirm: touch ? null : ActorConfirm([actor]), actorSlot: actor.Index);
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r =>
@@ -503,6 +505,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
                     ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null,
                 ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
+                RouteEvidence = RouteFailureEvidence.For(field, map, story, targets.AsReadOnly(), treasures),
             };
 
         void ReportInventory()
@@ -767,14 +770,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
             NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
-            string? guidanceRestriction = null)
+            string? guidanceRestriction = null, int? actorSlot = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
                 visible || discovered.ContainsKey(id))
                 {
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
-                    GuidanceRestriction = guidanceRestriction,
+                    GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
                 });
@@ -785,7 +788,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
-                    GuidanceRestriction = guidanceRestriction,
+                    GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
                 };
@@ -797,7 +800,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
-                GuidanceRestriction = guidanceRestriction,
+                GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,
             });

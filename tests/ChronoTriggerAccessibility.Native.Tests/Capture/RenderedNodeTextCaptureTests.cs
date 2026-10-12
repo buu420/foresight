@@ -9,7 +9,7 @@ public sealed class RenderedNodeTextCaptureTests
     private const uint Root = 0x1000000, Label = 0x1001000, Hidden = 0x1002000, Children = 0x2000000;
     internal static NavigationMemory Node(NavigationMemory m, uint p, uint parent = 0) =>
         m.Word(p + 0x16C, parent).Byte(p + 0x1AD, 1)
-            .Word(p + 0x160, 0).Word(p + 0x164, 0);
+            .Word(p + 0x160, 0).Word(p + 0x164, 0).String(p + 0x178, "");
     internal static NavigationMemory Text(NavigationMemory m, uint p, string text, uint parent = 0) =>
         Node(m, p, parent).Word(p + 0x278, 0x3000000).Word(0x3000008, 0x3001000)
             .Add(0x3001000, [0x8D, 0x41, 0x28, 0xC3]).String(p + 0x2A0, text);
@@ -26,6 +26,22 @@ public sealed class RenderedNodeTextCaptureTests
         var m = Fixture();
         Text(m, 0x1003000, "Elsewhere");
         Assert.Equal(["Potion"], new RenderedNodeTextCapture(m).Read(Root));
+    }
+    [Fact] public void ExcludesOnlyNamedSubtreesAndRejectsTheirIdentityChangingDuringCapture()
+    {
+        var m = Fixture().String(Label + 0x178, "hp");
+        var excluded = new HashSet<string>(["hp"], StringComparer.Ordinal);
+        Assert.Empty(new RenderedNodeTextCapture(m).Read(Root, excluded)!);
+        // The same visible text is kept when it belongs to an ordinary node.
+        m.String(Label + 0x178, "cost");
+        Assert.Equal(["Potion"], new RenderedNodeTextCapture(m).Read(Root, excluded));
+        m.String(Label + 0x178, "hp");
+        var reads = 0;
+        m.BeforeRead = address =>
+        {
+            if (address == Label + 0x178 && ++reads == 2) m.String(Label + 0x178, "cost");
+        };
+        Assert.Null(new RenderedNodeTextCapture(m).Read(Root, excluded));
     }
     [Fact] public void RejectsAReparentedChildRatherThanReadingAnUnrelatedScreen()
     {

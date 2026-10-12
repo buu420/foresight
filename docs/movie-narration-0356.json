@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "narrator": "Approved Foresight voice",
+  "movies": [
+    {
+      "fileName": "002.dat",
+      "duration": 39.105708,
+      "cues": [
+        {
+          "id": "ct-002-001",
+          "start": 0.5,
+          "end": 2.8,
+          "text": "A volcano erupts."
+        },
+        {
+          "id": "ct-002-002",
+          "start": 3,
+          "end": 9.7,
+          "text": "Green reptiles surround Crono among the rocks."
+        },
+        {
+          "id": "ct-002-003",
+          "start": 10,
+          "end": 16.7,
+          "text": "Ayla leaps from a rock, kicking one reptile as she lands."
+        },
+        {
+          "id": "ct-002-004",
+          "start": 17,
+          "end": 20,
+          "text": "She clubs another away."
+        },
+        {
+          "id": "ct-002-005",
+          "start": 20.2,
+          "end": 24.8,
+          "text": "Ayla ducks a lunge and punches the attacker away."
+        },
+        {
+          "id": "ct-002-006",
+          "start": 25,
+          "end": 31.8,
+          "text": "She grins, then sweeps a group of reptiles off their feet with her club."
+        },
+        {
+          "id": "ct-002-007",
+          "start": 32,
+          "end": 34.5,
+          "text": "Crono stares, wide-eyed."
+        },
+        {
+          "id": "ct-002-008",
+          "start": 35,
+          "end": 39.1,
+          "text": "Descriptions by ViddyScribe."
+        }
+      ]
+    },
+    {
+      "fileName": "003.dat",
+      "duration": 65.498708,
+      "cues": [
+        {
+          "id": "ct-003-001",
+          "start": 0,
+          "end": 3.8,
+          "text": "Cliffs rise under dark clouds."
+        },
+        {
+          "id": "ct-003-002",
+          "start": 4,
+          "end": 15.7,
+          "text": "Beside Crono, Frog draws a broad sword, closes his eyes, and raises the blade."
+        },
+        {
+          "id": "ct-003-003",
+          "start": 16,
+          "end": 22.7,
+          "text": "Blue light streams from its tip. Wind whips around Frog."
+        },
+        {
+          "id": "ct-003-004",
+          "start": 23,
+          "end": 26.7,
+          "text": "Golden sparks flicker along the blade."
+        },
+        {
+          "id": "ct-003-005",
+          "start": 27,
+          "end": 33.7,
+          "text": "A beam shoots skyward, opening a swirling gap in the clouds."
+        },
+        {
+          "id": "ct-003-006",
+          "start": 34,
+          "end": 40.7,
+          "text": "Frog brings his shining sword down toward the mountain."
+        },
+        {
+          "id": "ct-003-007",
+          "start": 41,
+          "end": 48.7,
+          "text": "Frog swings toward the mountain as Crono watches."
+        },
+        {
+          "id": "ct-003-008",
+          "start": 49,
+          "end": 57.7,
+          "text": "Rocks fall as a deep cleft opens through the mountain."
+        },
+        {
+          "id": "ct-003-009",
+          "start": 58,
+          "end": 61.7,
+          "text": "Frog puts his sword away."
+        },
+        {
+          "id": "ct-003-010",
+          "start": 62,
+          "end": 65.49,
+          "text": "Crono smiles."
+        }
+      ]
+    },
+    {
+      "fileName": "004.dat",
+      "duration": 52.018604,
+      "cues": [
+        {
+          "id": "ct-004-001",
+          "start": 0.8,
+          "end": 4.0,
+          "text": "A dim blue hall emerges from darkness."
+        },
+        {
+          "id": "ct-004-002",
+          "start": 4.2,
+          "end": 12.0,
+          "text": "Frog holds his broad sword upright and looks ahead."
+        },
+        {
+          "id": "ct-004-003",
+          "start": 14.2,
+          "end": 19.8,
+          "text": "He walks between rows of blue flames."
+        },
+        {
+          "id": "ct-004-004",
+          "start": 20.3,
+          "end": 24.0,
+          "text": "Frog's face fills the view."
+        },
+        {
+          "id": "ct-004-005",
+          "start": 24.5,
+          "end": 31.0,
+          "text": "He continues through the hall, sword raised among the glowing flames."
+        },
+        {
+          "id": "ct-004-006",
+          "start": 34.0,
+          "end": 39.0,
+          "text": "A cloaked figure stands before an ornate altar on a glowing pink circle."
+        },
+        {
+          "id": "ct-004-007",
+          "start": 39.2,
+          "end": 42.5,
+          "text": "Long blue hair hangs down his cape."
+        },
+        {
+          "id": "ct-004-008",
+          "start": 43.0,
+          "end": 46.4,
+          "text": "Frog narrows his eyes behind his sword."
+        },
+        {
+          "id": "ct-004-009",
+          "start": 48.0,
+          "end": 51.8,
+          "text": "The scene goes black."
+        }
+      ]
+    }
+  ]
+}

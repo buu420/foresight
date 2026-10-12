@@ -10,6 +10,30 @@ namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 public sealed class StoryActionRuntimeTests
 {
     [Fact]
+    public void NativeMoviesCancelHeldGesturesAndHideUnderlyingActionsUntilTheirOwnClose()
+    {
+        var movies = new MovieNarrationLifetime(); var narrated = new List<StoryNarration>();
+        var stops = 0; var originals = 0; var frame = Frame() with { TextboxState = 1 };
+        var runtime = new StoryActionRuntime((_, _) => frame,
+            _ => new(StoryAnimationKind.Looping, 0x16), () => true, _ => "Crono", _ => { }, _ => { },
+            narrate: narrated.Add, stopNarration: () => stops++, movies: movies);
+        runtime.Enable();
+        runtime.Dispatch(0x1000, 0xAA, () => originals++); Assert.Empty(narrated);
+        var before = stops;
+        movies.Begin(0x4000, "003.dat", true);
+        Assert.True(stops > before);
+        runtime.Observe(new DialogueLinePresented(0, 1, "Movie dialogue."));
+        frame = frame with { TextboxState = 0 };
+        runtime.Dispatch(0x1000, 0xAA, () => originals++); Assert.Empty(narrated);
+        // Closing another player does not expose the field beneath this movie.
+        movies.CloseSession(0x9000, _ => 0x5000, _ => 0);
+        runtime.Dispatch(0x1000, 0xAA, () => originals++); Assert.Empty(narrated);
+        movies.CloseSession(0x9000, _ => 0x4000, _ => 0);
+        runtime.Dispatch(0x1000, 0xAA, () => originals++);
+        Assert.Single(narrated); Assert.Equal(4, originals);
+    }
+
+    [Fact]
     public void AVisibleNativeNodIsQueuedAfterTheOriginalAndUsesTheCurrentName()
     {
         var test = new Session(); test.Runtime.Enable();

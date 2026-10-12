@@ -19,6 +19,11 @@ public interface INavigationGraph
     /// <summary>Bind movement rules to the selected destination, when reaching
     /// it requires a native contact that would block ordinary travel.</summary>
     INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) => this;
+    /// <summary>The same terrain and actors without enemy creatures, whose native contact
+    /// blocks only while one stands in the way. Null when the graph has no such actors.</summary>
+    INavigationGraph? WithoutCreatures => null;
+    /// <summary>The actor slot whose native contact closes this edge, when one does.</summary>
+    int? BlockingActor(NavigationPoint from, NavigationPoint to) => null;
     IEnumerable<NavigationPoint> Neighbours(NavigationPoint point);
     /// <summary>The input that produces a verified edge. Native corner slides
     /// can move sideways during a cardinal command; displacement is not input.</summary>
@@ -53,6 +58,8 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     public bool GuideAvailable { get; init; }
     /// <summary>A current story reminder with no spatial claim. Its Position is unused.</summary>
     public bool IsStoryNote { get; init; }
+    /// <summary>The native actor slot this row stands for, when it is one actor.</summary>
+    public int? ActorSlot { get; init; }
     public string? Instruction { get; init; }
     /// <summary>A visible moving hazard remains readable by position, but is
     /// not a destination for the mod's guidance or automatic walking.</summary>
@@ -111,6 +118,9 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public NavigationFloor? MovingFloor { get; init; }
     /// <summary>Fresh native script identity, not merely loss of player control.</summary>
     public IReadOnlySet<string> ActiveTransitions { get; init; } = new HashSet<string>();
+    /// <summary>Diagnostic only: encodes the captured state this frame was built from for a
+    /// failed route (failure kind, target id). Never consulted for movement.</summary>
+    public Func<string, string?, string?>? RouteEvidence { get; init; }
 }
 
 public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision)

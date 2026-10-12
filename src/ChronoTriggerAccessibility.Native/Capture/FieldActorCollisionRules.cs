@@ -9,7 +9,21 @@ public sealed class FieldActorCollisionRules(FieldNavigationSnapshot field)
             !a.IsPartyMember && (a.ClassTag & 0x80) == 0)
         .OrderByDescending(a => a.Index).ToArray();
 
-    public bool BlocksProbe(int x, int y, IReadOnlySet<int>? contactDestinations = null)
+    /// <summary>The same contacts without enemy creatures (classes 5 and 6). Their contact
+    /// blocks only while one stands in the way, and touching one starts a battle, so a
+    /// route closed only by them is waited on rather than reported unreachable. Null
+    /// when no creature takes part in contact.</summary>
+    public FieldActorCollisionRules? WithoutCreatures() => candidates.Any(IsCreature)
+        ? new(field with { Actors = field.Actors.Where(a => !IsCreature(a)).ToArray() }) : null;
+
+    private static bool IsCreature(FieldActorSnapshot actor) => (actor.ClassTag & 0x7F) is 5 or 6;
+
+    public bool BlocksProbe(int x, int y, IReadOnlySet<int>? contactDestinations = null) =>
+        ContactProbe(x, y, contactDestinations) is not null;
+
+    /// <summary>The slot whose contact blocks this probe, or null when none does. The same
+    /// candidates and first-match precedence as <see cref="BlocksProbe"/>.</summary>
+    public int? ContactProbe(int x, int y, IReadOnlySet<int>? contactDestinations = null)
     {
         foreach (var actor in candidates)
         {
@@ -23,17 +37,21 @@ public sealed class FieldActorCollisionRules(FieldNavigationSnapshot field)
             // Native touch is dispatched even when this contact blocks movement.
             // Navigation may intentionally bump only its selected touch target;
             // preserve first-contact precedence rather than skipping that slot.
-            return (actor.LoadedFlag & 1) != 0 && contactDestinations?.Contains(actor.Index) != true;
+            return (actor.LoadedFlag & 1) != 0 && contactDestinations?.Contains(actor.Index) != true ? actor.Index : null;
         }
-        return false;
+        return null;
     }
 
-    public bool BlocksMove(int fromX, int fromY, int x, int y, IReadOnlySet<int>? contactDestinations = null)
+    public bool BlocksMove(int fromX, int fromY, int x, int y, IReadOnlySet<int>? contactDestinations = null) =>
+        ContactActor(fromX, fromY, x, y, contactDestinations) is not null;
+
+    /// <summary>The slot whose contact refuses this movement frame, by <see cref="BlocksMove"/>'s probe.</summary>
+    public int? ContactActor(int fromX, int fromY, int x, int y, IReadOnlySet<int>? contactDestinations = null)
     {
-        if (x != fromX) return BlocksProbe(x + Math.Sign(x - fromX) * 112, y - 64, contactDestinations);
+        if (x != fromX) return ContactProbe(x + Math.Sign(x - fromX) * 112, y - 64, contactDestinations);
         var head = field.SceneId == 0x163 && fromX > 0xC8F && fromX < 0xD80 &&
             fromY > 0x14DF && fromY < 0x1590 ? 96 : 112;
-        return BlocksProbe(x, y < fromY ? y - head : y, contactDestinations);
+        return ContactProbe(x, y < fromY ? y - head : y, contactDestinations);
     }
 
     public static int Radius(int scene, int fairFlags = 0) => scene switch

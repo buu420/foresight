@@ -51,7 +51,7 @@ public sealed class TopMenuHookSetTests
         Assert.Equal("Menu", presented.Title);
         Assert.Equal("Settings", presented.Focus!.Label);
         Assert.Equal(5, presented.Focus.Position);
-        Assert.Equal(["Party status", "12:34", "12345 G"], presented.StatusDetails);
+        Assert.Equal(["12:34", "12345 G", "Party status"], presented.StatusDetails);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.ClassicTopMenuBuilder]);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.MenuTextLabelFactory]);
         Assert.Equal(1, harness.Factory.OriginalCalls[HookId.StatusBarFormatScope]);
@@ -157,7 +157,7 @@ public sealed class TopMenuHookSetTests
         Assert.Empty(harness.Dispatcher.Failures);
         Assert.Empty(harness.Dispatcher.Diagnostics);
         var presented = Assert.IsType<MenuPresented>(Assert.Single(harness.Dispatcher.Events));
-        Assert.Equal(["Party status", "12:34", "12345 G"], presented.StatusDetails);
+        Assert.Equal(["12:34", "12345 G", "Party status"], presented.StatusDetails);
         Assert.Single(harness.Capture.Session!.Utf8Returns);
         Assert.Equal(2, harness.Capture.Session.Status!.RenderedReturns.Count);
         Assert.True(harness.Capture.Session.Status.Completed);
@@ -723,7 +723,8 @@ public sealed class TopMenuHookSetTests
             [new TopMenuMemberSnapshot("Crono", TopMenuMemberKind.Active,
                 [new TopMenuStatRowSnapshot("LV", ["12"], null)])],
             ["Party status"],
-            ["Party status", "12:34", "12345 G"]));
+            ["Crono", "LV", "12", ":", "HP", "175/", "221", ":", "MP", "20/", "30", ":",
+                "Party status", "12:34", "12345 G"]));
         var set = new TopMenuHookSet(factory, factory, memory, dispatcher, capture);
         var boundary = new UnmanagedBoundaryGuard(new RecordingLog(), new RecordingFatal());
         var installer = new ReloadedHookInstaller(set.Registrations, [set]);

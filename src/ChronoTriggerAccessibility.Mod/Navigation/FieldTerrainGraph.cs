@@ -25,6 +25,9 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
             scene.Actors.Any(m => m.Matches(a) && m.Actions.Any(c => c.Touch && c.Kind == "Terrain" &&
                 c.Copy is { } copy && ActionAvailable(scene.Id, a.Index, c, story) && HasChanges(map, copy))))
             ? new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals) : Wrap(map, terminals, collisions, touchGoals);
+    public INavigationGraph? WithoutCreatures => collisions?.WithoutCreatures() is { } open
+        ? new FieldTerrainGraph(map, actors, story, scene, terminals, open, touchGoals, selectedGoals) : null;
+    public int? BlockingActor(NavigationPoint from, NavigationPoint to) => live.BlockingActor(from, to);
     public IEnumerable<NavigationPoint> Neighbours(NavigationPoint point) => live.Neighbours(point);
     public NavigationDirection InputDirection(NavigationPoint from, NavigationPoint to) => live.InputDirection(from, to);
     public bool IsTerminal(NavigationPoint point) => live.IsTerminal(point);

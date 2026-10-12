@@ -9,6 +9,12 @@ public sealed partial class FieldTechDetailsCapture(IReadableMemory memory)
 {
     private readonly RenderedNodeTextCapture rendered = new(memory);
     private readonly LoadedGameTextCapture messages = new(memory);
+    // 1CE350 builds the MP-cost cards through 23CB60/23A140. The latter
+    // assigns these native names to its background character-stat subtrees.
+    private static readonly IReadOnlySet<string> BackgroundStatRows =
+        new HashSet<string>(["lv", "hp", "mp"], StringComparer.Ordinal);
+    private static readonly IReadOnlySet<string> ComboBackgroundStatRows =
+        new HashSet<string>(["lv", "hp"], StringComparer.Ordinal);
     private sealed record State(uint Manager, uint Category, uint Row, uint Begin, uint End,
         uint Control, uint Description, uint Components, uint Costs, string Record);
 
@@ -25,7 +31,10 @@ public sealed partial class FieldTechDetailsCapture(IReadableMemory memory)
         var selected = rendered.Read(state.Control);
         var description = rendered.Read(state.Description);
         var components = rendered.Read(state.Components);
-        var costs = state.Costs == 0 ? [] : rendered.Read(state.Costs);
+        // Combo cards expose each participant's current MP beside their cost.
+        // Keep that relevant information while omitting unrelated health/level.
+        var costs = state.Costs == 0 ? [] : rendered.Read(state.Costs,
+            state.Category == 0 ? BackgroundStatRows : ComboBackgroundStatRows);
         var title = messages.Get(image, 0x23, 0x22);
         if (title is null || selected is null || selected.Count == 0 || selected.Count > 12 ||
             description is null || components is null || costs is null || ReadState(image, node) != state) return null;

@@ -67,7 +67,6 @@ public sealed class EnemyStoryBindingTests
 
     [Theory]
     [InlineData(169, 11, 157, 136, 0x72, "story:full:keep-slash")]
-    [InlineData(174, 10, 167, 136, 0x7E, "story:full:keep-ozzie")]
     [InlineData(397, 9, 166, 180, 0, "story:full:woe-summit")]
     public void MovingCreatureToEnemiesPreservesItsStoryDestination(
         int scene, int index, int visual, int point, int keepFlags, string storyId)
@@ -85,5 +84,20 @@ public sealed class EnemyStoryBindingTests
         Assert.NotEmpty(story.ApproachPoints);
         Assert.NotNull(NavigationPathfinder.Find(frame.Graph, frame.Player, story.ApproachPoints));
     }
+    [Fact]
+    public void NamedOzzieKeepsHisPersonRowBesideTheEncounterAndTheStoryDestination()
+    {
+        // Named challengers keep both rows; his scripts speak as "Ozzie" (StoryCharacterLabels).
+        var actor = FullGameNavigationTests.Actor(10, 5 * 256 + 128, 5 * 256 + 255) with { ClassTag = 5, VisualIndex = 167 };
+        var state = new FieldStoryState(136, false) { Globals = new Dictionary<int, int> { [0xA3] = 0x7E } };
+        var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(
+            FullGameNavigationTests.Field(174, actor), FullGameNavigationTests.Map(), new(0, 0, 256, 256), [], state);
+        Assert.Contains(frame.Targets, t => t.Id == "actor-encounter:10");
+        Assert.Equal("Ozzie", Assert.Single(frame.Targets, t => t.Category == NavigationCategory.People && t.Id.StartsWith("actor:10:")).Label);
+        var story = Assert.Single(frame.Targets, t => t.Id == "story:full:keep-ozzie");
+        Assert.False(story.IsStoryNote);
+        Assert.NotNull(NavigationPathfinder.Find(frame.Graph, frame.Player, story.ApproachPoints));
+    }
+
     private sealed class NoMemory : IReadableMemory { public bool TryRead(nuint address, Span<byte> destination) => false; }
 }
