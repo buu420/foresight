@@ -74,6 +74,19 @@ public sealed class BattleCaptureTests
         Assert.Equal([0], snapshot!.Party.Select(member => member.Slot));
     }
 
+    [Theory]
+    [InlineData("Chrono")]
+    [InlineData("Frosch")]
+    public void LocalizedSixCharacterNameDoesNotMakeTheVisibleBattleHudUnavailable(string name)
+    {
+        var world = World();
+        world.Name(Canvas + 0x1908, name);
+        var snapshot = new BattleCapture(world).Capture(ImageBase, ClassicMenu);
+        Assert.NotNull(snapshot);
+        Assert.Equal(name, snapshot.Party[0].Name);
+        Assert.Equal($"{name}: Item", snapshot.FocusText);
+    }
+
     [Fact]
     public void APresentSlotThatCannotBeReadIsRefusedInsteadOfSilentlyDropped()
     {

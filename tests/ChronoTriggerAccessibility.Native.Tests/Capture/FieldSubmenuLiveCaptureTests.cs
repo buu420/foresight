@@ -155,6 +155,18 @@ public sealed class FieldSubmenuLiveCaptureTests
         Assert.Null(new FieldSubmenuCapture(memory).Capture(image, node));
     }
 
+    [Theory]
+    [InlineData("Chrono")]
+    [InlineData("Frosch")]
+    public void VisibleReserveCardKeepsTheLocalizedSixCharacterNativeName(string name)
+    {
+        var (memory, image, node) = PartyWithSyntheticReserve();
+        memory.String(0x50006000 + 0x1908 + 24, name);
+        var snapshot = new FieldSubmenuCapture(memory).Capture(image, node);
+        Assert.NotNull(snapshot);
+        Assert.StartsWith($"Reserve, 1 of 1. {name}. LV 14.", snapshot.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void PartyReadsRenderedCombosAndDistinguishesIconOnlyGroupsFromUnreadableLabels()
     {

@@ -345,10 +345,9 @@ public sealed class NewGameNarrator
     {
         if (string.IsNullOrWhiteSpace(presented.Instructions) ||
             string.IsNullOrWhiteSpace(presented.Restriction) ||
-            presented.CurrentName is null ||
-            presented.CurrentName.Length > 5)
+            presented.CurrentName is null)
         {
-            return Fail("Name Entry instructions/restriction is blank or the current name exceeds five UTF-16 code units.");
+            return Fail("Name Entry instructions/restriction is blank or the native current name is unavailable.");
         }
 
         modeSelectActive = false;
@@ -361,7 +360,7 @@ public sealed class NewGameNarrator
         lastConfirmationText = null;
         var current = presented.CurrentName.Length == 0 ? "empty" : presented.CurrentName;
         return [Interrupt(
-            $"{WithoutTerminalPeriod(presented.Instructions)}. Current name: {current}. Maximum five characters. {WithoutTerminalPeriod(presented.Restriction)}.")];
+            $"{WithoutTerminalPeriod(presented.Instructions)}. Current name: {current}. {WithoutTerminalPeriod(presented.Restriction)}.")];
     }
 
     private IReadOnlyList<Announcement> FocusNameGrid(NameGridFocused focus)
@@ -396,9 +395,9 @@ public sealed class NewGameNarrator
 
     private IReadOnlyList<Announcement> ChangeName(NewGameNameChanged changed)
     {
-        if (!nameEntryActive || changed.Name is null || changed.Name.Length > 5)
+        if (!nameEntryActive || changed.Name is null)
         {
-            return Fail("Name Entry resulting name is unavailable or exceeds five UTF-16 code units.");
+            return Fail("Name Entry resulting native name is unavailable.");
         }
         if (string.Equals(lastNameText, changed.Name, StringComparison.Ordinal))
         {
@@ -436,8 +435,7 @@ public sealed class NewGameNarrator
 
     private IReadOnlyList<Announcement> FocusKeyboardNameEntry(KeyboardNameEntryFocused focused)
     {
-        if (!nameEntryActive || focused.CurrentName is null ||
-            focused.CurrentName.Length > 5)
+        if (!nameEntryActive || focused.CurrentName is null)
         {
             return Fail("Keyboard name entry opened without a validated current name.");
         }
@@ -449,8 +447,7 @@ public sealed class NewGameNarrator
 
     private IReadOnlyList<Announcement> CloseKeyboardNameEntry(KeyboardNameEntryClosed closed)
     {
-        if (!nameEntryActive || !keyboardEntryActive || closed.CurrentName is null ||
-            closed.CurrentName.Length > 5)
+        if (!nameEntryActive || !keyboardEntryActive || closed.CurrentName is null)
         {
             return Fail("Keyboard name entry closed without a validated active keyboard entry or current name.");
         }

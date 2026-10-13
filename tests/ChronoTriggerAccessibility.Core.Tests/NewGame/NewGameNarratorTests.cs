@@ -135,7 +135,7 @@ public sealed class NewGameNarratorTests
         var entered = Assert.Single(narrator.Apply(new NameEntryPresented(
             "Enter a name", "Crono", "Latin letters and symbols")));
         Assert.Equal(
-            "Enter a name. Current name: Crono. Maximum five characters. Latin letters and symbols.",
+            "Enter a name. Current name: Crono. Latin letters and symbols.",
             entered.Text);
 
         Assert.Equal(
@@ -202,6 +202,33 @@ public sealed class NewGameNarratorTests
             Assert.Single(narrator.Apply(new KeyboardNameEntryClosed("Lucca"))).Text);
     }
 
+    [Theory]
+    [InlineData("Chrono", "Frosch")]
+    [InlineData("ABCDEFGH", "LongDefaultName")]
+    [InlineData("😀😀😀😀😀😀😀😀", "😀😀😀😀😀😀😀")]
+    [InlineData("クロノ", "シルバード")]
+    [InlineData("크로노", "실버드")]
+    [InlineData("克罗诺", "席尔巴德")]
+    [InlineData("克羅諾", "席爾巴德")]
+    public void NativeLocalizedNamesAreSpokenThroughoutNamingWithoutAGlobalFiveCharacterRule(
+        string defaultName, string changedName)
+    {
+        var narrator = new NewGameNarrator();
+        var presented = Assert.Single(narrator.Apply(new NameEntryPresented(
+            "Enter a name", defaultName, "Use the character grid or keyboard name entry")));
+        Assert.Contains($"Current name: {defaultName}.", presented.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Maximum five characters", presented.Text, StringComparison.Ordinal);
+        Assert.Equal($"Keyboard name entry. Current name: {defaultName}.",
+            Assert.Single(narrator.Apply(new KeyboardNameEntryFocused(defaultName))).Text);
+        Assert.Equal($"Name: {changedName}.",
+            Assert.Single(narrator.Apply(new NewGameNameChanged(changedName))).Text);
+        Assert.Equal($"Keyboard name entry closed. Current name: {changedName}.",
+            Assert.Single(narrator.Apply(new KeyboardNameEntryClosed(changedName))).Text);
+        Assert.Equal($"Use {changedName}?", narrator.Apply(new NameConfirmationPresented(
+            $"Use {changedName}?", ["Yes", "No"], 1))[0].Text);
+        Assert.Equal("Accept, 2 of 4", Assert.Single(narrator.Apply(new NameActionFocused("Accept", 1, 4))).Text);
+    }
+
     [Fact]
     public void InactiveGridKeyboardRoundTripReannouncesRestoredKeyTwoFocus()
     {
@@ -256,8 +283,8 @@ public sealed class NewGameNarratorTests
 
         var invalidName = new NewGameNarrator();
         var nameFailure = Assert.Single(invalidName.Apply(new NameEntryPresented(
-            "Enter a name", "😀ABCD", "Latin letters and symbols")));
-        Assert.Contains("UTF-16", nameFailure.Text, StringComparison.OrdinalIgnoreCase);
+            "Enter a name", null!, "Latin letters and symbols")));
+        Assert.Contains("unavailable", nameFailure.Text, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(invalidName.Apply(new NameGridFocused("A", "Latin", 0, 0)));
     }
 

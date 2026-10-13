@@ -167,7 +167,7 @@ public sealed class SemanticEventDispatcherTests
         Assert.Equal(
             new[] { true, false, true, false, true, false },
             session.Outputs.Select(output => output.Interrupt));
-        Assert.Contains("Maximum five characters", session.Outputs[0].Text);
+        Assert.Equal("Enter a name. Current name: Crono. Use shown characters.", session.Outputs[0].Text);
         Assert.Equal("A. Latin page, row 1, column 1.", session.Outputs[1].Text);
         Assert.Equal("Name: Crona.", session.Outputs[2].Text);
         Assert.Equal("Done. Latin page, row 8, column 11.", session.Outputs[3].Text);

@@ -1704,6 +1704,42 @@ public sealed class NewGameHookSetTests
     }
 
     [Theory]
+    [InlineData("Chrono")]
+    [InlineData("Frosch")]
+    public void NativeSixCharacterDefaultIsNarratedAndConfirmationForwardsItsExactNativeWords(string name)
+    {
+        var memory = CreateNameMemory(name, active: 0, page: -1);
+        AddConfirmationMemory(memory);
+        memory.AddInlineString(ConfirmationTextAddress(3), $"Use {name}?");
+        var dispatcher = new RecordingDispatcher();
+        var factory = new RecordingHookFactory();
+        ConfigureNameInit(factory, includeGridAction: false);
+        var set = new NewGameHookSet(factory, new RecordingWrapperFactory(), memory, dispatcher);
+        var forwarded = new List<uint[]>();
+        ConfigureConfirmationBuilder(factory, set, forwarded, extraBinding: false);
+        var installer = new ReloadedHookInstaller(set.Registrations, [set]);
+        installer.PrepareAll(CreateBuild(), CreateBoundary());
+        installer.ActivateAll();
+
+        Assert.Equal(1, factory.GetDetour<NameInputSceneInitDelegate>(HookId.NameInputSceneInit)((nint)NameScene));
+        Assert.Empty(dispatcher.Failures);
+        var narrator = new NewGameNarrator();
+        var speech = Flatten(dispatcher.Events).Cast<NewGameAccessibilityEvent>()
+            .SelectMany(narrator.Apply).Select(item => item.Text).ToArray();
+        Assert.Contains(speech, text => text.Contains($"Current name: {name}.", StringComparison.Ordinal));
+        Assert.DoesNotContain(speech, text => text.Contains("Maximum five characters", StringComparison.Ordinal));
+        dispatcher.Events.Clear();
+        var words = EncodeInlineName(name);
+        factory.GetDetour<NameConfirmationBuilderDelegate>(HookId.NameConfirmationBuilder)(
+            (nint)NameScene, words[0], words[1], words[2], words[3], words[4], words[5]);
+        Assert.Empty(dispatcher.Failures);
+        Assert.Equal(words, Assert.Single(forwarded));
+        var confirmation = Assert.IsType<NameConfirmationPresented>(Assert.Single(dispatcher.Events));
+        Assert.Equal($"Use {name}?", confirmation.Prompt);
+        Assert.Equal(["Yes", "No"], confirmation.Choices);
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]

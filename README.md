@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.58 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.59 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.58 distinguishes Tyranno Lair's doorways and guides through the native passages and skull-room controls between its separate terraces. The guide checks gate state before choosing the next leg. Unseen blocked Tyranno gates are omitted; visible or remembered gates explain their restriction. The previous prison, movie narration, character-name and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.58.md).
+Version 0.3.59 fixes New Game name entry rejecting the game's own localized names, including French/German “Chrono” and German “Frosch.” Entry, keyboard edits and confirmation read the actual native name while the game retains its input rules. The Tyranno Lair routes and doorway labels, movie narration, character-name and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.59.md).
 
 ## Install the beta download
 
@@ -19,6 +19,8 @@ You need Windows 10 or 11, your own Steam copy of Chrono Trigger, and a screen r
 5. Start your screen reader, then launch the game normally from Steam.
 
 Use the classic game interface. Touch-interface Inventory, Equipment, Tech, Party and shop menus are not implemented. Testing has primarily used English game text. The supported Steam app ID is **613830**.
+
+Name entry reads native Unicode names and localized button/confirmation text. The default-name audit covers English, French, German, Spanish, Italian, Japanese, Korean, and both Chinese variants. This is not full localization of the mod: its own announcements and recorded descriptions remain mainly English, and live naming tests in these languages are still needed.
 
 For updates, close the game, copy the new ZIP's contents over the mod files and run Install Foresight again. Internal names still contain `ChronoTriggerAccessibility` and `chrono.trigger.accessibility` for compatibility. Saves and any separately installed narration pack are preserved.
 

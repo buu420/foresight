@@ -86,7 +86,6 @@ public static class NameInputCapture
     public const uint TextFieldCurrentNameOffset = 0x584;
     public const uint GridPointerTableRva = 0x39B708;
     public const uint LanguageGlobalRva = 0x3FA168;
-    public const int MaximumNameUtf16CodeUnits = 5;
 
     private const int PageCount = 3;
     private const int RowsPerPage = 8;
@@ -475,9 +474,9 @@ public static class NameInputCapture
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(name) || name.Length > MaximumNameUtf16CodeUnits)
+        if (string.IsNullOrWhiteSpace(name))
         {
-            error = "Confirmation requires a non-empty name of at most five UTF-16 code units.";
+            error = "Confirmation requires a non-empty native name.";
             return false;
         }
 
@@ -715,11 +714,13 @@ public static class NameInputCapture
             error = $"{diagnosticPrefix} contains an embedded NUL before its declared length.";
             return false;
         }
-        if (value.Length > MaximumNameUtf16CodeUnits)
-        {
-            error = $"{diagnosticPrefix} exceeds the audited maximum of five UTF-16 code units.";
-            return false;
-        }
+        // This is an observation of native text, not an input validator. The
+        // five-unit check at game RVA 0x2C1BE0 applies only to grid appends.
+        // NameEdit::setText (0x2BF7E0) bypasses it for localized defaults such
+        // as Chrono/Frosch. Keyboard update (0x2BF170) also exempts native
+        // defaults and can briefly expose longer text before truncating it.
+        // Keep the bounded allocation/strict UTF-8 checks in both readers,
+        // but never reject displayed text because of a different edit path.
         foreach (var rune in value.EnumerateRunes())
         {
             if (Rune.GetUnicodeCategory(rune) is

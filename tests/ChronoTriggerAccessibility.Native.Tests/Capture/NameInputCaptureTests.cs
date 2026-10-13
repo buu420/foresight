@@ -35,6 +35,36 @@ public sealed class NameInputCaptureTests
         ],
     ];
 
+    [Theory]
+    [InlineData("Chrono")]
+    [InlineData("Frosch")]
+    [InlineData("ABCDEFGH")]
+    [InlineData("LongDefaultName")]
+    [InlineData("😀😀😀😀😀😀😀😀")]
+    [InlineData("クロノ")]
+    [InlineData("크로노")]
+    [InlineData("克罗诺")]
+    [InlineData("克羅諾")]
+    public void LocalizedNativeNamesRemainReadableThroughEntryAndConfirmation(string name)
+    {
+        var bytes = Encoding.UTF8.GetBytes(name);
+        var memory = CreateValidMemory(name, -1, 0, 0, 1, "",
+            externalName: bytes.Length >= 16, active: 0);
+        Assert.True(NameInputCapture.TryCreateSnapshot(
+            memory, ImageBase, Scene, null, out var snapshot, out var error), error);
+        Assert.Equal(name, snapshot.Name);
+
+        memory.AddCString(0x50000, name);
+        Assert.True(NameInputCapture.TryDecodeByValueName(
+            memory, 0x50000, 0, 0, 0, (uint)bytes.Length, 63,
+            out var decoded, out var decodeError), decodeError);
+        Assert.Equal(name, decoded);
+        Assert.True(NameInputCapture.TryCreateConfirmation(
+            $"Use {name}?", decoded, [new(0, 0xB000, "Yes"), new(1, 0xB100, "No")], 1,
+            out var confirmation, out var confirmationError), confirmationError);
+        Assert.Equal($"Use {name}?", confirmation.Prompt);
+    }
+
     [Fact]
     public void ModelsTheExactAuditedThreePageEightByElevenGrid()
     {
@@ -151,7 +181,7 @@ public sealed class NameInputCaptureTests
     }
 
     [Fact]
-    public void EnforcesFiveUtf16CodeUnitsAndRequiresStrictUtf8WithNulTermination()
+    public void ReadsNativeTextBeyondTheGridLimitAndRequiresStrictUtf8WithNulTermination()
     {
         var fiveUnits = CreateValidMemory("😀ABC", 0, 0, 0, 1, "A");
         Assert.True(NameInputCapture.TryCreateSnapshot(
@@ -159,7 +189,10 @@ public sealed class NameInputCaptureTests
             out var valid, out var validError), validError);
         Assert.Equal(5, valid.Name.Length);
 
-        AssertRejected(CreateValidMemory("😀ABCD", 0, 0, 0, 1, "A"), "UTF-16");
+        var sixUnits = CreateValidMemory("😀ABCD", 0, 0, 0, 1, "A");
+        Assert.True(NameInputCapture.TryCreateSnapshot(
+            sixUnits, ImageBase, Scene, "Localized action", out var longer, out var longerError), longerError);
+        Assert.Equal("😀ABCD", longer.Name);
 
         var external = CreateValidMemory("Crono", 0, 0, 0, 1, "A", externalName: true);
         Assert.True(NameInputCapture.TryCreateSnapshot(
@@ -378,7 +411,7 @@ public sealed class NameInputCaptureTests
     }
 
     [Fact]
-    public void ByValueConfirmationNameRejectsInvalidCapacityTerminationUtf8AndUtf16Limit()
+    public void ByValueConfirmationNameRejectsInvalidCapacityTerminationUtf8AndAllocationLength()
     {
         Assert.False(NameInputCapture.TryDecodeByValueName(
             new TestMemory(), 0, 0, 0, 0, 6, 5,
@@ -398,11 +431,10 @@ public sealed class NameInputCaptureTests
             out _, out var utf8Error));
         Assert.Contains("UTF-8", utf8Error, StringComparison.OrdinalIgnoreCase);
 
-        var sixUnits = new TestMemory().AddCString(0x50000, "123456");
         Assert.False(NameInputCapture.TryDecodeByValueName(
-            sixUnits, 0x50000, 0, 0, 0, 6, 16,
+            new TestMemory(), 0x50000, 0, 0, 0, MsvcStringReader.MaximumByteLength + 1, 8191,
             out _, out var lengthError));
-        Assert.Contains("five UTF-16", lengthError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("allocation limit", lengthError, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

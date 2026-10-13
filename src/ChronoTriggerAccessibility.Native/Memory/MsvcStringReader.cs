@@ -52,7 +52,6 @@ public sealed class MsvcStringReader
 {
     public const int LayoutSize = 24;
     public const int MaximumByteLength = 4096;
-    public const int MaximumNameTextElements = 5;
 
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
@@ -158,17 +157,11 @@ public sealed class MsvcStringReader
         }
 
         var textElements = StringInfo.GetTextElementEnumerator(value);
-        var count = 0;
+        // Stored native names include localized defaults such as Chrono and
+        // Frosch. The five-unit grid editing rule is not a read constraint.
+        // TryRead already bounds allocations and strictly decodes UTF-8.
         while (textElements.MoveNext())
         {
-            count++;
-            if (count > MaximumNameTextElements)
-            {
-                value = string.Empty;
-                error = "Name contains more than five visible Unicode text elements.";
-                return false;
-            }
-
             if (!ContainsVisibleScalar(textElements.GetTextElement()))
             {
                 value = string.Empty;

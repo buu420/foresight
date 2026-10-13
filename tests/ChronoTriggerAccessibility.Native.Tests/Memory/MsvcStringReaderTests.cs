@@ -184,14 +184,15 @@ public sealed class MsvcStringReaderTests
     [InlineData("Chrono")]
     [InlineData("😀😁😂😃😄😅")]
     [InlineData("éééééé")]
-    public void TryReadName_MoreThanFiveUnicodeTextElements_IsRejected(string text)
+    [InlineData("Frosch")]
+    public void TryReadName_NativeNamesBeyondFiveTextElements_ArePreserved(string text)
     {
         var memory = CreateMemoryForText(text);
 
-        var succeeded = new MsvcStringReader(memory).TryReadName(StringAddress, out _, out var error);
+        var succeeded = new MsvcStringReader(memory).TryReadName(StringAddress, out var actual, out var error);
 
-        Assert.False(succeeded);
-        Assert.Contains("five", error, StringComparison.OrdinalIgnoreCase);
+        Assert.True(succeeded, error);
+        Assert.Equal(text, actual);
     }
 
     private static SegmentedMemory CreateMemoryForText(string text)
@@ -202,6 +203,29 @@ public sealed class MsvcStringReaderTests
             : new SegmentedMemory()
                 .Add(StringAddress, CreateHeapLayout(HeapAddress, encoded.Length, encoded.Length))
                 .Add(HeapAddress, encoded);
+    }
+
+    [Theory]
+    [InlineData("\0")]
+    [InlineData("\n")]
+    [InlineData("\u200B")]
+    [InlineData("\u0301")]
+    [InlineData(" ")]
+    public void TryReadName_NonVisibleTextStillFails(string text)
+    {
+        var memory = CreateMemoryForText(text);
+        Assert.False(new MsvcStringReader(memory).TryReadName(StringAddress, out var value, out var error));
+        Assert.Empty(value);
+        Assert.Contains("non-visible", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryReadName_StillBoundsNativeAllocationsBeforeReadingText()
+    {
+        var memory = CreateMemoryForText(new string('A', MsvcStringReader.MaximumByteLength + 1));
+        Assert.False(new MsvcStringReader(memory).TryReadName(StringAddress, out _, out var error));
+        Assert.Contains("safety limit", error, StringComparison.Ordinal);
+        Assert.Single(memory.Reads);
     }
 
     private static byte[] CreateInlineLayout(string value, int? capacity = null)

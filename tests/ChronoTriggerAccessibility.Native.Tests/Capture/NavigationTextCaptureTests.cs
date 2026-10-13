@@ -11,6 +11,8 @@ public sealed class NavigationTextCaptureTests
 
     [Theory]
     [InlineData(0, "Alex")]
+    [InlineData(0, "Chrono")]
+    [InlineData(4, "Frosch")]
     [InlineData(1, "Amy")]
     [InlineData(2, "Jen")]
     [InlineData(3, "Bot")]
@@ -31,7 +33,6 @@ public sealed class NavigationTextCaptureTests
     [InlineData(7, "Amy")]
     [InlineData(1, "")]
     [InlineData(1, "\n")]
-    [InlineData(1, "TooLong")]
     public void InvalidCharacterIdentityOrUnreadableNameDoesNotInventAName(int character, string value)
     {
         var memory = Memory();
