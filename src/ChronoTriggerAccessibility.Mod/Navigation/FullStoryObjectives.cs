@@ -196,7 +196,9 @@ public static class FullStoryObjectives
 
         Upto(0x93, Tail("call-dactyls", "Call the dactyls from the peak", [At(295)])),
 
-        Upto(0x96, Tail("tyranno-lair", "Break into the Tyranno Lair", [At(302)],
+        // Atel_0057 actor 0: crossing tile column 55 (rows 19-25) below 0x96 starts the Turnkey
+        // battle and sets 0x96. Actor 1's trap strips sit in the western section.
+        Upto(0x96, Tail("tyranno-lair", "Break into the Tyranno Lair", [With(302, 0)],
             "The lair is the fortress on the eastern spur of the prehistoric map.")),
 
         Upto(0x97, Tail("free-kino", "Free the prisoner inside the lair", [With(302, 9)])),

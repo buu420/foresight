@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.56 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.57 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.56 adds recorded descriptions for Ayla's rescue, Frog opening the Magic Cave, and the approach to Magus, using the same approved narrator voice as the opening and story actions. It also identifies verified Ozzie and Kino appearances, keeps guidance active during temporary creature blockage, and removes unwanted menu and Tech stat repetitions. The existing 146 opening and story recordings are retained. Dialogue and menus keep using your screen reader. See [this build's changes and testing notes](docs/releases/v0.3.56.md).
+Version 0.3.57 repairs Tyranno Lair progression after the prison battle and filters guide targets that the current native floor proves are in a disconnected section. Visible or remembered blocked targets remain identifiable with a restriction. The previous movie narration, character names and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.57.md).
 
 ## Install the beta download
 
@@ -90,6 +90,10 @@ Acceleration is automatic. Use the game's **Up/Down** controls to steer and your
 Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. A tester reported completing the race on 0.3.44; broader timing and playability testing remains needed. **Interactable Objects → Jet bike** now tracks the native bike interaction in either Site 32 parking lot. Press Confirm yourself after arriving. See [race research and verification](docs/bike-race-research.md).
 
 ## Navigation
+
+In Tyranno Lair, **Story Events → Free the prisoner inside the lair** first guides through the native prison-passage trigger after the required battle. Once the game reveals Kino, it guides to his visible interaction and asks you to face him and press Confirm. Hidden people remain absent from People. Both manual guidance and auto-walk use the same native approaches.
+
+Unseen guide destinations in a definitively disconnected floor section are omitted. Visible or remembered destinations remain readable with a restriction when the current floor does not connect them. A conservative floor check preserves unknown cases and possible routes through verified native doors, drops and stair landings. Actual movement still obeys the full native collision, interaction and transition rules; connected floor does not guarantee that every route is currently usable.
 
 Once their names have been introduced by the native story, verified Ozzie and Kino appearances use those names in People. The same sprites used for unrelated people retain their appearance labels. When creatures temporarily block an otherwise reachable route, both navigation modes wait and recheck, then continue when the way clears. Auto-walk stops moving while blocked; it does not fight or press Confirm. A blocker is named only when the native contact identifies the same visible navigation target.
 

@@ -13,6 +13,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     private readonly NavigationExitLabels exitLabels = new();
     private readonly NavigationPeopleLabels peopleLabels = new();
     private readonly FieldLevelCrossings levelCrossings = new();
+    private readonly FieldRegionIndex regions = new();
     private string? scene;
     private string? lastFailure;
     private string? lastInventory;
@@ -464,6 +465,21 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);
+        if (field.SceneIdCoherent) storyCandidates.AddRange(TyrannoLairTargets.Build(field, map, story));
+        var transitions = guideActive ? FieldTransitions.Find(field, map, story) : [];
+        var routeGraph = guideActive
+            ? FieldTransitionGraph.Create(FieldLandingGraph.Create(
+                FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals, collisions, touchGoals),
+                map, GameNavigationCatalog.ForScene(field.SceneId)), transitions)
+            : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals);
+        regions.Update(map);
+        // A reachable native door, landing or drop can bridge a real floor gap.
+        // Preserve its full staged proof. A marker in another disconnected room
+        // cannot make every guide target in that room available from here.
+        var stagedPart = CanReachStagedPart();
+        bool Disconnected(NavigationTarget t) => !stagedPart && !t.IsStoryNote &&
+            t.ApproachPoints.Count != 0 && t.ApproachPoints.All(p => regions.Connected(player, p) == false);
+        storyCandidates.RemoveAll(Disconnected);
         if (field.SceneIdCoherent)
         {
             var available = storyCandidates.ToArray();
@@ -475,7 +491,6 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         exitLabels.Apply(targets);
         peopleLabels.Apply(targets, genericIds);
-        var transitions = guideActive ? FieldTransitions.Find(field, map, story) : [];
         if (guideActive)
             targets.AddRange(levelCrossings.Find(field.SceneId, map).Select(t => t with
                 { Visible = t.ApproachPoints.Any(p => TileVisible(p.X / 256, p.Y / 256)) }));
@@ -489,14 +504,25 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 Instruction = "Continue down at this point to take the drop. This drop is one-way.",
             });
         }
+        const string otherPart = "This destination is in another part of this map. Reach that section first.";
+        for (var i = targets.Count - 1; i >= 0; i--)
+        {
+            var target = targets[i];
+            if (!Disconnected(target)) continue;
+            // Seen information remains identifiable. A guide must not promote
+            // an unseen destination on another floor component as usable here.
+            if (!target.Visible && !target.Discovered) { targets.RemoveAt(i); continue; }
+            targets[i] = target with
+            {
+                GuideAvailable = false,
+                GuidanceRestriction = target.GuidanceRestriction ?? otherPart,
+                Instruction = otherPart + (string.IsNullOrWhiteSpace(target.Instruction) ? "" : " " + target.Instruction),
+            };
+        }
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
-            player, targets.AsReadOnly(), guideActive
-                ? FieldTransitionGraph.Create(FieldLandingGraph.Create(
-                    FieldTerrainGraph.Create(map, field.Actors, story!, GameNavigationCatalog.ForScene(field.SceneId)!, scriptTerminals, collisions, touchGoals),
-                    map, GameNavigationCatalog.ForScene(field.SceneId)), transitions)
-                : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals), NavigationUnits.LocalStep)
+            player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
             {
                 AreaName = field.SceneId == 464 ? GameNavigationCatalog.AreaName(field.SceneId)
                     : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
@@ -507,6 +533,35 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
                 RouteEvidence = RouteFailureEvidence.For(field, map, story, targets.AsReadOnly(), treasures),
             };
+
+        bool CanReachStagedPart()
+        {
+            if (routeGraph is not IStagedNavigationGraph || GameNavigationCatalog.ForScene(field.SceneId) is not { } metadata)
+                return false;
+            if (transitions.Any(t => (t.Available || t.Active) && regions.Connected(player, t.Transition.Approach) == true)) return true;
+            var landingIds = metadata.Exits.Where(e =>
+                (map.ExitDestinations?.TryGetValue(e.Id, out var current) == true ? current : e.Destination) == field.SceneId)
+                .Select(e => $"exit:{e.Id}").ToHashSet();
+            if (storyCandidates.Any(t => landingIds.Contains(t.Id) &&
+                t.ApproachPoints.Any(p => regions.Connected(player, p) == true))) return true;
+            foreach (var actor in field.Actors.Where(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember &&
+                         a.ScriptCallsEnabled && InsideMap(a)))
+            {
+                var actions = metadata.Actors.FirstOrDefault(a => a.Matches(actor))?.Actions;
+                if (actions?.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null && story is not null &&
+                    FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story) &&
+                    FieldTerrainGraph.Preview(map, a.Copy) is not null) != true) continue;
+                // A permissive neighbourhood covers native contact probes and
+                // closed-door edge approaches. This only retains eligibility;
+                // the exact staged search still controls every movement command.
+                for (var dy = -512; dy <= 512; dy += 256)
+                for (var dx = -512; dx <= 512; dx += 256)
+                for (var layer = 1; layer <= 3; layer++)
+                    if (regions.Connected(player, new(actor.FineX - actor.CollisionOffsetX * 16 + dx,
+                        actor.FineY + dy, layer)) == true) return true;
+            }
+            return false;
+        }
 
         void ReportInventory()
         {

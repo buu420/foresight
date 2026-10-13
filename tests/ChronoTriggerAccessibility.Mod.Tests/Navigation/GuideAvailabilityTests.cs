@@ -50,15 +50,16 @@ public sealed class GuideAvailabilityTests
     }
 
     [Fact]
-    public void UnseenStoryUsesCollisionAndBecomesRoutableWhenTheDoorOpens()
+    public void UnseenOtherSectionDoesNotPromiseARouteAndReappearsWhenNativeFloorOpens()
     {
         var source = Source();
         var map = Map(); map.ExitCells[6 * 8 + 6] = 0;
         for (var y = 0; y < 8; y++) map.CollisionLayers[y * 8 + 4] = 0;
         var closed = source.Build(Field(2), map, new(0, 0, 256, 256), [], new(3, false));
         var target = Assert.Single(closed.Targets, t => t.Category == NavigationCategory.StoryEvents);
-        Assert.False(target.IsStoryNote);
-        Assert.Null(NavigationPathfinder.Find(closed.Graph, closed.Player, target.ApproachPoints));
+        Assert.True(target.IsStoryNote);
+        Assert.Empty(target.ApproachPoints);
+        Assert.DoesNotContain(closed.Targets, t => t.Id == "exit:0");
         map.CollisionLayers[3 * 8 + 4] = map.CollisionLayers[4 * 8 + 4] = 1;
         var opened = source.Build(Field(2), map, new(0, 0, 256, 256), [], new(3, false));
         Assert.NotNull(NavigationPathfinder.Find(opened.Graph, opened.Player,
