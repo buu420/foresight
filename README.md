@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.57 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.58 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.57 repairs Tyranno Lair progression after the prison battle and filters guide targets that the current native floor proves are in a disconnected section. Visible or remembered blocked targets remain identifiable with a restriction. The previous movie narration, character names and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.57.md).
+Version 0.3.58 distinguishes Tyranno Lair's doorways and guides through the native passages and skull-room controls between its separate terraces. The guide checks gate state before choosing the next leg. Unseen blocked Tyranno gates are omitted; visible or remembered gates explain their restriction. The previous prison, movie narration, character-name and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.58.md).
 
 ## Install the beta download
 
@@ -90,6 +90,8 @@ Acceleration is automatic. Use the game's **Up/Down** controls to steer and your
 Tones stop during pause, loss of game focus, and race exit. Capture failures are announced and retried. Race diagnostics are added to the usual Reloaded log. A tester reported completing the race on 0.3.44; broader timing and playability testing remains needed. **Interactable Objects → Jet bike** now tracks the native bike interaction in either Site 32 parking lot. Press Confirm yourself after arriving. See [race research and verification](docs/bike-race-research.md).
 
 ## Navigation
+
+Tyranno Lair doorways are distinguished by terrace, position, and verified passage descriptions. Story Events follows the indoor connections and skull-room controls before returning to the next exterior section. Opened wall switches are not selected again. Both guidance modes recheck the current native floor and gate state; the player operates Confirm interactions and handles battles. See [Tyranno Lair route evidence and testing limits](docs/tyranno-navigation-0358.md).
 
 In Tyranno Lair, **Story Events → Free the prisoner inside the lair** first guides through the native prison-passage trigger after the required battle. Once the game reveals Kino, it guides to his visible interaction and asks you to face him and press Confirm. Hidden people remain absent from People. Both manual guidance and auto-walk use the same native approaches.
 

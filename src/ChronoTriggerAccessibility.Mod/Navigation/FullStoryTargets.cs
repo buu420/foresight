@@ -18,7 +18,8 @@ public sealed class FullStoryTargets
         var result = new List<NavigationTarget>();
         foreach (var chapter in FullStoryObjectives.Build(scene, state))
         {
-            var objective = OceanPalaceRoutes.ForRoom(chapter, scene, player, state);
+            var objective = TyrannoLairRoutes.ForRoom(
+                OceanPalaceRoutes.ForRoom(chapter, scene, player, state), scene, player, state);
             // A pillar is an alternative way to reach its destination, not the
             // intended era itself. Vehicle look-ahead must evaluate that destination.
             var goals = fieldOnly && objective.Goals.Any(g => g.Scene != FullStoryObjectives.EndOfTime)
@@ -56,7 +57,7 @@ public sealed class FullStoryTargets
         return result;
     }
 
-    private static bool ActorTarget(string id, int actor) => id == $"landmark:{actor}" ||
+    private static bool ActorTarget(string id, int actor) => id == $"landmark:{actor}" || id == $"actor-encounter:{actor}" ||
         id.StartsWith($"actor:{actor}:") || id.StartsWith($"script-region:{actor}:") ||
         id.StartsWith($"script-action:{actor}:") || id.StartsWith($"script-switch:{actor}:") ||
         id.StartsWith($"script-encounter:{actor}:") || id.StartsWith($"script-terrain:{actor}:");

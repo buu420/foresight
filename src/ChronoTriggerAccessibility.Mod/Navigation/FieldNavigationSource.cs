@@ -219,6 +219,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
+            if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index);
             if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
@@ -315,6 +316,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             if (!InsideMap(actor)) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
+            // These verified switches are scenery. Their concealed battle
+            // outcomes must not create a second, revealing Enemies row.
+            if (metadata is { Marker: true } && TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) is not null) continue;
             if (metadata is not { Marker: true } && FieldVisualLabels.Describe(actor).Category == NavigationCategory.Objects) continue;
             var encounters = FieldEncounters.Available(field, actor, story, metadata);
             if (encounters.Length == 0) continue;
@@ -381,7 +385,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
             var key = $"exit:{id}";
-            var label = FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
+            var label = (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
+                FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
             var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
             var catalogLabel = field.SceneIdCoherent ? map.ExitDestinations?.TryGetValue(id, out var destination) == true
@@ -479,7 +484,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var stagedPart = CanReachStagedPart();
         bool Disconnected(NavigationTarget t) => !stagedPart && !t.IsStoryNote &&
             t.ApproachPoints.Count != 0 && t.ApproachPoints.All(p => regions.Connected(player, p) == false);
-        storyCandidates.RemoveAll(Disconnected);
+        // Atel_0164 gates these two exterior doorways through scene303's
+        // Confirm wall switches. No touch-opening copy covers either exit.
+        // Other maps can have automatic doors whose staged goals need their
+        // own proof; an empty approach alone must not classify those doors.
+        bool BlockedExit(NavigationTarget t) => field.SceneIdCoherent && field.SceneId == 298 &&
+            t.Id is "exit:5" or "exit:8" && t.ApproachPoints.Count == 0;
+        storyCandidates.RemoveAll(t => Disconnected(t) || BlockedExit(t));
         if (field.SceneIdCoherent)
         {
             var available = storyCandidates.ToArray();
@@ -508,15 +519,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         for (var i = targets.Count - 1; i >= 0; i--)
         {
             var target = targets[i];
-            if (!Disconnected(target)) continue;
+            var blockedExit = BlockedExit(target);
+            if (!blockedExit && !Disconnected(target)) continue;
             // Seen information remains identifiable. A guide must not promote
             // an unseen destination on another floor component as usable here.
             if (!target.Visible && !target.Discovered) { targets.RemoveAt(i); continue; }
+            var restriction = blockedExit ? "This passage is currently blocked." : otherPart;
             targets[i] = target with
             {
                 GuideAvailable = false,
-                GuidanceRestriction = target.GuidanceRestriction ?? otherPart,
-                Instruction = otherPart + (string.IsNullOrWhiteSpace(target.Instruction) ? "" : " " + target.Instruction),
+                GuidanceRestriction = target.GuidanceRestriction ?? restriction,
+                Instruction = restriction + (string.IsNullOrWhiteSpace(target.Instruction) ? "" : " " + target.Instruction),
             };
         }
         ReportInventory();
