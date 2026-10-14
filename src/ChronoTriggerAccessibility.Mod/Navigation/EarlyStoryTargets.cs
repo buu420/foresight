@@ -3,14 +3,14 @@ using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-/// <summary>Local objectives through the prison escape. The counter and passage
+/// <summary>Local objectives through the prison escape and forest gate. The counter and passage
 /// flags select the chapter; active native targets supply route positions.</summary>
 public static class EarlyStoryTargets
 {
     public static IReadOnlyList<NavigationTarget> Build(int scene, FieldStoryState? state,
         IReadOnlyList<NavigationTarget> available, NavigationPoint player)
     {
-        if (state is null || state.Point is < 3 or > 48) return [];
+        if (state is null || state.Point is < 3 or > 51) return [];
         var p = state.Point;
         var result = new List<NavigationTarget>();
         switch (scene)
@@ -249,8 +249,11 @@ public static class EarlyStoryTargets
             case 19 when p == 48:
                 Exit("escape-forest", "Find a way out through the forest", [0]);
                 break;
-            case 20 when p == 48:
-                Note("forest-gate", "The forest clearing", "Continue toward the Gate in the clearing.");
+            case 20 when p is >= 48 and <= 51:
+                // The chase advances to 0x33 before returning control. The gate
+                // must actually be present; do not reveal an unseen portal.
+                if (available.Any(t => t.Id == "actor:9:4:151"))
+                    Bind("forest-gate", "Approach the Time Gate", ["actor:9:4:151"]);
                 break;
         }
         return result;
@@ -305,4 +308,13 @@ public static class EarlyStoryTargets
             (8, 11, 12) => true,
             _ => false,
         };
+
+    // Atel_0114: actor0 reveals actor9 at story>=0x30; its Confirm fn1
+    // (051C) sets local9, consumed by actor1's gate sequence (0332).
+    // Its touch fn2 is empty. Keep the normal native Confirm geometry and
+    // dispatch checks; +20 is camera culling, not a standing capability.
+    public static bool IsForestGateAvailable(int scene, FieldStoryState? state, FieldActorSnapshot actor) =>
+        scene == 20 && state is { Point: >= 48 } && actor.Index == 9 &&
+        actor.ClassTag == 4 && actor.VisualIndex == 151 && actor.LoadedFlag != 0 &&
+        actor.IsUsable && actor.IsDrawn && actor.ScriptCallsEnabled;
 }

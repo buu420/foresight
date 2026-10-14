@@ -104,7 +104,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (lairHole && ReptiteLairTargets.IsParked(actor)) continue;
             if (lairHole) description = (ReptiteLairTargets.HoleLabel(field.SceneId, actor), NavigationCategory.Exits);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
-            var scriptedAction = story is not null && actor.ScriptCallsEnabled &&
+            // Atel_0114 actor9's Confirm sets local9; actor1 performs the warp.
+            // The catalog cannot infer that handoff from actor9's handler alone.
+            var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);
+            var scriptedAction = forestGate || story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
             var scriptedContact = scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
@@ -159,7 +162,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
-                arrivalInstruction: lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
+                arrivalInstruction: forestGate ? "Press Confirm to enter the Time Gate." :
+                    lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
