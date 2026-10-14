@@ -1029,6 +1029,55 @@
       "sha256": "ce3dae6423df5b4e87f52d63efce8f5673bd12e57188af5699b0ef4668b96519",
       "duration": 1.947542,
       "bytes": 93526
+    },
+    {
+      "id": "scene-bookaopens",
+      "text": "Book A opens. A flame flickers above it.",
+      "sha256": "abe313dc08794824fb7f67d562b954b6700491e3418fb63d86538eb666c6376f",
+      "duration": 3.294292,
+      "bytes": 158170
+    },
+    {
+      "id": "scene-bookacloses",
+      "text": "Book A closes, and the flame disappears.",
+      "sha256": "7289a1ef8204a0f003a1df61a6ba3ea3eca5da8fb737a4177e9f584aae866285",
+      "duration": 3.433583,
+      "bytes": 164856
+    },
+    {
+      "id": "scene-bookbopens",
+      "text": "Book B opens. Water splashes above it.",
+      "sha256": "3d47ca259037556211ef3db808e95fd238c9728d7e33a6810082c4ee5ae6bb9a",
+      "duration": 3.201417,
+      "bytes": 153712
+    },
+    {
+      "id": "scene-bookbcloses",
+      "text": "Book B closes, and the water disappears.",
+      "sha256": "5c69d9448edc2665308da9188fc90e3370e314cb2a802c29b1db35ad445d5a61",
+      "duration": 3.480042,
+      "bytes": 167086
+    },
+    {
+      "id": "scene-bookcopens",
+      "text": "Book C opens. Blue-green wisps swirl above it.",
+      "sha256": "32fb6e0bb2663e81a921a590237dc7d9c42332faacd8b6ae26f10dc11f431d9a",
+      "duration": 3.898,
+      "bytes": 187148
+    },
+    {
+      "id": "scene-bookccloses",
+      "text": "Book C closes, and the swirling wisps disappear.",
+      "sha256": "d643271d0cd8856feadd7776d0fe210a34a84bb731d2580ddad0808b847b1cb1",
+      "duration": 3.990875,
+      "bytes": 191606
+    },
+    {
+      "id": "scene-passageopens",
+      "text": "A passage opens.",
+      "sha256": "b739730b5dbaf3fdd84868cec25d6bf720d864463450a6b5eba20fbd67ebe176",
+      "duration": 1.39025,
+      "bytes": 66776
     }
   ],
   "movieNarration": [

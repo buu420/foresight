@@ -51,7 +51,7 @@ public static class StoryVoiceCueCatalog
             result.Add(new(prefix + "-named", StoryActionCatalog.Describe(frame, animation, Name)!));
             result.Add(new(prefix + "-appearance", StoryActionCatalog.Describe(frame, animation, _ => null)!));
         }
-        foreach (var action in Enum.GetValues<StorySceneAction>())
+        foreach (var action in Enum.GetValues<StorySceneAction>().Where(IsRecorded))
         {
             var before = Frame(0);
             var scene = new StorySceneActionCandidate(action, before, before.ActorState, null, false);
@@ -67,6 +67,15 @@ public static class StoryVoiceCueCatalog
             result.Add(new($"movie-opening-{index:D2}", OpeningMovieTimeline.Entries[index].Text));
         return result.AsReadOnly();
     }
+
+    /// <summary>Each reviewed scene action has an embedded recording in the narrator's voice.</summary>
+    public static bool IsRecorded(StorySceneAction action) => action is
+        StorySceneAction.CurtainsOpen or StorySceneAction.MotherHeadsDownstairs or
+        StorySceneAction.BoyGetsOutOfBedAndStretches or StorySceneAction.FairCollision or
+        StorySceneAction.GirlGetsUp or StorySceneAction.BoyGetsUp or StorySceneAction.GirlHops or
+        StorySceneAction.BookAOpens or StorySceneAction.BookACloses or
+        StorySceneAction.BookBOpens or StorySceneAction.BookBCloses or
+        StorySceneAction.BookCOpens or StorySceneAction.BookCCloses or StorySceneAction.PassageOpens;
 
     private static string? Name(int sprite) => sprite >= 0 && sprite < Names.Length ? Names[sprite] : null;
     private static string SceneId(StorySceneAction action) => "scene-" + action.ToString().ToLowerInvariant();

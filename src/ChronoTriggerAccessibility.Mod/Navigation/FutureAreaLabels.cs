@@ -20,7 +20,7 @@ public static class FutureAreaLabels
             (226, 4, 3, 3) => state is { Point: < 60 } ? "Broken robot" : "Robo",
             (226, 2, 3, 1) => "Marle",
             (226, 3, 3, 2) => "Lucca",
-            (227, 11, 4, 151) => "Gate",
+            (227, 11, 4, 151) => "Time Gate",
             (228, 8, 4, 127) => "Entrance security terminal",
             (229, 12, 4, 127) => "Hatch control terminal",
             (230, 17, 4, 127) => "Laser control terminal",

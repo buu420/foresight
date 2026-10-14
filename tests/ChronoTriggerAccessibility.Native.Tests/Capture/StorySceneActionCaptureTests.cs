@@ -40,7 +40,9 @@ public sealed class StorySceneActionCaptureTests
         _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
-    public static TheoryData<StorySceneAction> Actions => new(Enum.GetValues<StorySceneAction>());
+    // The opening and fair cues; the Zeal books have their own fixture (StoryBookActionCaptureTests).
+    public static TheoryData<StorySceneAction> Actions => new(Enum.GetValues<StorySceneAction>()
+        .Where(action => action <= StorySceneAction.GirlHops));
 
     [Theory]
     [MemberData(nameof(Actions))]

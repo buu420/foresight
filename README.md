@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.60 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.61 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.60 makes the visible time gate in Guardia Forest trackable before its first interaction after the prison escape. Story Events now guides to the gate at the native chase stage, and both navigation modes reach its Confirm position. The localized naming fixes, Tyranno Lair routes and doorway labels, movie narration, character-name and menu-speech fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.60.md).
+Version 0.3.61 gives Enhasa and Kajar books stable labels, native guidance and recorded descriptions of opening, closing and their visible effects in the creator's voice. Skyway and Land Bridge teleport pads and End of Time pillars are in Interactable Objects; room doorways remain in Exits. It also names the unnamed Skyway room, identifies the small white dolls, and conceals bookcase passages until they open. Earlier fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.61.md).
 
 ## Install the beta download
 

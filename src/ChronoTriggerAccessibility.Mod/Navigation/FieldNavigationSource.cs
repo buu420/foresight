@@ -98,6 +98,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (!actor.IsUsable || !InsideMap(actor) || !actor.IsDrawn || !actor.ClassTagKnown ||
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
+            if (field.SceneIdCoherent && ZealFieldLabels.IsBookEffect(field.SceneId, actor)) continue;
+            var book = field.SceneIdCoherent ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var description = FieldVisualLabels.Describe(actor);
             // A lair hole is a Confirm passage drawn as an open pit; a parked one has no contact.
             var lairHole = field.SceneIdCoherent && ReptiteLairTargets.IsHole(field.SceneId, actor);
@@ -107,7 +109,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // Atel_0114 actor9's Confirm sets local9; actor1 performs the warp.
             // The catalog cannot infer that handoff from actor9's handler alone.
             var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);
-            var scriptedAction = forestGate || story is not null && actor.ScriptCallsEnabled &&
+            var scriptedAction = forestGate || book is not null || story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
             var scriptedContact = scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
@@ -124,11 +126,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var currentName = actor.IsPlayerClass && actor.VisualIndex is >= 0 and < 7
                 ? characterName?.Invoke(actor.VisualIndex) : null;
-            var label = !string.IsNullOrWhiteSpace(currentName) ? currentName :
+            var label = book ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
-                (IsCathedralOrgan(actor) ? "Organ" : null) : null;
+                ZealFieldLabels.Actor(field.SceneId, actor) ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
                 actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
@@ -162,7 +164,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
-                arrivalInstruction: forestGate ? "Press Confirm to enter the Time Gate." :
+                arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                    forestGate ? "Press Confirm to enter the Time Gate." :
                     lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
@@ -216,7 +219,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
-            var label = EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
+            var book = actor.ClassTag == 7 ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
+            var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
+            var label = book ?? teleportPad ?? EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
                 FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
@@ -263,10 +268,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var bike = FutureAreaLabels.IsBike(field.SceneId, actor.Index);
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage($"landmark:{actor.Index}", actor);
-            Add($"landmark:{actor.Index}", label, !bike && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
+            Add($"landmark:{actor.Index}", label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                arrivalInstruction: bike ? "Press Confirm to interact with the jet bike." :
+                instruction: teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
+                    ? "Teleportation is currently unavailable." : null,
+                arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                    bike ? "Press Confirm to interact with the jet bike." :
                     field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[$"landmark:{actor.Index}"] = Anchors(actor);
@@ -362,7 +370,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // player; the guard that the script sets when it is over removes it.
             var (regionLabel, regionCategory) = region.Kind switch
             {
-                "Warp" => (pillar ? FutureAreaLabels.PillarLabel(region) : GameNavigationCatalog.DestinationLabel(region.Destination), NavigationCategory.Exits),
+                "Warp" => (pillar ? FutureAreaLabels.PillarLabel(region) : GameNavigationCatalog.DestinationLabel(region.Destination),
+                    pillar ? NavigationCategory.Objects : NavigationCategory.Exits),
                 "Switch" => ("Floor trigger", NavigationCategory.Objects),
                 "Encounter" => ("Encounter", NavigationCategory.Enemies),
                 _ => ("Story event", NavigationCategory.Exits),
@@ -388,8 +397,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
+            if (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id) &&
+                !ZealFieldLabels.PassageOpen(story)) continue;
             var key = $"exit:{id}";
-            var label = (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
+            var label = (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id)
+                ? "Opening behind the bookcase" : null) ??
+                (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
                 FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
             var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
@@ -541,7 +554,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
             {
-                AreaName = field.SceneId == 464 ? GameNavigationCatalog.AreaName(field.SceneId)
+                AreaName = field.SceneId is 337 or 464 ? GameNavigationCatalog.AreaName(field.SceneId)
                     : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,

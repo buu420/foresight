@@ -50,7 +50,7 @@ public sealed class EndOfTimeTests
         Assert.Equal(new[] { "Pillar of light 1", "Pillar of light 2", "Pillar of light 3" }, pillars.Select(t => t.Label));
         Assert.All(pillars, t =>
         {
-            Assert.Equal(NavigationCategory.Exits, t.Category);
+            Assert.Equal(NavigationCategory.Objects, t.Category);
             Assert.NotEmpty(t.ApproachPoints);
             Assert.Contains(point < 77 ? "lesson" : "Confirm", t.ArrivalInstruction);
         });

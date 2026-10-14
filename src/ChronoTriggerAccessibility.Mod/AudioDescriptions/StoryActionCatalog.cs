@@ -24,9 +24,30 @@ public static class StoryActionCatalog
             StorySceneAction.GirlGetsUp => "The blonde girl gets to her feet.",
             StorySceneAction.BoyGetsUp => $"{Boy()} gets to their feet.",
             StorySceneAction.GirlHops => "The blonde girl hops up and down.",
+            // Zeal plaza books: stable per-room letters for fixed native actors. The visible
+            // change only; no element, sequence, counter or what the books unlock.
+            StorySceneAction.BookAOpens => "Book A opens. A flame flickers above it.",
+            StorySceneAction.BookACloses => "Book A closes, and the flame disappears.",
+            StorySceneAction.BookBOpens => "Book B opens. Water splashes above it.",
+            StorySceneAction.BookBCloses => "Book B closes, and the water disappears.",
+            StorySceneAction.BookCOpens => "Book C opens. Blue-green wisps swirl above it.",
+            StorySceneAction.BookCCloses => "Book C closes, and the swirling wisps disappear.",
+            StorySceneAction.PassageOpens => "A passage opens.",
             _ => throw new ArgumentOutOfRangeException(nameof(candidate)),
         };
     }
+
+    /// <summary>Which book a toggle belongs to and whether it opens it; null for other actions.</summary>
+    public static (char Book, bool Opens)? BookToggle(StorySceneAction action) => action switch
+    {
+        StorySceneAction.BookAOpens => ('A', true),
+        StorySceneAction.BookACloses => ('A', false),
+        StorySceneAction.BookBOpens => ('B', true),
+        StorySceneAction.BookBCloses => ('B', false),
+        StorySceneAction.BookCOpens => ('C', true),
+        StorySceneAction.BookCCloses => ('C', false),
+        _ => null,
+    };
 
     public static string? Describe(StoryActionSnapshot snapshot, int animation, Func<int, string?> characterName)
     {

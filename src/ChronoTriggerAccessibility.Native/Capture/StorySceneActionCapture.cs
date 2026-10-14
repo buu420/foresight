@@ -4,7 +4,9 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
-/// <summary>Visually reviewed opening and fair actions. Identity only: Root owns the words.</summary>
+/// <summary>Visually reviewed opening and fair actions, and the Zeal plaza books (Enhasa and
+/// Kajar). Identity only: Root owns the words. Books A, B and C are fixed native actors per
+/// room; their letters carry no element, order or outcome.</summary>
 public enum StorySceneAction
 {
     CurtainsOpen,
@@ -14,6 +16,13 @@ public enum StorySceneAction
     GirlGetsUp,
     BoyGetsUp,
     GirlHops,
+    BookAOpens,
+    BookACloses,
+    BookBOpens,
+    BookBCloses,
+    BookCOpens,
+    BookCCloses,
+    PassageOpens,
 }
 
 /// <summary><c>Subject</c> is the visible actor the action is about; for the curtains that is
@@ -30,11 +39,33 @@ public static class StorySceneActionCapture
 {
     public const string BedroomScriptSha256 = "7AAC21A8D18D4908F4655D070CDD47ECA95939472EE66625CF12FC713B19C765";
     public const string PlazaRearScriptSha256 = "574098067D910D56A9B30707F3DC837C56990AF788CAE55374A9C90CF4C04307";
+    public const string EnhasaPlazaScriptSha256 = "A912C2735A866CE4A2CE0009BE97BCAF5CF7E94C1BF67411CCFD0FA64657C880";
+    public const string KajarPlazaScriptSha256 = "DCCC62DA4C8A32EE6ED19E470111921DBA0A3F427194E14BF07CB3CB24578960";
 
     private enum Proof { TileCopyQueued, MoveStarted, StaticFrame, Looping, CountedFinished, AnimationReset }
 
+    /// <summary>The exact visible object: class tag, visual and tile of the subject actor.</summary>
+    private sealed record Identity(int Class, int Visual, int TileX, int TileY);
+
+    /// <summary>A tile rectangle (exclusive right/bottom) that must be inside the native camera.</summary>
+    private sealed record Tiles(int Left, int Top, int Right, int Bottom);
+
     private sealed record Anchor(StorySceneAction Action, int Scene, int Script, int Length, string Sha256,
-        int Actor, uint Pc, string Bytes, int Subject, int Partner, int MinStory, int MaxStory, Proof Proof);
+        int Actor, uint Pc, string Bytes, int Subject, int Partner, int MinStory, int MaxStory, Proof Proof,
+        Identity? Book = null, Tiles? Passage = null);
+
+    private const int EnhasaPlaza = 355, KajarPlaza = 357, EnhasaScript = 208, KajarScript = 209;
+    private const int EnhasaLength = 2796, KajarLength = 1861;
+    private static readonly Identity EnhasaA = new(4, 0x73, 16, 24), EnhasaB = new(4, 0x80, 27, 12);
+    // Enhasa's third closed book is drawn in the map; its Confirm marker (class 7, actor 13) stands on it.
+    // The open sprite (actor 12) is hidden or parked at (48,48) until that marker shows it.
+    private static readonly Identity EnhasaC = new(7, 0x00, 6, 7);
+    private static readonly Identity KajarA = new(4, 0x73, 13, 15), KajarB = new(4, 0x80, 3, 10), KajarC = new(4, 0x88, 22, 24);
+
+    private static Anchor Book(StorySceneAction action, int scene, int actor, uint pc, string bytes, Identity book) =>
+        scene == EnhasaPlaza
+            ? new(action, scene, EnhasaScript, EnhasaLength, EnhasaPlazaScriptSha256, actor, pc, bytes, actor, -1, 0, 0xFF, Proof.TileCopyQueued, book)
+            : new(action, scene, KajarScript, KajarLength, KajarPlazaScriptSha256, actor, pc, bytes, actor, -1, 0, 0xFF, Proof.TileCopyQueued, book);
 
     // Runtime PCs are file offsets - 1. Story gates mirror the native branches: 18 03 1E / the
     // fn1 curtain path (< 3), Marle's touch function 16 00 06 03 (< 6), the boy's rise ending
@@ -48,6 +79,24 @@ public static class StorySceneActionCapture
         new(StorySceneAction.GirlGetsUp, 439, 74, 3010, PlazaRearScriptSha256, 3, 0x69B, "B71302", 3, -1, 0, 5, Proof.CountedFinished),
         new(StorySceneAction.BoyGetsUp, 439, 74, 3010, PlazaRearScriptSha256, 1, 0x539, "AE", 1, -1, 0, 6, Proof.AnimationReset),
         new(StorySceneAction.GirlHops, 439, 74, 3010, PlazaRearScriptSha256, 3, 0x63C, "AA0B", 3, -1, 6, 7, Proof.Looping),
+        // Zeal plaza books. Each player Confirm runs exactly one E5 copy_tiles_wait: the open
+        // (2F) or closed book tile, graphics only (flags 41). Actor 0's reload reapply uses E4
+        // and is not watched. The third correct book's last E5 frame (flags 3B, with collision)
+        // completes the passage; its earlier two frames and the counter are not watched.
+        Book(StorySceneAction.BookAOpens, EnhasaPlaza, 10, 0x674, "E52F1F2F1F101841", EnhasaA),
+        Book(StorySceneAction.BookACloses, EnhasaPlaza, 10, 0x662, "E52E1F2E1F101841", EnhasaA),
+        Book(StorySceneAction.BookBOpens, EnhasaPlaza, 11, 0x6ED, "E52F1F2F1F1B0C41", EnhasaB),
+        Book(StorySceneAction.BookBCloses, EnhasaPlaza, 11, 0x6DB, "E52D1F2D1F1B0C41", EnhasaB),
+        Book(StorySceneAction.BookCOpens, EnhasaPlaza, 13, 0x746, "E52F1F2F1F060741", EnhasaC),
+        Book(StorySceneAction.BookCCloses, EnhasaPlaza, 13, 0x731, "E52E1F2E1F060741", EnhasaC),
+        Book(StorySceneAction.PassageOpens, EnhasaPlaza, 10, 0x6AB, "E5271C281F0C123B", EnhasaA) with { Passage = new(12, 18, 14, 22) },
+        Book(StorySceneAction.BookAOpens, KajarPlaza, 11, 0x4EE, "E52F2F2F2F0D0F41", KajarA),
+        Book(StorySceneAction.BookACloses, KajarPlaza, 11, 0x4DE, "E52D2F2D2F0D0F41", KajarA),
+        Book(StorySceneAction.BookBOpens, KajarPlaza, 12, 0x565, "E52F2F2F2F030A41", KajarB),
+        Book(StorySceneAction.BookBCloses, KajarPlaza, 12, 0x555, "E52E2F2E2F030A41", KajarB),
+        Book(StorySceneAction.BookCOpens, KajarPlaza, 13, 0x5A4, "E52F2F2F2F161841", KajarC),
+        Book(StorySceneAction.BookCCloses, KajarPlaza, 13, 0x594, "E52E2F2E2F161841", KajarC),
+        Book(StorySceneAction.PassageOpens, KajarPlaza, 11, 0x525, "E5272C282F110B3B", KajarA) with { Passage = new(17, 11, 19, 15) },
     ];
 
     private const uint ScriptHeader = 0x12000, ScriptActorOffset = 0x1180;
@@ -66,7 +115,7 @@ public static class StorySceneActionCapture
             if (!before.Bytes.StartsWith(anchor.Bytes, StringComparison.Ordinal) ||
                 before.StoryPoint < anchor.MinStory || before.StoryPoint > anchor.MaxStory ||
                 !ScriptMatches(memory, before.Location.Data, anchor) ||
-                !Visible(memory, before.Location, anchor.Subject, out var subject)) return false;
+                !Subject(memory, before.Location, anchor, out var subject)) return false;
             StoryActorState? partner = null;
             if (anchor.Partner >= 0 && !Visible(memory, before.Location, anchor.Partner, out partner)) return false;
             var actor = before.ActorState;
@@ -156,6 +205,22 @@ public static class StorySceneActionCapture
     {
         var script = new byte[anchor.Length];
         return memory.TryRead(data + ScriptHeader, script) && Convert.ToHexString(SHA256.HashData(script)) == anchor.Sha256;
+    }
+
+    /// <summary>The subject must be the proven visible object (exact class, visual and tile).
+    /// A passage is judged by its own tiles on camera, not by the book that completed it.</summary>
+    private static bool Subject(IReadableMemory memory, StoryScriptLocation location, Anchor anchor, out StoryActorState state)
+    {
+        if (anchor.Book is not { } book) return Visible(memory, location, anchor.Subject, out state);
+        if (!StoryActionCapture.TryReadActor(memory, location, anchor.Subject, out state) ||
+            state.ClassTag != book.Class || state.Visual != book.Visual ||
+            state.FineX >> 8 != book.TileX || state.FineY >> 8 != book.TileY || !state.Drawn) return false;
+        if (anchor.Passage is not { } tiles) return state.OnScreen == true;
+        var field = new FieldNavigationSnapshot(location.Context, location.Actors, location.Field, location.Data,
+            location.ActorCount, location.Scene, true, 0, 0, location.Actor, -1, null, []);
+        return location.Camera != 0 && FieldEnvironmentCapture.TryViewport(memory, field, out var viewport) &&
+            viewport.Left <= tiles.Left * 256 && viewport.Top <= tiles.Top * 256 &&
+            viewport.Right >= tiles.Right * 256 && viewport.Bottom >= tiles.Bottom * 256;
     }
 
     private static bool Visible(IReadableMemory memory, StoryScriptLocation location, int actor, out StoryActorState state) =>

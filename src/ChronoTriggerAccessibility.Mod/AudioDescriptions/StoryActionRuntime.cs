@@ -23,6 +23,8 @@ public sealed class StoryActionRuntime
     private readonly object gate = new();
     private readonly HashSet<(int Actor, uint Address, int Animation)> described = [];
     private readonly HashSet<StorySceneAction> describedScenes = [];
+    // A book toggles: describe each change once, allowing later opposite changes.
+    private readonly Dictionary<char, bool> bookStates = [];
     private readonly Queue<StoryNarration> held = new();
     private string? lastHeld;
     private (uint Context, uint Data, uint Actors, uint Field, int Scene, int Script)? owner;
@@ -158,7 +160,7 @@ public sealed class StoryActionRuntime
                 {
                     StopNarration();
                     if (!enabled || observedEpoch != epoch) return;
-                    held.Clear(); lastHeld = null; described.Clear(); describedScenes.Clear(); owner = nextOwner;
+                    held.Clear(); lastHeld = null; described.Clear(); describedScenes.Clear(); bookStates.Clear(); owner = nextOwner;
                 }
                 lastControl = before.Control;
                 // State 0 also covers a textbox that the native engine aborted
@@ -184,14 +186,18 @@ public sealed class StoryActionRuntime
                     // Exact script digest, instruction, story gate, visible
                     // subjects and native completion identify this scene action.
                     // Scene-load control flags need not be guessed here.
-                    if (!completeScene!(scene) || observedEpoch != epoch || !enabled ||
-                        describedScenes.Contains(scene.Action)) return;
+                    if (!completeScene!(scene) || observedEpoch != epoch || !enabled) return;
+                    var toggle = StoryActionCatalog.BookToggle(scene.Action);
+                    if (toggle is { } book ? bookStates.TryGetValue(book.Book, out var open) && open == book.Opens
+                        : describedScenes.Contains(scene.Action)) return;
                     var sceneText = StoryActionCatalog.DescribeScene(scene, characterName);
                     if (observedEpoch != epoch || !enabled) return;
-                    describedScenes.Add(scene.Action);
+                    if (toggle is { } changed) bookStates[changed.Book] = changed.Opens;
+                    else describedScenes.Add(scene.Action);
                     Log($"Story scene action: scene={location.Scene}; script={location.ScriptId}; actor={location.Actor}; " +
                         $"pc=0x{location.Address:X}; action={scene.Action}; text={sceneText}");
-                    Queue(StoryVoiceCueCatalog.ForScene(scene, sceneText), before.TextboxOpen, observedEpoch);
+                    Queue(StoryVoiceCueCatalog.IsRecorded(scene.Action) ? StoryVoiceCueCatalog.ForScene(scene, sceneText)
+                        : new StoryNarration(sceneText, Unrecorded, sceneText), before.TextboxOpen, observedEpoch);
                     return;
                 }
                 if (!before.ActorState.Drawn || before.ActorState.OnScreen != true) return;
@@ -243,12 +249,16 @@ public sealed class StoryActionRuntime
     private void Reset()
     {
         epoch++; owner = null; lastControl = null; held.Clear(); lastHeld = null; described.Clear(); describedScenes.Clear();
+        bookStates.Clear();
         StopNarration();
     }
 
+    // No recording exists for this description yet: speak it, never ask the voice pack.
+    private const string Unrecorded = "";
+
     private void Emit(StoryNarration cue)
     {
-        if (narrate is not null) narrate(cue);
+        if (narrate is not null && cue.CueId != Unrecorded) narrate(cue);
         else say(cue.Text);
     }
 
