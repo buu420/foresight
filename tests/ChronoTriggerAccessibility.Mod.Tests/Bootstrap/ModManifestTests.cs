@@ -50,7 +50,7 @@ public sealed class ModManifestTests
         Assert.Equal("chrono.trigger.accessibility", root.GetProperty("ModId").GetString());
         Assert.Equal("Foresight (Beta)", root.GetProperty("ModName").GetString());
         Assert.Equal("Buu420", root.GetProperty("ModAuthor").GetString());
-        Assert.Equal("0.3.61", root.GetProperty("ModVersion").GetString());
+        Assert.Equal("0.3.62", root.GetProperty("ModVersion").GetString());
         Assert.Equal("Foresight beta, registry-free installation: screen-reader menus, dialogue, battle information, navigation and bike-race feedback for Chrono Trigger. Navigation: U/O categories, J/L destinations, K repeat, I guidance, P auto-walk, F8 footsteps. Controller: R3 menu, L1/LB and R1/RB categories, D-pad Up/Down destinations, Square/X auto-walk, Cross/A guidance, Circle/B close. Battle: 1/2/3 inspect party member, Shift+H HP, M MP, K repeat. Bike race: Up/Down steer, game Dash action boosts, K or R3 reads status; high/low/middle tones mean Johnny above/below/aligned. See README for beta limitations.", root.GetProperty("ModDescription").GetString());
         Assert.Equal("ChronoTriggerAccessibility.Mod.dll", root.GetProperty("ModDll").GetString());
         Assert.Equal(string.Empty, root.GetProperty("ModIcon").GetString());
@@ -74,7 +74,7 @@ public sealed class ModManifestTests
         Assert.Equal("https://github.com/buu420/foresight", root.GetProperty("ProjectUrl").GetString());
 
         Assert.Equal(
-            "007DB68D7F8341966A859D1440761E65F91B884030B746965EB8AF2B34AD5C0A",
+            "159D987B885904E8ECE7BCD1BC5D189328E6B62DBAA17D666A2876E2D023302E",
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))));
     }
 

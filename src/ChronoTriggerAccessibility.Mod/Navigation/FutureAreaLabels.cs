@@ -39,10 +39,13 @@ public static class FutureAreaLabels
         // Native Confirm markers for the bike remain available on later visits.
         if (IsBike(scene, actor.Index)) return "Jet bike";
         if (scene == 465 && actor.Index == 15) return "Door to the main room";
+        // These map-drawn seals remain on later visits. Their native local
+        // removes the marker as soon as the doorway has actually opened.
+        if (SealedFieldTargets.IsDoor(scene, actor.Index))
+            return SealedFieldTargets.DoorClosed(scene, actor, state) ? "Sealed door" : null;
         if (state is not { Point: >= 51 and <= 77 }) return null;
         return (scene, actor.Index, state.Point) switch
         {
-            (208, 8, _) or (210, 17, _) or (217, 9, _) => "Sealed door",
             (210, 16, _) or (214, 12, _) or (226, 14, _) => "Enertron",
             (216, 8, _) => "Left door console",
             (217, 8, _) => "Door console",

@@ -117,7 +117,7 @@ public sealed class StoryBookActionRuntimeTests
     [Fact]
     public void RecordedVoicePackIncludesSevenVerifiedBookAndPassageCues()
     {
-        Assert.Equal(153, StoryVoiceCueCatalog.All.Count);
+        Assert.Equal(156, StoryVoiceCueCatalog.All.Count);
         Assert.Equal(7, StoryVoiceCueCatalog.All.Count(cue => cue.Id.Contains("book") || cue.Id.Contains("passage")));
         Assert.True(StoryVoiceCueCatalog.IsRecorded(StorySceneAction.BookAOpens));
         Assert.True(StoryVoiceCueCatalog.IsRecorded(StorySceneAction.PassageOpens));

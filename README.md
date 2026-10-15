@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.61 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.62 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.61 gives Enhasa and Kajar books stable labels, native guidance and recorded descriptions of opening, closing and their visible effects in the creator's voice. Skyway and Land Bridge teleport pads and End of Time pillars are in Interactable Objects; room doorways remain in Exits. It also names the unnamed Skyway room, identifies the small white dolls, and conceals bookcase passages until they open. Earlier fixes are retained. See [this build's changes and testing notes](docs/releases/v0.3.61.md).
+Version 0.3.62 names verified Nu NPCs, identifies closed sealed doors and the Forest Ruins pyramid, and adds the available Epoch dock at the End of Time. It stops audited unintroduced optional requests from appearing remotely, keeps passage directions in Story Events, and adds Nu actions and the Epoch movie in the creator's approved voice. Earlier fixes and recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.62.md).
 
 ## Install the beta download
 
@@ -36,7 +36,7 @@ The mod reads startup/main menus, Settings, Extras, New Game/name entry, confirm
 
 Minigames are not comprehensively accessible. Some icons, battle effects and result states remain unverified. Story-action descriptions cover selected native character gestures and seven opening/fair actions; they are not a complete description of every scene or NPC. Routes can fail or get stuck in live story states. Automatic walking does not fight, choose dialogue or press Confirm for you.
 
-The public download includes the recorded opening, supported story descriptions, and narration for movies 002–004: Ayla's rescue, the Magic Cave, and the approach to Magus. On verified original movie files, these three narration tracks play in the native movie session alongside the original soundtrack, without ducking. A verified separate movie narration pack takes precedence. A working opening movie pack suppresses the recorded opening fallback. Game movies, replacement movie files, the original voice recording and Fish credentials are excluded. The added movie tracks are audio only; they have no in-game braille transcript. See [movie narration details and scripts](docs/movie-narration-0356.md).
+The public download includes the recorded opening, supported story descriptions, and narration for movies 002–004 and 006: Ayla's rescue, the Magic Cave, the approach to Magus, and the Epoch's first travel. On verified original movie files, these four narration tracks play in the native movie session alongside the original soundtrack, without ducking. A verified separate movie narration pack takes precedence. A working opening movie pack suppresses the recorded opening fallback. Game movies, replacement movie files, the original voice recording and Fish credentials are excluded. The added movie tracks are audio only; they have no in-game braille transcript. See [movie narration details](docs/movie-narration-0356.md) and [Epoch narration timing](docs/movie-narration-0362.md).
 
 Controller navigation was tested in game and reported working by the user. This does not verify every controller or Steam Input configuration. The keyboard layout used for testing is WASD or arrows to move, X to confirm, C to cancel and V for the game menu; those game bindings remain configurable. All mod hotkeys and controller buttons are listed below.
 

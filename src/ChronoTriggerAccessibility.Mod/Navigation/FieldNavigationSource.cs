@@ -126,11 +126,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var currentName = actor.IsPlayerClass && actor.VisualIndex is >= 0 and < 7
                 ? characterName?.Invoke(actor.VisualIndex) : null;
+            var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) : null;
             var label = book ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
-                ZealFieldLabels.Actor(field.SceneId, actor) ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
+                ZealFieldLabels.Actor(field.SceneId, actor) ?? nu ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
                 actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
@@ -176,7 +177,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     actor.Index is 12 or 13 && actor.ClassTag == 5 && actor.VisualIndex == 134 &&
                     story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false,
                 actorSlot: actor.Index);
-            if (label is null) genericIds.Add(id);
+            if (label is null || nu is not null) genericIds.Add(id);
             foreach (var (standIn, same) in InteractionProxies(actor))
                 if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
                     : $"actor:{standIn.Index}:{standIn.ClassTag}:{standIn.VisualIndex}"));
@@ -212,6 +213,18 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 TileVisible(save.TileX, save.TileY), guideAvailable: guideActive,
                 instruction: FieldSavePoints.Instruction, arrivalInstruction: FieldSavePoints.ArrivalInstruction);
         }
+        if (field.SceneIdCoherent && SealedFieldTargets.PyramidClosed(field.SceneId, story) && map.Width >= 12 && map.Height > 18)
+        {
+            // Atel0423 draws the pyramid in tiles 4..11,6..13. It has no actor
+            // or Confirm handler: its loop watches the leader's tile Y == 18.
+            // Offer real floor in front of the visible structure; the native
+            // story guard decides whether walking there starts any sequence.
+            var approaches = Enumerable.Range(4, 8).SelectMany(x => At(x * 256 + 128, 18 * 256 + 128))
+                .Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+            Add(SealedFieldTargets.PyramidId, "Pyramid", NavigationCategory.Objects,
+                Position(8 * 256, 10 * 256), approaches, viewport.Intersects(4 * 256, 6 * 256, 12 * 256, 14 * 256),
+                guideAvailable: guideActive, instruction: "Approach the front of the pyramid.");
+        }
         if (field.SceneIdCoherent)
         foreach (var actor in field.Actors)
         {
@@ -219,6 +232,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
+            // Actor36's native A4 branch has an operand the older catalog missed.
+            // Its boarding choice is described only by the verified dock provider.
+            if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
+            var sealedDoor = SealedFieldTargets.IsDoor(field.SceneId, actor.Index);
+            var marker = SealedFieldTargets.DoorMarker(field.SceneId, actor.Index);
+            if (sealedDoor && (!SealedFieldTargets.DoorClosed(field.SceneId, actor, story) ||
+                actor.Index != marker && field.Actors.Any(a => a.Index == marker && InsideMap(a) &&
+                    SealedFieldTargets.DoorClosed(field.SceneId, a, story)))) continue;
+            var landmarkId = $"landmark:{marker}";
             var book = actor.ClassTag == 7 ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
             var label = book ?? teleportPad ?? EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
@@ -239,12 +261,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     scripted.FirstOrDefault(a => a.Kind == "Warp") is { } warp
                         ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery");
             if (label is null) continue;
-            if (generic) genericIds.Add($"landmark:{actor.Index}");
+            if (generic) genericIds.Add(landmarkId);
             var position = Position(actor.FineX, actor.FineY);
             var touch = knownTouch || metadata is { Touch: true };
             var approaches = touch
                 ? TouchApproach(actor)
                 : ActorApproach(actor, position);
+            if (sealedDoor) approaches = Anchors(actor).Where(a => SealedFieldTargets.DoorClosed(field.SceneId, a, story))
+                .SelectMany(a => ActorApproach(a, Position(a.FineX, a.FineY))).Distinct().ToArray();
             var terrainContact = (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
             if (terrainContact)
@@ -267,17 +291,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var scriptedExit = scripted.Any(a => a.Kind == "Warp");
             var bike = FutureAreaLabels.IsBike(field.SceneId, actor.Index);
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
-                ProtectContactPassage($"landmark:{actor.Index}", actor);
-            Add($"landmark:{actor.Index}", label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
+                ProtectContactPassage(landmarkId, actor);
+            Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                instruction: teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
+                instruction: sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
+                    teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
                     ? "Teleportation is currently unavailable." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                    sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
                     field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
-            if (!touch && !terrainContact) markerAnchors[$"landmark:{actor.Index}"] = Anchors(actor);
+            if (!touch && !terrainContact) markerAnchors[landmarkId] = Anchors(actor);
         }
         // A counter that only runs its keeper's script is the keeper's destination, already
         // offered under the keeper's name with the counter's reach. A visible character that
@@ -327,6 +353,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var actor in field.Actors)
         {
             if (!InsideMap(actor)) continue;
+            if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             // These verified switches are scenery. Their concealed battle
             // outcomes must not create a second, revealing Enemies row.
@@ -484,6 +511,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 approaches, visible, true);
             discovered[passage.Id] = target;
             (passage.StoryOnly ? storyAnchors : targets).Add(target);
+        }
+        foreach (var dock in EpochDockTargets.Build(field, map, viewport, story))
+        {
+            touchGoals.Add((EpochDockTargets.Actor, dock.ApproachPoints));
+            Add(dock.Id, dock.Label, dock.Category, dock.Position, dock.ApproachPoints, dock.Visible,
+                guideAvailable: dock.GuideAvailable, instruction: dock.Instruction,
+                arrivalInstruction: dock.ArrivalInstruction, contactPosition: dock.ContactPosition,
+                actorSlot: dock.ActorSlot);
         }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);

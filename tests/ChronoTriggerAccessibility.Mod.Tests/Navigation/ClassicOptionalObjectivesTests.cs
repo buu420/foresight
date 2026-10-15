@@ -37,9 +37,9 @@ public sealed class ClassicOptionalObjectivesTests
     [Fact]
     public void FlightQuestsDoNotWaitForTheBlackOmenCutscene()
     {
-        Assert.Null(Quest("sun", State(0xD1)));
-        Assert.NotNull(Quest("sun", State(0xD2)));
-        Assert.NotNull(Quest("cyrus", State(0xD2)));
+        Assert.Null(Quest("sun", State(0xD1, (0x13A, 1))));
+        Assert.NotNull(Quest("sun", State(0xD2, (0x13A, 1))));
+        Assert.NotNull(Quest("cyrus", State(0xD2, (0x19E, 0x10))));
     }
 
     [Fact]
@@ -52,6 +52,72 @@ public sealed class ClassicOptionalObjectivesTests
         var planted = State(0xD4, (0xF7, 2), (0x1A3, 1), (0x19E, 1));
         Assert.Equal("full:quest:desert:recover", Quest("desert", planted)!.Id);
         Assert.Null(Quest("desert", State(0xD4, (0x19E, 3))));
+    }
+
+    [Theory]
+    [InlineData(0xAE, 496, 0)]
+    [InlineData(0xAE, 496, 2)]
+    [InlineData(0xAE, 464, 2)]
+    [InlineData(0xD4, 497, 2)]
+    [InlineData(0xAE, 158, 2)]
+    [InlineData(0xAE, 401, 0)]
+    [InlineData(0xD4, 424, 0)]
+    public void SaplingConsentDoesNotIntroduceFionasRequest(int point, int scene, int sapling)
+    {
+        Assert.Null(Quest("desert", State(point, (0xF7, sapling)), scene));
+    }
+
+    [Theory]
+    [InlineData(496)]
+    [InlineData(497)]
+    [InlineData(464)]
+    public void HeardFionaRequestRemainsActiveBeforeFlight(int scene)
+    {
+        var heard = State(0xAE, (0xF7, 2), (0x1AD, 0x80));
+        Assert.Equal("full:quest:desert:retinite", Quest("desert", heard, scene)!.Id);
+    }
+
+    [Theory]
+    [InlineData("cyrus", 496)]
+    [InlineData("sun", 496)]
+    [InlineData("geno", 496)]
+    [InlineData("rainbow", 496)]
+    [InlineData("ozzie", 496)]
+    [InlineData("cyrus", 464)]
+    [InlineData("sun", 464)]
+    [InlineData("geno", 464)]
+    [InlineData("rainbow", 464)]
+    [InlineData("ozzie", 464)]
+    public void FlightAloneDoesNotIntroduceRemoteOptionalQuests(string family, int scene) =>
+        Assert.Null(Quest(family, State(0xD2), scene));
+
+    [Theory]
+    [InlineData("cyrus", 188, "ask-tools")]
+    [InlineData("sun", 251, "battle")]
+    [InlineData("geno", 248, "console")]
+    [InlineData("rainbow", 188, "toma")]
+    [InlineData("ozzie", 183, "flea")]
+    public void UnintroducedClassicQuestsKeepTheirNativeLocalInteraction(string family, int scene, string suffix) =>
+        Assert.Equal("full:quest:" + family + ":" + suffix, Quest(family, State(0xD2), scene)!.Id);
+
+    [Theory]
+    [InlineData("cyrus", 0x19E, 0x10, "descendant")]
+    [InlineData("sun", 0x13A, 1, "moon-stone")]
+    [InlineData("geno", 0x13C, 1, "switch-left")]
+    [InlineData("rainbow", 0x1A0, 2, "tomb")]
+    [InlineData("ozzie", 0x1A1, 1, "flea")]
+    public void NativeIntroductionsKeepAcceptedOptionalQuestsAvailable(string family, int index, int flag, string suffix) =>
+        Assert.Equal("full:quest:" + family + ":" + suffix, Quest(family, State(0xD2, (index, flag)))!.Id);
+
+    [Fact]
+    public void UnheardDesertRequestPreservesTheNativeLocalFiona()
+    {
+        var source = new FieldNavigationSource(new NoMemory(), _ => { });
+        var state = Locals(State(0xAE, (0xF7, 2)));
+        var fiona = ActorSnapshot(8, 10 * 256, 10 * 256) with { ClassTag = 4, VisualIndex = 73 };
+        var frame = source.Build(Field(158, 8 * 256, 10 * 256, fiona), Map(), new(0, 0, 256, 256), [], state);
+        Assert.Contains(frame.Targets, t => t.ActorSlot == 8 && t.Category == NavigationCategory.People);
+        Assert.DoesNotContain(frame.Targets, t => t.Id.StartsWith("story:full:quest:desert:"));
     }
 
     [Fact]
@@ -112,7 +178,7 @@ public sealed class ClassicOptionalObjectivesTests
     [Fact]
     public void GenoUsesBothDollsAndTheActualMotherBrainCompletionFlag()
     {
-        Assert.NotNull(Quest("geno", State(0xD4, (0x13F, 0x80))));
+        Assert.NotNull(Quest("geno", State(0xD4, (0x13F, 0x80)), 248));
         Assert.Null(Quest("geno", State(0xD4, (0x13B, 0x10))));
         Assert.Equal("full:quest:geno:atropos", Quest("geno", State(0xD4, (0x13C, 7)))!.Id);
         Assert.Equal("full:quest:geno:pedestal-left", Quest("geno", State(0xD4, (0x13C, 7), (0x13B, 0x20)))!.Id);
@@ -155,7 +221,8 @@ public sealed class ClassicOptionalObjectivesTests
     [Fact]
     public void TomaTabIsNotThePromiseAndShellHasItsOwnBossStep()
     {
-        Assert.Equal("full:quest:rainbow:toma", Quest("rainbow", State(0xD4, (0x1AC, 0x10)))!.Id);
+        Assert.Null(Quest("rainbow", State(0xD4, (0x1AC, 0x10))));
+        Assert.Equal("full:quest:rainbow:toma", Quest("rainbow", State(0xD4, (0x1AC, 0x10)), 188)!.Id);
         Assert.Equal("full:quest:rainbow:tomb", Quest("rainbow", State(0xD4, (0x1A0, 2), (0x1AC, 0x10)))!.Id);
         Assert.Equal("full:quest:rainbow:shell", Quest("rainbow", State(0xD4, (0x1D2, 0x40)))!.Id);
         Assert.Equal("full:quest:rainbow:leave-shell", Quest("rainbow", State(0xD4, (0x1D2, 0x40), (0x1AF, 2)), 197)!.Id);

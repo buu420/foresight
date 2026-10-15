@@ -1,0 +1,70 @@
+{
+  "provider": "Fish Audio",
+  "voice": "Foresight narrator",
+  "referenceSha256": "66e41e7efeb37965426f45b54898007b85d44c1cb4ff5d67927f1d2b62191a6c",
+  "films": [
+    {
+      "movie": "006",
+      "duration_seconds": 25.0583,
+      "cues": [
+        {
+          "id": "ct-006-001",
+          "start": 0.8,
+          "end": 5.4,
+          "text": "In a metal hangar, the Epoch waits.",
+          "duration": 2.319042,
+          "sha256": "d95abf62cc831a99e09b59448216648d44e70b251a516f2f79dfd772eba34778"
+        },
+        {
+          "id": "ct-006-002",
+          "start": 5.7,
+          "end": 9.7,
+          "text": "The red-haired boy leaps into the cockpit.",
+          "duration": 2.783458,
+          "sha256": "74ee99a573798e4b5f7fe5e6437239cf94eb453121b989686f7f38942b064552"
+        },
+        {
+          "id": "ct-006-003",
+          "start": 10.0,
+          "end": 12.4,
+          "text": "He grips the controls.",
+          "duration": 1.483125,
+          "sha256": "a1163c4b397453104b5cbe70ced3d0654636682a5db2e1368ce9d070011a64f1"
+        },
+        {
+          "id": "ct-006-004",
+          "start": 12.6,
+          "end": 16.6,
+          "text": "The engine blasts a yellow-white flame.",
+          "duration": 2.458375,
+          "sha256": "d505c943d71ef25faa251b6ff30a41f72d3d02e21925c65ed1cca409e2731abf"
+        },
+        {
+          "id": "ct-006-005",
+          "start": 17.0,
+          "end": 18.4,
+          "text": "He smiles.",
+          "duration": 1.158042,
+          "sha256": "9c3f2c7361c7aaee69ef013827e8f3c561914e5fe99da83a1013ac1ce9a914ce"
+        },
+        {
+          "id": "ct-006-006",
+          "start": 18.5,
+          "end": 21.85,
+          "text": "Three thrusters flare orange, then yellow.",
+          "duration": 3.294292,
+          "sha256": "7fcd26a1ad9fa0e1cce80c4b6f30386704c6d47ac04b6331c8a028639b1aeabd"
+        },
+        {
+          "id": "ct-006-007",
+          "start": 21.9,
+          "end": 25.0,
+          "text": "A flash. The hangar is empty.",
+          "duration": 2.55125,
+          "sha256": "c3e2f6e495b174e5203ce412d292c2722344458c80e7bc07ad1b6f950bb49b68"
+        }
+      ],
+      "decoded_sha256": "95f627afe3da97d9924cd96349329f1c0f488adef1d2bab4d5f36a0481782509"
+    }
+  ]
+}

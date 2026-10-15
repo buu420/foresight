@@ -31,6 +31,33 @@ public sealed class BonusStoryObjectivesTests
     private static void Is(string expected, FullStoryObjective? objective) =>
         Assert.Equal("bonus:sanctum:" + expected, objective?.Id);
 
+    [Theory]
+    [InlineData("hammer")]
+    [InlineData("middle-forest")]
+    [InlineData("smith")]
+    [InlineData("lumicite")]
+    public void CompletedForestDoesNotIntroduceUnacceptedRemoteRequests(string family) =>
+        Assert.Null(Quest(family, State()));
+
+    [Fact]
+    public void UnvisitedLostSanctumIsLeftToItsNativeEntrance()
+    {
+        var s = State((0x1F, 0), (0x12, 0), (0x11, 0));
+        Assert.Empty(BonusStoryObjectives.Build(496, s));
+    }
+
+    [Theory]
+    [InlineData("smith", 0x5023)]
+    [InlineData("lumicite", 0x5024)]
+    public void FindingAQuestItemDoesNotRevealAnUnheardSmithRequest(string family, int item) =>
+        Assert.Null(Quest(family, Items(State(), item)));
+
+    [Fact]
+    public void AcceptedHammerRequestRemainsAvailableFromTheWorld()
+    {
+        Is("hammer:sand", Quest("hammer", State((0x10, 1))));
+    }
+
     [Fact]
     public void UnreadableStateAndUnrelatedRoomsDoNotInventQuests()
     {
@@ -38,7 +65,8 @@ public sealed class BonusStoryObjectivesTests
         Assert.Empty(BonusStoryObjectives.Build(496, new(0xD4, false)));
         Assert.Empty(BonusStoryObjectives.Build(226, State()));
         Assert.Empty(BonusStoryObjectives.Build(496, State() with { Point = 0xD1 }));
-        Assert.NotEmpty(BonusStoryObjectives.Build(496, State()));
+        Assert.Empty(BonusStoryObjectives.Build(496, State()));
+        Assert.NotEmpty(BonusStoryObjectives.Build(496, State((0x10, 1))));
         Assert.NotEmpty(BonusStoryObjectives.Build(583, State() with { Point = 0xD1 }));
     }
 
@@ -55,7 +83,7 @@ public sealed class BonusStoryObjectivesTests
     [Fact]
     public void GoldenHammerHasSandSaplingChaseAndHandInSteps()
     {
-        Is("hammer:request", Quest("hammer", State()));
+        Is("hammer:request", Quest("hammer", State(), 583));
         Is("hammer:sand", Quest("hammer", State((0x10, 1))));
         Is("hammer:sapling", Quest("hammer", Items(State((0x10, 1), (0x12, 0x48)), 0x5019)));
         Is("hammer:tracks", Quest("hammer", State((0x10, 1), (0x12, 0x18))));
@@ -78,7 +106,7 @@ public sealed class BonusStoryObjectivesTests
     public void PrismRequiresTheHammerAndUsesTheActualNuAndSummit()
     {
         Assert.Null(Quest("prism", State()));
-        Is("prism:request", Quest("prism", State((0x10, 3))));
+        Is("prism:request", Quest("prism", State((0x10, 3)), 583));
         Is("prism:guardian", Quest("prism", State((0x10, 7))));
         Is("prism:collect", Quest("prism", State((0x10, 7), (0x1F, 0x21))));
         Is("prism:deliver", Quest("prism", Items(State((0x10, 7)), 0x501B)));
@@ -103,9 +131,9 @@ public sealed class BonusStoryObjectivesTests
     [Fact]
     public void SaintstoneOfferRequiresRecoveringAPrematurelyPlacedPrismastone()
     {
-        Is("saint:request", Quest("saint", Items(State((0x10, 0x0F)), 0x501B)));
-        Is("saint:recover-left", Quest("saint", State((0x10, 0x0F), (0x1F, 0x41))));
-        Is("saint:recover-right", Quest("saint", State((0x10, 0x0F), (0x1F, 0x81))));
+        Is("saint:request", Quest("saint", Items(State((0x10, 0x0F)), 0x501B), 583));
+        Is("saint:recover-left", Quest("saint", State((0x10, 0x0F), (0x1F, 0x41)), 584));
+        Is("saint:recover-right", Quest("saint", State((0x10, 0x0F), (0x1F, 0x81)), 584));
         Assert.Null(Quest("saint", State((0x10, 0x0F), (0x1F, 0x41)) with { Inventory = null }));
         Assert.Null(Quest("saint", State((0x10, 0x0F))));
     }
@@ -113,7 +141,7 @@ public sealed class BonusStoryObjectivesTests
     [Fact]
     public void MiddleForestCompletionSurvivesLaterMarkQuestAndRespawnFlags()
     {
-        Is("middle-forest:request", Quest("middle-forest", State()));
+        Is("middle-forest:request", Quest("middle-forest", State(), 585));
         Is("middle-forest:group-4", Quest("middle-forest", State((0x18, 1), (0x1C, 7))));
         Is("middle-forest:report", Quest("middle-forest", State((0x18, 2))));
         Assert.Null(Quest("middle-forest", State((0x18, 4), (0x1C, 0))));
@@ -146,7 +174,7 @@ public sealed class BonusStoryObjectivesTests
     public void BridgeFoodAndDefenseAreSeparatePrerequisites()
     {
         Is("bridge:revisit", Quest("bridge", State((0x19, 0x0A))));
-        Is("bridge:request", Quest("bridge", State((0x19, 0x0A), (0x1A, 0x20))));
+        Is("bridge:request", Quest("bridge", State((0x19, 0x0A), (0x1A, 0x20)), 585));
         Is("bridge:rescue", Quest("bridge", State((0x19, 0x1A), (0x16, 2))));
         Is("bridge:help", Quest("bridge", State((0x19, 0x1A), (0x16, 2), (0x1D, 2))));
         Is("bridge:lunch", Quest("bridge", State((0x19, 0x1A), (0x16, 2), (0x1D, 2), (0x15, 8))));
@@ -163,16 +191,16 @@ public sealed class BonusStoryObjectivesTests
     [Fact]
     public void WaystoneCaveDefenseAndTowerRetireConsumedItemsPermanently()
     {
-        Is("waystone:hint", Quest("waystone", Items(State((0x10, 0x3F)), 0x501C)));
+        Is("waystone:hint", Quest("waystone", Items(State((0x10, 0x3F)), 0x501C), 583));
         Is("waystone:place", Quest("waystone", Items(State((0x10, 0x3F), (0x31, 1)), 0x501C)));
         Is("waystone:collect", Quest("waystone", State((0x10, 0x3F), (0x12, 0x28))));
-        Is("cave:request", Quest("cave", Items(State((0x10, 0x3F), (0x12, 0x28), (0x1F, 5)), 0x501E)));
+        Is("cave:request", Quest("cave", Items(State((0x10, 0x3F), (0x12, 0x28), (0x1F, 5)), 0x501E), 583));
         Is("cave:light", Quest("cave", Items(State((0x10, 0x7F)), 0x501E)));
         Is("cave:fortress", Quest("cave", State((0x10, 0x7F), (0x13, 1))));
         Is("defend:leaders", Quest("defend", State((0x10, 0x7F), (0x11, 9))));
         Is("defend:report", Quest("defend", State((0x10, 0x7F), (0x11, 9), (0x14, 2))));
         Assert.Null(Quest("defend", State((0x11, 11))));
-        Is("tower:request", Quest("tower", State((0x19, 0x20))));
+        Is("tower:request", Quest("tower", State((0x19, 0x20)), 585));
         Is("tower:guardians", Quest("tower", State((0x19, 0x60))));
         Is("tower:idols", Quest("tower", State((0x19, 0x60), (0x1F, 9))));
         Is("tower:report", Quest("tower", State((0x19, 0x60), (0x1B, 1))));
@@ -182,8 +210,8 @@ public sealed class BonusStoryObjectivesTests
     [Fact]
     public void SmithRewardsUsePersistentCompletionRatherThanHeldQuestItems()
     {
-        Is("smith:deliver", Quest("smith", Items(State(), 0x5023)));
-        Is("lumicite:deliver", Quest("lumicite", Items(State(), 0x5024)));
+        Is("smith:deliver", Quest("smith", Items(State((0x14, 0x10)), 0x5023)));
+        Is("lumicite:deliver", Quest("lumicite", Items(State((0x14, 0x40)), 0x5024)));
         Assert.Null(Quest("smith", State((0x14, 0x20))));
         Assert.Null(Quest("lumicite", State((0x14, 0x80))));
         Assert.Null(Quest("lumicite", State((0x14, 0x40)))); // No invented random-spawn position.

@@ -94,7 +94,7 @@ public sealed class FieldContentCoverageTests
             {
                 var frame = Build(row.Scene, [actor], state, Open(row.X, row.Y));
                 // A battle the encounter layer offers under Enemies is offered too.
-                if (frame.Targets.Any(t => t.Id == Id(actor) || t.Id == $"actor-encounter:{actor.Index}")) { offered = true; break; }
+                if (frame.Targets.Any(t => t.Id == Id(actor, row.Scene) || t.Id == $"actor-encounter:{actor.Index}")) { offered = true; break; }
             }
             if (!offered) missing.Add($"{row.Scene}:{row.Actor}");
         }
@@ -177,8 +177,8 @@ public sealed class FieldContentCoverageTests
             var map = Open(group.Members.Max(m => m.X), group.Members.Max(m => m.Y));
             // Markers the field layer does not offer on their own (battles, which the
             // encounter layer owns) have nothing to merge.
-            if (!members.All(m => Build(group.Scene, [m], state, map).Targets.Any(t => t.Id == Id(m)))) continue;
-            var rows = Build(group.Scene, members, state, map).Targets.Where(t => members.Any(m => t.Id == Id(m))).ToArray();
+            if (!members.All(m => Build(group.Scene, [m], state, map).Targets.Any(t => t.Id == Id(m, group.Scene)))) continue;
+            var rows = Build(group.Scene, members, state, map).Targets.Where(t => members.Any(m => t.Id == Id(m, group.Scene))).ToArray();
             var row = Assert.Single(rows);
             merged++;
             foreach (var member in members)
@@ -200,9 +200,9 @@ public sealed class FieldContentCoverageTests
             var members = group.Members.Select(Snapshot).Select(m => m with { ActivationBinding = 0x80 }).ToArray();
             var state = States(group.Scene, members[0]).First();
             var map = Open(group.Members.Max(m => m.X), group.Members.Max(m => m.Y));
-            if (!members.All(m => Build(group.Scene, [m], state, map).Targets.Any(t => t.Id == Id(m)))) continue;
+            if (!members.All(m => Build(group.Scene, [m], state, map).Targets.Any(t => t.Id == Id(m, group.Scene)))) continue;
             var frame = Build(group.Scene, members, state, map);
-            var row = Assert.Single(frame.Targets, t => members.Any(m => t.Id == Id(m)));
+            var row = Assert.Single(frame.Targets, t => members.Any(m => t.Id == Id(m, group.Scene)));
             var player = FullGameNavigationTests.Actor(0, 384, 384, true) with { ClassTag = 0 };
             FieldActorSnapshot[] actors = [player, .. members];
             IReadOnlyList<NavigationDirection> Ready(NavigationPoint p) => row.ConfirmAt(p)?.Invoke(p) ?? [];
@@ -368,8 +368,16 @@ public sealed class FieldContentCoverageTests
         }
     }
 
-    private static string Id(FieldActorSnapshot actor) =>
-        actor.ClassTag == 7 ? $"landmark:{actor.Index}" : $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
+    private static string Id(FieldActorSnapshot actor, int scene = -1) =>
+        actor.ClassTag != 7 ? $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}" :
+        // The Keeper's Dome forwarding markers share the actual handler's stable
+        // destination id, including when only that forwarding slot is captured.
+        (scene, actor.Index) switch
+        {
+            (241, 12) => "landmark:13", (242, 14) => "landmark:15",
+            (464, 36) => EpochDockTargets.Id,
+            _ => $"landmark:{actor.Index}",
+        };
 
     private static FieldActorSnapshot Snapshot(Placed p) =>
         FullGameNavigationTests.Actor(p.Actor, p.X, p.Y) with
@@ -402,6 +410,12 @@ public sealed class FieldContentCoverageTests
     /// <summary>States satisfying each catalogued action of the actor in turn, then none.</summary>
     private static IEnumerable<FieldStoryState> States(int scene, FieldActorSnapshot actor)
     {
+        // Atel0283's A4 branch was mis-sized by the old catalog. Exercise the
+        // independently audited parked-Epoch state instead of solving that
+        // catalog's unrelated encounter guards for this one native dock marker.
+        if (scene == 464 && actor.Index == 36)
+            yield return new FieldStoryState(174, true)
+            { Globals = new Dictionary<int, int> { [0xAB] = 0x80 } };
         var info = GameNavigationCatalog.ActorInfo(scene, actor);
         foreach (var action in info?.Actions.OrderBy(a => a.Touch) ?? Enumerable.Empty<GameNavigationCatalog.Action>())
             if (Solve(action.Guards) is { } state) yield return state;

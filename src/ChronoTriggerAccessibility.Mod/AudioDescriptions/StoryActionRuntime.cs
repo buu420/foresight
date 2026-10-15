@@ -101,7 +101,7 @@ public sealed class StoryActionRuntime
                         Flush(observedEpoch);
                         // An ordinary NPC interaction leaves control enabled.
                         // Cutscene textbox pages do not end the scripted episode.
-                        if (enabled && epoch == observedEpoch && lastControl == 1) described.Clear();
+                        if (enabled && epoch == observedEpoch && lastControl == 1) RearmInteraction();
                         break;
                     case BattleStarted or StartupSceneEntered or ScreenEntered or MenuPresented or MenuContentPresented:
                         Reset();
@@ -122,7 +122,7 @@ public sealed class StoryActionRuntime
         // capture or an animation interpretation on each scheduler instruction.
         var interesting = opcode is 0xAA or 0xAB ||
             (controlRestored is not null && opcode == 0xE3) ||
-            (matchScene is not null && opcode is 0xE5 or 0xA0 or 0x96 or 0xAC or 0xB7 or 0xAE);
+            (matchScene is not null && opcode is 0xE5 or 0xA0 or 0x96 or 0xAC or 0xB7 or 0xAE or 0x92);
         try
         {
             lock (gate)
@@ -175,7 +175,7 @@ public sealed class StoryActionRuntime
                     lastControl = null;
                     if (controlRestored?.Invoke(before) == true && enabled && observedEpoch == epoch)
                     {
-                        described.Clear(); lastControl = 1;
+                        RearmInteraction(); lastControl = 1;
                     }
                     return;
                 }
@@ -244,6 +244,16 @@ public sealed class StoryActionRuntime
     {
         lastHeld = null;
         while (enabled && epoch == observedEpoch && held.TryDequeue(out var cue)) Emit(cue);
+    }
+
+    private void RearmInteraction()
+    {
+        described.Clear();
+        // The Nu's native Confirm handler wakes it and lets it settle again on
+        // every conversation. Opening set pieces and its first approach remain
+        // once per scene; only these repeatable poses follow the episode boundary.
+        describedScenes.Remove(StorySceneAction.NuRaisesArms);
+        describedScenes.Remove(StorySceneAction.NuSettlesDown);
     }
 
     private void Reset()

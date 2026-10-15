@@ -80,6 +80,59 @@ public sealed class FullStoryTargetsTests
         Assert.Equal(bound.Id, missing.Id);
     }
 
+    [Theory]
+    [InlineData(0x19E, 0x10, 62, "cyrus:descendant")]
+    [InlineData(0x1AD, 0x80, 161, "desert:retinite")]
+    public void RemoteQuestPassageIsStoryGuidance(int index, int value, int destination, string suffix)
+    {
+        var globals = Enumerable.Range(0, 512).ToDictionary(i => i, _ => 0);
+        globals[index] = value;
+        globals[0xF7] = 2;
+        var state = new FieldStoryState(0xD4, false) { Globals = globals };
+        var entrance = Target("world:entrance") with { Label = "Residence" };
+        var result = new FullStoryTargets().Build(496, state, [entrance], new(128, 128, 1),
+            new Dictionary<string, int> { [entrance.Id] = destination });
+        var quest = Assert.Single(result, t => t.Id == "story:full:quest:" + suffix);
+        Assert.Equal(NavigationCategory.StoryEvents, quest.Category);
+        Assert.Equal(entrance.ApproachPoints, quest.ApproachPoints);
+        Assert.Contains("Next passage: Residence.", quest.Instruction);
+    }
+
+    [Fact]
+    public void LocalQuestPersonKeepsThePeopleCategory()
+    {
+        var globals = Enumerable.Range(0, 512).ToDictionary(i => i, _ => 0);
+        globals[0x1A3] = 1;
+        var state = new FieldStoryState(0xAE, false) { Globals = globals };
+        var fiona = Target("actor:8:native") with { Label = "Fiona", Category = NavigationCategory.People };
+        var result = new FullStoryTargets().Build(158, state, [fiona], new(128, 128, 1));
+        var quest = Assert.Single(result, t => t.Id == "story:full:quest:desert:robo");
+        Assert.Equal(NavigationCategory.People, quest.Category);
+        Assert.Equal(fiona.ApproachPoints, quest.ApproachPoints);
+    }
+
+    [Fact]
+    public void EndOfTimePillarDoesNotIntroduceFionaButCanRouteAnAlreadyHeardRequest()
+    {
+        var globals = Enumerable.Range(0, 512).ToDictionary(i => i, _ => 0);
+        globals[0xF7] = 2;
+        globals[0xA6] = 1;
+        var state = new FieldStoryState(0xAE, false)
+        {
+            Globals = globals, Locals = new Dictionary<int, int> { [6] = 0 },
+        };
+        var region = GameNavigationCatalog.ForScene(464)!.Regions.Single(r => r.Kind == "Warp" && r.Destination == 113);
+        var pillar = Target(region.Id) with { Label = "Pillar 5" };
+        var source = new FullStoryTargets();
+        var unintroduced = source.Build(464, state, [pillar], new(128, 128, 1));
+        Assert.DoesNotContain(unintroduced, t => t.Id.StartsWith("story:full:quest:desert:"));
+        var heard = state with { Globals = new Dictionary<int, int>(globals) { [0x1AD] = 0x80 } };
+        var introduced = source.Build(464, heard, [pillar], new(128, 128, 1));
+        var quest = Assert.Single(introduced, t => t.Id == "story:full:quest:desert:retinite");
+        Assert.Equal(NavigationCategory.StoryEvents, quest.Category);
+        Assert.Equal(pillar.ApproachPoints, quest.ApproachPoints);
+    }
+
     private static NavigationTarget Target(string id) => new(id, "Passage", NavigationCategory.Exits,
         new(3584, 2048, 1), [new(3584, 2048, 1)], false, false);
     private sealed class OpenGraph : INavigationGraph

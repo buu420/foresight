@@ -1,5 +1,8 @@
 # Movie narration in 0.3.56
 
+Version 0.3.62 adds [the Epoch movie (006)](movie-narration-0362.md).
+The implementation and three-track probe results below describe 0.3.56.
+
 The embedded narration covers movie 002 (Ayla's rescue), 003 (Frog opening the
 Magic Cave), and 004 (the approach to Magus). The first two use the previously
 reviewed ViddyScribe descriptions; 004 was reviewed from the selected native

@@ -10,11 +10,22 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Startup;
 public sealed class MovieNarrationResourceTests : IDisposable
 {
     [Fact]
-    public void AllThreeShippedCinemaMastersLoadAndEndNoLaterThanTheirMovies()
+    public void ShippedCinemaMastersIncludeEpochAndEndNoLaterThanTheirMovies()
     {
         var tracks = MovieNarrationPack.Load();
-        Assert.Equal(["002.dat", "003.dat", "004.dat"], tracks.Select(track => track.Movie.FileName));
+        Assert.Equal(["002.dat", "003.dat", "004.dat", "006.dat"], tracks.Select(track => track.Movie.FileName));
         Assert.All(tracks, track => Assert.True(track.Samples / (double)track.SampleRate <= track.Movie.DurationSeconds));
+    }
+
+    [Fact]
+    public void EpochNarrationUsesTheOriginalTwentyFiveSecondMovie()
+    {
+        var track = Assert.Single(MovieNarrationPack.Load(), track => track.Movie.FileName == "006.dat");
+        Assert.Equal("95F627AFE3DA97D9924CD96349329F1C0F488ADEF1D2BAB4D5F36A0481782509", track.Movie.DecodedSha256);
+        Assert.Equal(15679299, track.Movie.DecodedBytes);
+        Assert.Equal(25.0583, track.Movie.DurationSeconds);
+        Assert.Equal(601399, track.Samples);
+        Assert.Equal(24000, track.SampleRate);
     }
 
     // Hand-checked identities of the decoded original Steam movies (sha256sum of the audited XOR output).

@@ -31,10 +31,12 @@ public sealed class FullStoryTargets
             // sequence. Its native spatial predicate supplies the next approach.
             if (candidates.Length == 0 && local.Any(g => g.Actors.Length == 0 && g.Targets.Length == 0))
                 candidates = ProgressTargets(scene, state, available);
+            var routed = false;
             if (candidates.Length == 0)
             {
                 var onward = goals.Where(g => g.Scene != scene).Select(g => g.Scene);
                 candidates = router.Next(scene, state, onward, available, worldDestinations, fieldDestinations, fieldOnly).ToArray();
+                routed = candidates.Length != 0;
             }
             if (candidates.Length == 0)
             {
@@ -48,11 +50,13 @@ public sealed class FullStoryTargets
                 continue;
             }
             var instruction = objective.Instruction;
-            if (local.Length == 0 && candidates[0].Label is { Length: > 0 } next)
+            if (routed && candidates[0].Label is { Length: > 0 } next)
                 instruction = $"Next passage: {next}." + (instruction is null ? "" : " " + instruction);
             var bound = StoryTarget.BindAny(objective.Id, objective.Label, candidates,
                 candidates.Select(t => t.Id).ToArray(), player, instruction);
-            result.Add(bound with { Category = objective.Category });
+            // A passage toward an NPC or object is a story direction, not that
+            // entity's presence in the current room or on the world map.
+            result.Add(bound with { Category = routed ? NavigationCategory.StoryEvents : objective.Category });
         }
         return result;
     }

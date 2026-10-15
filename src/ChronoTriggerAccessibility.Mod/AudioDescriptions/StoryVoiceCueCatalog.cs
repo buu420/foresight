@@ -75,7 +75,8 @@ public static class StoryVoiceCueCatalog
         StorySceneAction.GirlGetsUp or StorySceneAction.BoyGetsUp or StorySceneAction.GirlHops or
         StorySceneAction.BookAOpens or StorySceneAction.BookACloses or
         StorySceneAction.BookBOpens or StorySceneAction.BookBCloses or
-        StorySceneAction.BookCOpens or StorySceneAction.BookCCloses or StorySceneAction.PassageOpens;
+        StorySceneAction.BookCOpens or StorySceneAction.BookCCloses or StorySceneAction.PassageOpens or
+        StorySceneAction.NuApproachesParty or StorySceneAction.NuRaisesArms or StorySceneAction.NuSettlesDown;
 
     private static string? Name(int sprite) => sprite >= 0 && sprite < Names.Length ? Names[sprite] : null;
     private static string SceneId(StorySceneAction action) => "scene-" + action.ToString().ToLowerInvariant();

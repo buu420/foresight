@@ -50,17 +50,17 @@ public static class BonusStoryObjectives
         S("middle-forest:group-4", "Clear the monsters from Millennia Wood, 600 AD", Region(589, 8, 53, 15, 60)),
         S("middle-forest:group-5", "Clear the monsters from Millennia Wood, 600 AD", Region(589, 8, 18, 16, 24)),
         S("middle-forest:report", "Report to the villagers after clearing Millennia Wood, 600 AD", Switch(585, 0x18, 3), NavigationCategory.People),
-        S("hammer:request", "Ask the prehistoric villager about a Golden Hammer", Actor(583, 9), NavigationCategory.People),
+        S("hammer:request", "Speak with the prehistoric villager", Actor(583, 9), NavigationCategory.People),
         S("hammer:sand", "Collect Golden Sand in the Great Southern Swamp", Actor(576, 9)),
         S("hammer:sapling", "Use Golden Sand on the sapling in Millennia Wood", Actor(587, 48)),
         S("hammer:tracks", "Investigate the golden tree's site in Millennia Wood, 600 AD", Switch(589, 0x1B, 8)),
         S("hammer:goldhammer", "Catch the Goldhammer in Millennia Wood, 600 AD", Region(589, 18, 47, 34, 51)),
         S("hammer:deliver", "Bring the Golden Hammer to the prehistoric villager", Actor(583, 9), NavigationCategory.People),
-        S("prism:request", "Ask the prehistoric villager about the Prismastone", Actor(583, 10), NavigationCategory.People),
+        S("prism:request", "Speak with the prehistoric villager", Actor(583, 10), NavigationCategory.People),
         S("prism:guardian", "Challenge the Nu Guardian on prehistoric Mount Emerald", Actor(532, 9), NavigationCategory.People),
         S("prism:collect", "Collect the Prismastone at Mount Emerald's summit", Actor(535, 9)),
         S("prism:deliver", "Show the Prismastone to the prehistoric villager", Actor(583, 10), NavigationCategory.People),
-        S("saint:request", "Ask the prehistoric villager about the Saintstone", Actor(583, 14), NavigationCategory.People),
+        S("saint:request", "Speak with the prehistoric villager", Actor(583, 14), NavigationCategory.People),
         S("saint:recover-left", "Recover the Prismastone from the left prehistoric altar", Actor(584, 8)),
         S("saint:recover-right", "Recover the Prismastone from the right prehistoric altar", Actor(584, 9)),
         new("bonus:sanctum:saint:first-altar", "Place the Prismastone on a prehistoric shrine altar",
@@ -73,7 +73,7 @@ public static class BonusStoryObjectives
         S("saint:past-left", "Place the second Prismastone on the empty left prehistoric altar", Actor(584, 8)),
         S("saint:past-right", "Place the second Prismastone on the empty right prehistoric altar", Actor(584, 9)),
         S("saint:deliver", "Show the Saintstone to the prehistoric villager", Actor(583, 14), NavigationCategory.People),
-        S("nu:request", "Ask about the Nu on Mount Emerald, 600 AD", Actor(585, 9), NavigationCategory.People),
+        S("nu:request", "Speak with the villager in 600 AD", Actor(585, 9), NavigationCategory.People),
         S("nu:wake", "Speak to the Nu at the foot of Mount Emerald, 600 AD", Actor(536, 18), NavigationCategory.People),
         S("nu:ladder", "Inspect the broken ladder on Mount Emerald, 600 AD", Switch(536, 0x15, 0x40)),
         S("nu:vines", "Collect Sturdy Vines in the Southern Glade", Actor(577, 8)),
@@ -81,13 +81,13 @@ public static class BonusStoryObjectives
         S("nu:hang-vines", "Hang the Sturdy Vines from prehistoric Mount Emerald", Switch(532, 0x1B, 0x20)),
         S("nu:master", "Meet the Nu Master atop Mount Emerald, 600 AD", Arrival(538), NavigationCategory.People),
         S("nu:report", "Tell the villager in 600 AD about the Nu Master", Actor(585, 9), NavigationCategory.People),
-        S("materials:request", "Ask the bridge builder in 600 AD what he needs", Actor(585, 14), NavigationCategory.People),
+        S("materials:request", "Speak with the bridge builder in 600 AD", Actor(585, 14), NavigationCategory.People),
         S("materials:wood", "Ask the prehistoric woodcutter for Godwood", Actor(587, 49), NavigationCategory.People),
         S("materials:hammer", "Borrow the Golden Hammer from the prehistoric villager", Actor(583, 9), NavigationCategory.People),
         S("materials:steel", "Search the Winding Passage in 600 AD for the Steel Ingot", Target(581, "chest:301")),
         S("materials:deliver", "Give the bridge builder the materials you are carrying", Actor(585, 14), NavigationCategory.People),
         S("bridge:revisit", "Revisit the Lost Sanctum entrance while the builder is away", Arrival(654), NavigationCategory.Exits),
-        S("bridge:request", "Ask the villager in 600 AD about the missing bridge builder", Actor(585, 12), NavigationCategory.People),
+        S("bridge:request", "Speak with the villager in 600 AD", Actor(585, 12), NavigationCategory.People),
         S("bridge:nu", "Ask the Nu Master about the missing bridge builder", Actor(538, 9), NavigationCategory.People),
         S("bridge:rescue", "Reach the stranded builder at the Great Bridge", Arrival(556), NavigationCategory.People),
         S("bridge:help", "Ask the Nu Master to help build the bridge", Actor(538, 9), NavigationCategory.People),
@@ -98,23 +98,23 @@ public static class BonusStoryObjectives
         S("bridge:feed", "Bring the Sweet Banana to the Nu at the Great Bridge", Actor(556, 8), NavigationCategory.People),
         S("bridge:finish", "Return to the Great Bridge after feeding the Nu and defending the village", Arrival(556), NavigationCategory.People),
         S("bridge:report", "Return to the village in 600 AD after completing the bridge", Switch(585, 0x19, 0x20), NavigationCategory.People),
-        S("waystone:hint", "Ask the prehistoric villager where to place the Saintstone", Actor(583, 12), NavigationCategory.People),
+        S("waystone:hint", "Speak with the prehistoric villager", Actor(583, 12), NavigationCategory.People),
         S("waystone:place", "Place the Saintstone on prehistoric Mount Emerald", Switch(535, 0x12, 0x20)),
         S("waystone:collect", "Collect the Waystone atop Mount Emerald, 600 AD", Actor(539, 8)),
-        S("cave:request", "Show the Waystone to the prehistoric cave explorer", Actor(583, 13), NavigationCategory.People),
+        S("cave:request", "Speak with the prehistoric cave explorer", Actor(583, 13), NavigationCategory.People),
         S("cave:light", "Bring the Waystone into the Lightless Cave", Arrival(580)),
         S("cave:fortress", "Explore the entrance of the Primeval Fortress", Arrival(540)),
         S("cave:report", "Warn the prehistoric village about the fortress", Arrival(583), NavigationCategory.People),
         S("defend:leaders", "Confront the enemy leaders in the Primeval Fortress", Arrival(555)),
         S("defend:report", "Return to the prehistoric village after defending it", Arrival(583), NavigationCategory.People),
-        S("tower:request", "Meet the villagers in 600 AD about the tower beyond the bridge", Switch(585, 0x19, 0x40), NavigationCategory.People),
+        S("tower:request", "Meet the villagers in 600 AD", Switch(585, 0x19, 0x40), NavigationCategory.People),
         S("tower:guardians", "Confront the guardians at the top of the Tower of the Ancients", Region(575, 12, 18, 18, 19)),
         S("tower:idols", "Investigate the room beyond the tower guardians", Arrival(652)),
         S("tower:report", "Report the tower discovery to the village in 600 AD", Switch(585, 0x19, 0x80), NavigationCategory.People),
-        S("smith:request", "Ask the prehistoric smith about a rusted blade", Actor(583, 11), NavigationCategory.People),
+        S("smith:request", "Speak with the prehistoric smith", Actor(583, 11), NavigationCategory.People),
         S("smith:blade", "Search the Tower of the Ancients for the Rusted Blade", Target(570, "chest:286")),
         S("smith:deliver", "Bring the Rusted Blade to the prehistoric smith", Actor(583, 11), NavigationCategory.People),
-        S("lumicite:request", "Ask the smith in 600 AD about lumicite", Actor(585, 11), NavigationCategory.People),
+        S("lumicite:request", "Speak with the smith in 600 AD", Actor(585, 11), NavigationCategory.People),
         S("lumicite:hunt-537", "Look for the smith's lumicite on the Wonder Rock", Actor(537, 15), instruction: "The Wonder Rock appears only on some visits."),
         S("lumicite:hunt-587", "Look for the smith's lumicite on the Wonder Rock", Actor(587, 24), instruction: "The Wonder Rock appears only on some visits."),
         S("lumicite:hunt-589", "Look for the smith's lumicite on the Wonder Rock", Actor(589, 29), instruction: "The Wonder Rock appears only on some visits."),
@@ -163,7 +163,7 @@ public static class BonusStoryObjectives
         var sanctum = scene is >= 532 and <= 587 or 589 or 652 or 653 or 654 or 668;
         if ((world && state.Point >= 0xD2 || sanctum) &&
             Enumerable.Range(0x10, 0x10).All(i => state.Extra(i).HasValue))
-            Sanctum(state, result);
+            Sanctum(scene, state, result);
         if (world || scene == 464 || scene is >= 591 and <= 650 or >= 655 and <= 666)
             Vortex(scene, state, result, world);
         // A random spawn can only bind in its own room, to its current native
@@ -176,9 +176,19 @@ public static class BonusStoryObjectives
 
     private static bool Has(FieldStoryState s, int cell, int mask) => s.Extra(cell) is { } n && (n & mask) == mask;
     private static void Add(List<FullStoryObjective> result, string id) => result.Add(byId["bonus:" + id]);
-    private static void Sanctum(FieldStoryState s, List<FullStoryObjective> result)
+    private static void Sanctum(int scene, FieldStoryState s, List<FullStoryObjective> result)
     {
-        void AddS(string id) => Add(result, "sanctum:" + id);
+        void AddS(string id)
+        {
+            var objective = byId["bonus:sanctum:" + id];
+            // These branches run before their own request flag has been set.
+            // A completed prerequisite or a found item does not mean that the
+            // player has heard this villager's new request. Keep introductions
+            // in their actual room, alongside the native local interactions.
+            var introduction = id is "arrival" or "saint:recover-left" or "saint:recover-right" ||
+                id.EndsWith(":request", StringComparison.Ordinal) || id == "waystone:hint";
+            if (!introduction || objective.Goals.Any(g => g.Scene == scene)) result.Add(objective);
+        }
         bool H(int c, int m) => Has(s, c, m);
         int? I(int item) => s.ItemCount(item);
 
@@ -301,14 +311,14 @@ public static class BonusStoryObjectives
                 H(0x1F, 8) ? "tower:idols" : "tower:guardians");
         if (!H(0x14, 0x20) && (!H(0x11, 1) || H(0x11, 2)))
         {
-            if (I(Blade) > 0) AddS("smith:deliver");
-            else if (!H(0x14, 0x10)) AddS("smith:request");
+            if (!H(0x14, 0x10)) AddS("smith:request");
+            else if (I(Blade) > 0) AddS("smith:deliver");
             else if (H(0x1A, 0x40) && I(Blade) == 0) AddS("smith:blade");
         }
         if (!H(0x14, 0x80))
         {
-            if (I(Lumicite) > 0) AddS("lumicite:deliver");
-            else if (!H(0x14, 0x40)) AddS("lumicite:request");
+            if (!H(0x14, 0x40)) AddS("lumicite:request");
+            else if (I(Lumicite) > 0) AddS("lumicite:deliver");
             // The optional local hunt binding is selected separately in Build.
         }
     }

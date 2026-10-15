@@ -21,9 +21,9 @@ public sealed class StoryVoiceCueCatalogTests
     [Fact]
     public void EveryReviewedGestureAndSpecificSceneHasARecordedCue()
     {
-        Assert.Equal(153, StoryVoiceCueCatalog.All.Count);
-        Assert.Equal(153, StoryVoiceCueCatalog.All.Select(cue => cue.Id).Distinct().Count());
-        Assert.Equal(131, StoryVoiceCueCatalog.All.Count(cue => !cue.Id.StartsWith("movie-opening-")));
+        Assert.Equal(156, StoryVoiceCueCatalog.All.Count);
+        Assert.Equal(156, StoryVoiceCueCatalog.All.Select(cue => cue.Id).Distinct().Count());
+        Assert.Equal(134, StoryVoiceCueCatalog.All.Count(cue => !cue.Id.StartsWith("movie-opening-")));
         Assert.All(StoryVoiceCueCatalog.All, cue =>
         {
             Assert.Matches("^[a-z0-9-]+$", cue.Id);

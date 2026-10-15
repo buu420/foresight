@@ -42,13 +42,9 @@ public static class ClassicOptionalObjectives
 
     public static IReadOnlyList<FullStoryObjective> All { get; } =
     [
-        Person("desert:seed-zeal", "Ask the woman in Zeal Palace to keep the sapling", 401, 12,
-            "Tell her to plant it rather than burn it. This is the prerequisite for Fiona's desert."),
-        Person("desert:seed-survivors", "Ask the woman in the surviving village to plant the sapling", 424, 25),
-        Person("desert:fiona", "Speak with Fiona about the desert", 158, 8),
-        new("full:quest:desert:retinite", "Defeat Retinite beneath the Sunken Desert",
+        new("full:quest:desert:retinite", "Investigate the monsters beneath the Sunken Desert",
             [new(161, [2, 3, 4, 5], [])],
-            "The four native encounter regions follow its appearances in the sand. Water magic weakens its defense.", NavigationCategory.Objects),
+            Category: NavigationCategory.Objects),
         Person("desert:robo", "Return to Fiona with Robo and offer his help", 158, 8,
             "Robo must be in the active party. Agree to leave him to restore the forest."),
         Person("desert:recover", "Recover Robo from Fiona's Shrine in 1000 AD", 57, 8,
@@ -59,7 +55,7 @@ public static class ClassicOptionalObjectives
         Actor("lucca:return", "Return through the gate in Lucca's room", 10, 13, category: NavigationCategory.Exits),
         Person("lucca:robo", "Speak with Robo after returning from Lucca's past", 83, 2),
 
-        Person("cyrus:ask-tools", "Ask the carpenter in 600 AD Choras about his tools", 188, 15),
+        Person("cyrus:ask-tools", "Speak with the carpenter in 600 AD Choras", 188, 15),
         Person("cyrus:descendant", "Ask the carpenter in the 1000 AD Choras inn for tools", 62, 11),
         Person("cyrus:tools", "Collect the tools from the carpenter's wife", 61, 8),
         Person("cyrus:deliver-tools", "Bring the tools to the carpenter in 600 AD", 188, 15),
@@ -76,7 +72,7 @@ public static class ClassicOptionalObjectives
         Person("cyrus:upper-repair", "Pay the carpenter to finish the upper hall repairs", 186, 8,
             "The repair costs 2000 G. The restored rooms and their sealed chests can then be explored in both eras."),
 
-        Actor("sun:battle", "Defeat the Son of the Sun in the future Sun Temple", 251, 8),
+        Actor("sun:battle", "Approach the Sun Temple encounter", 251, 8),
         Actor("sun:moon-stone", "Collect the Moon Stone after the Sun Temple battle", 251, 17),
         Actor("sun:prehistoric", "Leave the Moon Stone in the prehistoric Sun Shrine", 327, 8),
         Actor("sun:missing", "Check the missing Moon Stone in the 1000 AD Sun Shrine", 64, 9),
@@ -89,8 +85,7 @@ public static class ClassicOptionalObjectives
         Actor("sun:future", "Collect the charged Sun Stone with Lucca in 2300 AD", 255, 8,
             "Lucca must be in the active party. Her workshop scene and rewards follow automatically."),
 
-        Actor("geno:console", "Use the Geno Dome entrance console with Robo", 248, 8,
-            "Robo must be in the active party. The console moves him into the lead for the dome."),
+        Actor("geno:console", "Use Geno Dome's entrance console", 248, 8),
         Actor("geno:switch-left", "Set the left switch in Geno Dome's three-switch room", 256, 14),
         Actor("geno:switch-right", "Set the right switch in Geno Dome's three-switch room", 256, 16),
         Actor("geno:switch-middle", "Restore the middle switch to green", 256, 15,
@@ -124,7 +119,7 @@ public static class ClassicOptionalObjectives
         Actor("geno:brain", "Enter Mother Brain's chamber", 268, 30,
             "Both dolls must be on their pedestals. The battle and Robo's rewards follow."),
 
-        Person("rainbow:toma", "Take Toma's request at the 600 AD Choras tavern", 188, 13),
+        Person("rainbow:toma", "Speak with Toma at the 600 AD Choras tavern", 188, 13),
         Actor("rainbow:tomb", "Pour Toma's drink on his tomb at West Cape in 1000 AD", 63, 8),
         Exit("rainbow:claw-entrance", "Follow Giant's Claw's entrance passage to the throne room", 195, 1),
         Exit("rainbow:claw-throne", "Continue south through Giant's Claw's throne room", 297, 0),
@@ -250,12 +245,10 @@ public static class ClassicOptionalObjectives
         if (!In(scene, DesertScenes) || !Known(s, 0xF7, 0x19E, 0x1AD, 0x1A3) || Bit(s, 0x19E, 2)) return null;
         if (Bit(s, 0x19E, 1)) return "desert:recover";
         if (Bit(s, 0x1A3, 1)) return "desert:robo";
-        if (!Bit(s, 0xF7, 2))
-        {
-            if (s.Point >= Flight) return "desert:seed-survivors";
-            return s.Point is >= 0x9F and < 0xCB ? "desert:seed-zeal" : null;
-        }
-        return Bit(s, 0x1AD, 0x80) ? "desert:retinite" : "desert:fiona";
+        // Atel0467 actor8/9 sets G1AD/80 while introducing the desert request.
+        // G0F7/02 is only the sapling choice in Zeal/the surviving village; it
+        // cannot tell us that the player has heard about Fiona's problem.
+        return Bit(s, 0x1AD, 0x80) ? "desert:retinite" : null;
     }
 
     private static string? Lucca(int scene, FieldStoryState s)
@@ -279,7 +272,9 @@ public static class ClassicOptionalObjectives
         {
             if (Bit(s, 0x19E, 0x80)) return "cyrus:deliver-tools";
             if (Bit(s, 0x19E, 0x20)) return "cyrus:tools";
-            return Bit(s, 0x19E, 0x10) ? "cyrus:descendant" : "cyrus:ask-tools";
+            // Actor15's first Confirm sets G19E/10. Until then, only the
+            // carpenter actually present in this tavern is a known interaction.
+            return Bit(s, 0x19E, 0x10) ? "cyrus:descendant" : scene == 188 ? "cyrus:ask-tools" : null;
         }
         if (Bit(s, 0x19F, 1)) return AncientRuins(scene, s) ? "cyrus:repairs-arrival" : null;
         if (!Bit(s, 0x19F, 2)) return "cyrus:hire";
@@ -303,7 +298,7 @@ public static class ClassicOptionalObjectives
         }
         if (Bit(s, 0x13A, 4)) return "sun:missing";
         if (Bit(s, 0x13A, 2)) return "sun:prehistoric";
-        return Bit(s, 0x13A, 1) ? "sun:moon-stone" : "sun:battle";
+        return Bit(s, 0x13A, 1) ? "sun:moon-stone" : scene == 251 ? "sun:battle" : null;
     }
 
     private static string? Geno(int scene, FieldStoryState s)
@@ -318,7 +313,8 @@ public static class ClassicOptionalObjectives
             if (!Bit(s, 0x13C, 0x20)) return "geno:pedestal-right";
             return "geno:brain";
         }
-        if (!Bit(s, 0x13C, 1)) return "geno:console";
+        // Atel0349 actor9 records the console introduction in G13C/01.
+        if (!Bit(s, 0x13C, 1)) return scene == 248 ? "geno:console" : null;
         if (!first)
         {
             if (Bit(s, 0x13E, 4)) return "geno:doll-first";
@@ -363,7 +359,7 @@ public static class ClassicOptionalObjectives
         if (Bit(s, 0x1D2, 0x40)) return "rainbow:shell";
         if (Bit(s, 0x1A3, 0x80) || scene is 195 or 196 or 197 or 109 or 110 or 111 or 296 or 297 or 490)
             return GiantClaw(scene, s);
-        return Bit(s, 0x1A0, 2) ? "rainbow:tomb" : "rainbow:toma";
+        return Bit(s, 0x1A0, 2) ? "rainbow:tomb" : scene == 188 ? "rainbow:toma" : null;
     }
 
     private static string GiantClaw(int scene, FieldStoryState s)
@@ -403,7 +399,9 @@ public static class ClassicOptionalObjectives
         if (Bit(s, 0x1A1, 0x40)) return Bit(s, 0x1A0, 0x80) ? "ozzie:return" : "ozzie:switch";
         if (Bit(s, 0x1A1, 0x10)) return "ozzie:three";
         if (Bit(s, 0x1A1, 8)) return "ozzie:guillotine";
-        return Bit(s, 0x1A1, 4) ? "ozzie:slash" : "ozzie:flea";
+        // Atel0472's entrance conversation records G1A1/01. Flight alone
+        // does not establish that the player has visited or heard about the fort.
+        return Bit(s, 0x1A1, 4) ? "ozzie:slash" : Bit(s, 0x1A1, 1) || scene == 183 ? "ozzie:flea" : null;
     }
 
     private static string? Revival(int scene, FieldStoryState s)

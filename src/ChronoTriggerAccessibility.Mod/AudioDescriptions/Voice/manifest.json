@@ -1078,6 +1078,27 @@
       "sha256": "b739730b5dbaf3fdd84868cec25d6bf720d864463450a6b5eba20fbd67ebe176",
       "duration": 1.39025,
       "bytes": 66776
+    },
+    {
+      "id": "scene-nuapproachesparty",
+      "text": "The Nu walks up to the party.",
+      "sha256": "b2c362e5942c513163c7c96c3d4cf2d95eeba916df8d17df7dafe04eadc18706",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "scene-nuraisesarms",
+      "text": "The Nu raises both arms and opens its mouth wide.",
+      "sha256": "4bb0495226220954920fed2b397a40bcdd4362ebb659e1756e16d73898e400ed",
+      "duration": 3.805125,
+      "bytes": 182690
+    },
+    {
+      "id": "scene-nusettlesdown",
+      "text": "The Nu settles down beneath the Epoch.",
+      "sha256": "9f11f2d0661a3e9b1031bc0e5a00fac86978d9ad1ad5647be0e1ec14bcb275e9",
+      "duration": 2.644125,
+      "bytes": 126962
     }
   ],
   "movieNarration": [
@@ -1107,6 +1128,15 @@
       "bytes": 2496936,
       "sampleRate": 24000,
       "samples": 1248446
+    },
+    {
+      "movie": "006.dat",
+      "decodedSha256": "95f627afe3da97d9924cd96349329f1c0f488adef1d2bab4d5f36a0481782509",
+      "resource": "movie-narration-006.wav",
+      "sha256": "6b8f54a28e3eefa7861722ea9b1968786328c258dde3b186c05d1e49508fa59b",
+      "bytes": 1202842,
+      "sampleRate": 24000,
+      "samples": 601399
     }
   ]
 }

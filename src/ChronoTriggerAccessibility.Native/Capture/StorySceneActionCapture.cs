@@ -23,6 +23,9 @@ public enum StorySceneAction
     BookCOpens,
     BookCCloses,
     PassageOpens,
+    NuApproachesParty,
+    NuRaisesArms,
+    NuSettlesDown,
 }
 
 /// <summary><c>Subject</c> is the visible actor the action is about; for the curtains that is
@@ -41,8 +44,9 @@ public static class StorySceneActionCapture
     public const string PlazaRearScriptSha256 = "574098067D910D56A9B30707F3DC837C56990AF788CAE55374A9C90CF4C04307";
     public const string EnhasaPlazaScriptSha256 = "A912C2735A866CE4A2CE0009BE97BCAF5CF7E94C1BF67411CCFD0FA64657C880";
     public const string KajarPlazaScriptSha256 = "DCCC62DA4C8A32EE6ED19E470111921DBA0A3F427194E14BF07CB3CB24578960";
+    public const string EpochStorageScriptSha256 = "31EB20EC02C914BE51D48F153C1FAE386757EAC1B0F6F1349F0702BE3A532B65";
 
-    private enum Proof { TileCopyQueued, MoveStarted, StaticFrame, Looping, CountedFinished, AnimationReset }
+    private enum Proof { TileCopyQueued, MoveStarted, StaticFrame, Looping, CountedFinished, AnimationReset, TimedMoveStarted }
 
     /// <summary>The exact visible object: class tag, visual and tile of the subject actor.</summary>
     private sealed record Identity(int Class, int Visual, int TileX, int TileY);
@@ -52,7 +56,11 @@ public static class StorySceneActionCapture
 
     private sealed record Anchor(StorySceneAction Action, int Scene, int Script, int Length, string Sha256,
         int Actor, uint Pc, string Bytes, int Subject, int Partner, int MinStory, int MaxStory, Proof Proof,
-        Identity? Book = null, Tiles? Passage = null);
+        Identity? Book = null, Tiles? Passage = null, int? SubjectClass = null, int? SubjectVisual = null);
+
+    private static Anchor Nu(StorySceneAction action, uint pc, string bytes, Proof proof) =>
+        new(action, 243, 163, 2159, EpochStorageScriptSha256, 14, pc, bytes, 14, -1, 0xAB, 0xFF, proof,
+            SubjectClass: 5, SubjectVisual: 0);
 
     private const int EnhasaPlaza = 355, KajarPlaza = 357, EnhasaScript = 208, KajarScript = 209;
     private const int EnhasaLength = 2796, KajarLength = 1861;
@@ -97,6 +105,13 @@ public static class StorySceneActionCapture
         Book(StorySceneAction.BookCOpens, KajarPlaza, 13, 0x5A4, "E52F2F2F2F161841", KajarC),
         Book(StorySceneAction.BookCCloses, KajarPlaza, 13, 0x594, "E52E2F2E2F161841", KajarC),
         Book(StorySceneAction.PassageOpens, KajarPlaza, 11, 0x525, "E5272C282F110B3B", KajarA) with { Passage = new(17, 11, 19, 15) },
+        // Exact Nu (load_enemy 0 -> c263) dispatches in the storage-room introduction
+        // and the later player interaction. Ordinary load-time pose reapplication is absent.
+        Nu(StorySceneAction.NuApproachesParty, 0x610, "92C0E0", Proof.TimedMoveStarted),
+        Nu(StorySceneAction.NuRaisesArms, 0x5FF, "AC0C", Proof.StaticFrame),
+        Nu(StorySceneAction.NuRaisesArms, 0x639, "AC0C", Proof.StaticFrame),
+        Nu(StorySceneAction.NuSettlesDown, 0x61D, "AC0D", Proof.StaticFrame),
+        Nu(StorySceneAction.NuSettlesDown, 0x608, "AC0D", Proof.StaticFrame),
     ];
 
     private const uint ScriptHeader = 0x12000, ScriptActorOffset = 0x1180;
@@ -121,6 +136,13 @@ public static class StorySceneActionCapture
             var actor = before.ActorState;
             switch (anchor.Proof)
             {
+                case Proof.TimedMoveStarted:
+                    if (!Word(memory, ActorAddress(before.Location, before.Location.Actor) + 0xCC, out var moving) || moving != 0)
+                        return false;
+                    break;
+                case Proof.StaticFrame when anchor.SubjectClass.HasValue:
+                    if (actor.AnimationMode == 3 && actor.StaticFrame == Convert.FromHexString(anchor.Bytes)[1]) return false;
+                    break;
                 case Proof.MoveStarted:
                     // 16CE00 completes at once when the actor already stands on the target tile.
                     var operand = Convert.FromHexString(anchor.Bytes);
@@ -152,12 +174,26 @@ public static class StorySceneActionCapture
                 !Word(memory, location.Field + ScriptActorOffset, out var raw) || raw != location.Actor * 2u ||
                 !memory.TryRead(location.Data + ScriptHeader + 1 + location.Address, bytes) ||
                 Convert.ToHexString(bytes) != before.Bytes || !memory.TryRead(location.Context, head)) return false;
+            if (anchor.SubjectClass.HasValue && !Subject(memory, location, anchor, out _)) return false;
             var pc = location.Address;
             var advanced = (head[4] & 1) != 0;
             var current = Read(head, 0x24);
             var next = Read(head, 0x18);
             switch (anchor.Proof)
             {
+                case Proof.TimedMoveStarted:
+                {
+                    // 16CB50 initializes a timed move and yields at this PC; 17B1B0
+                    // derives the actual velocity from its angle and the actor's speed.
+                    // The requested angle alone does not prove the Nu started moving.
+                    var address = ActorAddress(location, location.Actor);
+                    return !advanced && current == pc && next == pc &&
+                        Word(memory, address + 0xCC, out var started) && started == 1 &&
+                        Word(memory, address + 0xC8, out var remaining) && remaining == bytes[2] &&
+                        Word(memory, location.Field + 0x20CC, out var angle) && angle == bytes[1] &&
+                        Word(memory, address + 0x94, out var xVelocity) && xVelocity == 0 &&
+                        Word(memory, address + 0xAC, out var yVelocity) && (int)yVelocity < 0;
+                }
                 case Proof.TileCopyQueued:
                 {
                     // 171C40 copies the seven operand bytes to data+0x2E13E, requests the copy
@@ -211,6 +247,9 @@ public static class StorySceneActionCapture
     /// A passage is judged by its own tiles on camera, not by the book that completed it.</summary>
     private static bool Subject(IReadableMemory memory, StoryScriptLocation location, Anchor anchor, out StoryActorState state)
     {
+        if (anchor.SubjectClass is { } expectedClass)
+            return Visible(memory, location, anchor.Subject, out state) && state.ClassTag == expectedClass &&
+                state.Visual == anchor.SubjectVisual;
         if (anchor.Book is not { } book) return Visible(memory, location, anchor.Subject, out state);
         if (!StoryActionCapture.TryReadActor(memory, location, anchor.Subject, out state) ||
             state.ClassTag != book.Class || state.Visual != book.Visual ||

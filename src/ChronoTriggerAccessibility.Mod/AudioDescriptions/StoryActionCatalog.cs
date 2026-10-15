@@ -33,6 +33,9 @@ public static class StoryActionCatalog
             StorySceneAction.BookCOpens => "Book C opens. Blue-green wisps swirl above it.",
             StorySceneAction.BookCCloses => "Book C closes, and the swirling wisps disappear.",
             StorySceneAction.PassageOpens => "A passage opens.",
+            StorySceneAction.NuApproachesParty => "The Nu walks up to the party.",
+            StorySceneAction.NuRaisesArms => "The Nu raises both arms and opens its mouth wide.",
+            StorySceneAction.NuSettlesDown => "The Nu settles down beneath the Epoch.",
             _ => throw new ArgumentOutOfRangeException(nameof(candidate)),
         };
     }

@@ -15,6 +15,9 @@ public sealed class StorySceneActionRuntimeTests
     [InlineData(StorySceneAction.GirlGetsUp, 0xB7, "The blonde girl gets to her feet.")]
     [InlineData(StorySceneAction.BoyGetsUp, 0xAE, "Cinder gets to their feet.")]
     [InlineData(StorySceneAction.GirlHops, 0xAA, "The blonde girl hops up and down.")]
+    [InlineData((StorySceneAction)14, 0x92, "The Nu walks up to the party.")]
+    [InlineData((StorySceneAction)15, 0xAC, "The Nu raises both arms and opens its mouth wide.")]
+    [InlineData((StorySceneAction)16, 0xAC, "The Nu settles down beneath the Epoch.")]
     public void VerifiedSceneActionsSpeakOnceAfterNativeEvenWithAnInvisibleController(StorySceneAction action, int opcode, string expected)
     {
         var test = new Session(action, opcode); test.Runtime.Enable();
@@ -68,6 +71,43 @@ public sealed class StorySceneActionRuntimeTests
         Assert.Empty(test.Speech); Assert.Equal(1, test.Originals);
     }
 
+    [Theory]
+    [InlineData(StorySceneAction.NuRaisesArms)]
+    [InlineData(StorySceneAction.NuSettlesDown)]
+    public void NuPosesAreDescribedAgainInTheNextPlayerConversation(StorySceneAction action)
+    {
+        var test = new Session(action, 0xAC);
+        test.Before = test.Before with { Control = 1 };
+        test.Runtime.Enable(); test.Dispatch(); test.Dispatch();
+        Assert.Single(test.Speech);
+        test.Runtime.Observe(new DialogueClosed());
+        test.Dispatch(); test.Dispatch();
+        Assert.Equal(2, test.Speech.Count);
+    }
+
+    [Theory]
+    [InlineData(true, 2)]
+    [InlineData(false, 1)]
+    public void OnlyProvenNativeControlRestorationRearmsTheNuAfterItsIntroduction(bool restored, int expected)
+    {
+        var test = new Session(StorySceneAction.NuRaisesArms, 0xAC, _ => restored);
+        var pose = test.Before with { Control = 0 };
+        test.Before = pose; test.Runtime.Enable(); test.Dispatch();
+        test.Before = pose with { Location = pose.Location with { Opcode = 0xE3 }, Bytes = "E301000000000000" };
+        test.Dispatch(); test.Before = pose; test.Dispatch();
+        Assert.Equal(expected, test.Speech.Count);
+        Assert.Equal(3, test.Originals);
+    }
+
+    [Fact]
+    public void ClosingDialogueDoesNotRepeatASceneOnceOnlyApproach()
+    {
+        var test = new Session(StorySceneAction.NuApproachesParty, 0x92);
+        test.Before = test.Before with { Control = 1 };
+        test.Runtime.Enable(); test.Dispatch(); test.Runtime.Observe(new DialogueClosed()); test.Dispatch();
+        Assert.Single(test.Speech);
+    }
+
     private sealed class Session
     {
         public StoryActionSnapshot Before;
@@ -75,7 +115,7 @@ public sealed class StorySceneActionRuntimeTests
         public int Originals;
         public List<string> Speech { get; } = [];
         public StoryActionRuntime Runtime { get; }
-        public Session(StorySceneAction action, int opcode)
+        public Session(StorySceneAction action, int opcode, Func<StoryActionSnapshot, bool>? restore = null)
         {
             Before = StoryActionRuntimeTests.Frame() with
             {
@@ -86,7 +126,7 @@ public sealed class StorySceneActionRuntimeTests
             Runtime = new((_, _) => Before, _ => new(StoryAnimationKind.Looping, 0x0B),
                 () => true, _ => "Cinder", Speech.Add, _ => { },
                 matchScene: snapshot => new(action, snapshot, StoryActionRuntimeTests.Actor(), null, false),
-                completeScene: _ => Completed && Originals > 0);
+                completeScene: _ => Completed && Originals > 0, controlRestored: restore);
         }
         public void Dispatch(Action? inside = null) => Runtime.Dispatch(0x1000, Before.Location.Opcode,
             () => { Originals++; inside?.Invoke(); });
