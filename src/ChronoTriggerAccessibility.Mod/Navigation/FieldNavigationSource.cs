@@ -109,7 +109,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // Atel_0114 actor9's Confirm sets local9; actor1 performs the warp.
             // The catalog cannot infer that handoff from actor9's handler alone.
             var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);
-            var scriptedAction = forestGate || book is not null || story is not null && actor.ScriptCallsEnabled &&
+            var entranceTerminal = field.SceneIdCoherent && FutureAreaLabels.IsEntranceSecurityTerminal(field.SceneId, actor);
+            var scriptedAction = forestGate || entranceTerminal || book is not null || story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
             var scriptedContact = scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
@@ -162,10 +163,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 storyCandidate: !conveyorRobot,
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
                     (label is not null || actor.IsActivationCandidate || scriptedAction),
-                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
+                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." :
+                    entranceTerminal && story?.Flag(0x58, 4) == false && story.PartyContains(3, true) == 0
+                    ? "Robo must be in the active party to deactivate security." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                    entranceTerminal ? "Press Confirm to use the entrance security terminal." :
                     forestGate ? "Press Confirm to enter the Time Gate." :
                     lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
                 contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
@@ -292,12 +296,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var bike = FutureAreaLabels.IsBike(field.SceneId, actor.Index);
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage(landmarkId, actor);
+            var liftRestriction = FutureAreaLabels.FactoryLiftRestriction(field.SceneId, actor.Index, story);
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                instruction: sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
+                instruction: liftRestriction ?? (sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
                     teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
-                    ? "Teleportation is currently unavailable." : null,
+                    ? "Teleportation is currently unavailable." : null),
+                guidanceRestriction: liftRestriction,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
@@ -555,7 +561,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         exitLabels.Apply(targets);
         peopleLabels.Apply(targets, genericIds);
         if (guideActive)
-            targets.AddRange(levelCrossings.Find(field.SceneId, map).Select(t => t with
+            targets.AddRange(levelCrossings.Find(field.SceneId, map)
+                // Map124 also holds other Factory rooms. Its distant stair is
+                // not part of scene228, even after the entrance lasers open.
+                .Where(t => field.SceneId != 228 || t.ApproachPoints.Any(p => regions.Connected(player, p) != false))
+                .Select(t => t with
                 { Visible = t.ApproachPoints.Any(p => TileVisible(p.X / 256, p.Y / 256)) }));
         foreach (var entry in transitions)
         {
@@ -642,6 +652,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 $"savePoints={string.Join(",", savePoints.Select(s => $"{s.Checker}@{s.TileX}:{s.TileY}"))}; " +
                 $"storyPoint={story?.Point.ToString() ?? "unknown"}; " +
                 $"motherIntroduced={story?.MotherIntroducedFriend.ToString() ?? "unknown"}; " +
+                $"storyParty={(story?.Party is { } roster ? string.Join(",", roster) : "unavailable")}; " +
                 $"storyFlags={string.Join(",", FieldStoryCapture.ObjectiveGlobalIndices.Select(index =>
                     $"{index:X}={story?.Global(index)?.ToString("X2") ?? "?"}"))}";
             if (inventory == lastInventory) return;

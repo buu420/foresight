@@ -6,6 +6,16 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// retain the ordinary appearance label; this table supplies no coordinates.</summary>
 public static class FutureAreaLabels
 {
+    // Atel0039 actor8 is the drawn entrance console. D2's party check
+    // governs Robo's override, not the console's visible existence. Missing
+    // optional roster capture must not erase its native Confirm destination.
+    public static bool IsEntranceSecurityTerminal(int scene, FieldActorSnapshot actor) =>
+        scene == 228 && actor.Index == 8 && actor.ClassTag == 4 && actor.VisualIndex == 127;
+
+    public static string? FactoryLiftRestriction(int scene, int actor, FieldStoryState? state) =>
+        scene == 228 && actor is 9 or 10 && state is { Point: >= 60 and < 63 } && state.Flag(0x58, 4) == false
+            ? "Entrance security is active. Use the entrance security terminal first." : null;
+
     public static string? ActorLabel(int scene, FieldActorSnapshot actor, FieldStoryState? state) =>
         (scene, actor.Index, actor.ClassTag, actor.VisualIndex) switch
         {

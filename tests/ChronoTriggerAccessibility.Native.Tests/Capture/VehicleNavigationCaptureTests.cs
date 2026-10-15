@@ -194,7 +194,8 @@ public sealed class VehicleNavigationCaptureTests
     public void WorldStoryPredicatesHaveTheSameRosterAndGoldDuringWalkingAndFlight(bool flying)
     {
         var memory = Full(flying ? Flying(VehicleKind.Epoch) : Walking()).Word(Actors + 0x1A24, 3456);
-        var party = new[] { 3, 1, 4, 0, 2, 5, 6, 255, 255 };
+        // Expanded roster cells use80 for empty, matching the native writers.
+        var party = new[] { 3, 1, 4, 0, 2, 5, 6, 0x80, 0x80 };
         for (var i = 0; i < party.Length; i++) memory.Word(Actors + 0x1324Cu + (nuint)(i * 4), (uint)party[i]);
         var snapshot = flying
             ? WorldNavigationCapture.CaptureFlight(memory, Image, Context, VehicleKind.Epoch, out _)

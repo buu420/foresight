@@ -69,14 +69,77 @@ public sealed class StoryMemoryCaptureTests
         Assert.Null(StoryMemoryCapture.Party(memory, 0x4000));
     }
 
+    [Theory]
+    [InlineData(0x80)]
+    [InlineData(0x81)]
+    [InlineData(0x82)]
+    [InlineData(0x83)]
+    [InlineData(0x84)]
+    [InlineData(0x85)]
+    [InlineData(0x86)]
+    public void NativeEmptyAndVacatedSlotsPreserveReadableActiveAndReserveMembership(int marker)
+    {
+        var party = StoryMemoryCapture.Party(new RosterMemory { EmptyValue = marker }, 0x4000);
+        Assert.NotNull(party);
+        Assert.Equal(marker, party[5]);
+        var state = new FieldStoryState(60, false) { Party = party };
+        Assert.Equal(1, state.PartyContains(5, true));
+        Assert.Equal(0, state.PartyContains(4, true));
+        Assert.Equal(1, state.PartyContains(4, false));
+        Assert.Equal(0, state.PartyContains(6, false));
+    }
+
+    [Fact]
+    public void VacatedRoboSlotDoesNotCountAsARecruitedOrActiveRobo()
+    {
+        var party = StoryMemoryCapture.Party(new RosterMemory { ReserveRobo = 0x83 }, 0x4000);
+        Assert.NotNull(party);
+        var state = new FieldStoryState(60, false) { Party = party };
+        Assert.Equal(0, state.PartyContains(3, true));
+        Assert.Equal(0, state.PartyContains(3, false));
+    }
+
+    [Fact]
+    public void FactoryPartyWithNativeEmptySlotsMakesRoboActiveAndLuccaReserve()
+    {
+        var state = new FieldStoryState(60, false) {
+            Party = StoryMemoryCapture.Party(new RosterMemory { FactoryParty = true }, 0x4000),
+        };
+        Assert.Equal(1, state.PartyContains(3, true));
+        Assert.Equal(0, state.PartyContains(2, true));
+        Assert.Equal(1, state.PartyContains(2, false));
+        Assert.Equal(0, state.PartyContains(4, false));
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(0x103)]
+    public void UnsupportedRosterWordsRemainUnavailable(int invalid)
+    {
+        Assert.Null(StoryMemoryCapture.Party(new RosterMemory { EmptyValue = invalid }, 0x4000));
+    }
+
+    [Fact]
+    public void RosterChangingBetweenReadsRemainsUnavailable()
+    {
+        Assert.Null(StoryMemoryCapture.Party(new RosterMemory { Mutate = true }, 0x4000));
+    }
+
     private sealed class RosterMemory : IReadableMemory
     {
         public bool Invalid { get; init; }
+        public int EmptyValue { get; init; } = 0x80;
+        public int ReserveRobo { get; init; } = 3;
+        public bool FactoryParty { get; init; }
+        public bool Mutate { get; init; }
+        private int reads;
         public bool TryRead(nuint address, Span<byte> destination)
         {
             if (address == 0x1724c && destination.Length == 36)
             {
-                int[] roster = [0, 1, 5, 4, 3, Invalid ? 99 : 255, 255, 255, 255];
+                int[] roster = [0, 1, 5, 4, ReserveRobo, Invalid ? 99 : EmptyValue, EmptyValue, EmptyValue, EmptyValue];
+                if (FactoryParty) roster = [0, 3, 1, 2, 0x80, 0x80, 0x80, 0x80, 0x80];
+                if (Mutate && reads++ != 0) roster[0] = 1;
                 for (var i = 0; i < roster.Length; i++) BinaryPrimitives.WriteInt32LittleEndian(destination[(i * 4)..], roster[i]);
                 return true;
             }

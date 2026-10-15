@@ -8,11 +8,14 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 public static class StoryMemoryCapture
 {
     /// <summary>D2/CF call 183090 modes 0/3, whose 183220/183410 helpers
-    /// search the first three/all nine expanded roster slots at A+1324C.</summary>
+    /// search the first three/all nine expanded roster slots at A+1324C.
+    /// Native removal (183260/183450) marks a vacated character with id|80;
+    /// initialization uses80. Preserve these raw nonmembers rather than
+    /// rejecting the roster or masking them back into recruited characters.</summary>
     public static IReadOnlyList<int>? Party(IReadableMemory memory, nuint actors)
     {
         var cells = StableWords(memory, actors + 0x1324Cu, 9, 4, false);
-        return cells.Count == 9 && cells.Values.All(v => v is >= 0 and <= 6 or 255)
+        return cells.Count == 9 && cells.Values.All(v => v is >= 0 and <= 6 or >= 0x80 and <= 0x86)
             ? Enumerable.Range(0, 9).Select(i => cells[i]).ToArray() : null;
     }
 

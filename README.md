@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.62 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.63 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.62 names verified Nu NPCs, identifies closed sealed doors and the Forest Ruins pyramid, and adds the available Epoch dock at the End of Time. It stops audited unintroduced optional requests from appearing remotely, keeps passage directions in Story Events, and adds Nu actions and the Epoch movie in the creator's approved voice. Earlier fixes and recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.62.md).
+Version 0.3.63 fixes the party reader's handling of native empty slots and restores the Factory entrance security terminal in Interactable Objects and Story Events. Both navigation modes reach the terminal; the onward lifts explain when entrance security blocks them. Robo's override, player Confirm and native barriers remain under the game's control. All earlier fixes and voice recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.63.md).
 
 ## Install the beta download
 
