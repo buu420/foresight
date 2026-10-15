@@ -63,9 +63,9 @@
 **Files:** Version/configuration, README, public native audit and release audit; existing package/deploy/catalog scripts.
 
 - [x] Review the complete diff with a fresh Codex review after Claude's weekly limit, fix justified findings and run the full managed and required release suites.
-- [ ] Preserve current saves/settings, game resources and all 156 previous WAVs; build final tagged standalone and AMM packages and verify their hashes.
-- [ ] Deploy locally, verify setup and preservation, publish GitHub tester assets and the matching AMM catalog entry.
-- [ ] Verify anonymous downloads and live catalog hashes; record a handoff and state any live gameplay/listening coverage still pending.
+- [x] Preserve current saves/settings, game resources and all 156 previous WAVs; build final tagged standalone and AMM packages and verify their hashes.
+- [x] Deploy locally, verify setup and preservation, publish GitHub tester assets and the matching AMM catalog entry.
+- [x] Verify anonymous downloads and live catalog hashes; record a handoff and state any live gameplay/listening coverage still pending.
 
 ## Execution rulings
 
