@@ -10,6 +10,34 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class FactoryEntranceTests
 {
     [Theory]
+    [InlineData(57)]
+    [InlineData(59)]
+    public void EarlyFactoryVisitDoesNotNameAnUnintroducedCharacter(int point)
+    {
+        var frame = Frame(2560, 6399, point: point, roster: [0, 1, 2, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]);
+        var terminal = Assert.Single(frame.Targets, t => t.Id == "actor:8:4:127");
+        Assert.DoesNotContain("Robo", terminal.Instruction ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Robo", terminal.ArrivalInstruction ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(frame.Targets, t => t.Id == "story:future:factory-security");
+    }
+
+    [Fact]
+    public void CapturedNativeRosterBindsTheConsoleWithItsControllerPresent()
+    {
+        var roster = StoryMemoryCapture.Party(new RosterMemory([0, 3, 1, 2, 0x80, 0x80, 0x80, 0x80, 0x80]), 0x4000);
+        Assert.NotNull(roster);
+        var state = new FieldStoryState(60, false) { Party = roster };
+        Assert.True(new GameNavigationCatalog.Requirement("ActiveParty", 3, 0, 1, true).Allows(state));
+        var frame = Frame(2560, 6399, roster: roster.ToArray());
+        var terminal = Assert.Single(frame.Targets, t => t.Id == "actor:8:4:127");
+        var story = Assert.Single(frame.Targets, t => t.Id == "story:future:factory-security");
+        Assert.False(story.IsStoryNote);
+        Assert.Equal(terminal.ApproachPoints, story.ApproachPoints);
+        Assert.NotNull(NavigationPathfinder.Search(frame.Graph, frame.Player, story.ApproachPoints).Route);
+        Assert.DoesNotContain(frame.Targets, t => t.Id == "actor-encounter:8" || t.Id == "actor-encounter:15");
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(4)]
     public void SharedMapStairOutsideTheEntranceDoesNotBecomeAnEntranceDestination(int flags)
@@ -135,7 +163,8 @@ public sealed class FactoryEntranceTests
         Assert.True(Assert.Single(frame.Targets, t => t.Id == "story:future:factory-security").IsStoryNote);
     }
 
-    private static NavigationFrame Frame(int x, int y, int flags = 0, Func<FieldActorSnapshot, FieldActorSnapshot>? mutate = null)
+    private static NavigationFrame Frame(int x, int y, int flags = 0, Func<FieldActorSnapshot, FieldActorSnapshot>? mutate = null,
+        int point = 60, int[]? roster = null)
     {
         // Positions, class, draw and activation gates are from the October15
         // log. Roster words and terrain planes were NOT logged. Null Party
@@ -143,15 +172,19 @@ public sealed class FactoryEntranceTests
         // MapTable0124's initial resource terrain, not a captured live map.
         var player = Actor(1, 0, 0, x, y, true);
         var terminal = Actor(8, 4, 127, 2432, 4864);
-        var actors = new[] { player, Actor(2, 2, 1, x, y, true), Actor(4, 1, 3, x, y, true),
+        var party = roster is null
+            ? new[] { player, Actor(4, 1, 3, x, y, true), Actor(2, 2, 1, x, y, true) }
+            : roster.Take(3).Select((character, slot) => Actor(character + 1, slot, character, x, y, true)).ToArray();
+        FieldActorSnapshot[] actors = [Actor(0, 7, 0, 65280, 65280), .. party,
             mutate?.Invoke(terminal) ?? terminal, Actor(9, 7, 0, 1152, 1535), Actor(10, 7, 0, 3968, 1535),
             Actor(11, 5, 85, 2176, 2559), Actor(12, 5, 85, 2688, 2559), Actor(13, 5, 85, 3200, 2559),
-            Actor(14, 7, 0, 2432, 2559), Actor(16, 7, 0, 1152, 4351), Actor(17, 7, 0, 1152, 4863) };
+            Actor(14, 7, 0, 2432, 2559), Actor(16, 7, 0, 1152, 4351), Actor(17, 7, 0, 1152, 4863)];
         var field = new FieldNavigationSnapshot(0x266F8958, 0x4000, 0x2000, 0x20000, 18, 228, true,
-            1, 0, 1, 1, player, actors, [1, 4, 2]);
-        var story = new FieldStoryState(60, true) {
+            1, 0, 1, 1, player, actors, party.Select(a => a.Index).ToArray());
+        var story = new FieldStoryState(point, true) {
             Globals = new Dictionary<int, int> { [0x58] = flags },
             Locals = new Dictionary<int, int> { [8] = 0, [9] = 0, [10] = 0 },
+            Party = roster,
         };
         using var stream = typeof(FactoryEntranceTests).Assembly.GetManifestResourceStream(
             "ChronoTriggerAccessibility.Mod.Tests.Navigation.factory-entrance-map-0363.json")!;
@@ -174,4 +207,14 @@ public sealed class FactoryEntranceTests
         new(id, x >> 8, x, x & 255, y >> 8, y, y & 255, 0, 1, kind == 7 ? 0 : 1, visual, kind,
             0x2020, 0, id is 8 or 16 or 17 || party ? 128 : 0, party, true, true, true);
     private sealed class NoMemory : IReadableMemory { public bool TryRead(nuint address, Span<byte> destination) => false; }
+    private sealed class RosterMemory(int[] values) : IReadableMemory
+    {
+        public bool TryRead(nuint address, Span<byte> destination)
+        {
+            if (address != 0x1724C || destination.Length != 36) return false;
+            for (var i = 0; i < values.Length; i++)
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(destination[(i * 4)..], values[i]);
+            return true;
+        }
+    }
 }

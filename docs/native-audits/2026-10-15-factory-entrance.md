@@ -53,8 +53,8 @@ visible identity now also establishes object capability independently of the
 optional roster capture. Drawing, native call, subject and scene checks remain.
 Its existing actor-facing/Confirm rules supply both navigation modes, and
 arrival asks the player to use Confirm. Robo's active-party requirement still
-runs in the game; a known missing Robo can be explained without claiming
-unknown membership is absence.
+runs in the game. Review caught an unnecessary instruction that could name him
+on an early visit; that instruction was removed before publication.
 
 MapTable 0124 has solid laser cells 14..16,18 until the native opening. Therefore
 the onward lifts were correctly unreachable before security was disabled.

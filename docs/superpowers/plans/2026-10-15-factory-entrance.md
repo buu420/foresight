@@ -13,7 +13,7 @@ automated Confirm, hidden information or changes to unrelated files.
 - [x] Locate the new log, inspect current source, preserve unrelated work and confirm scope.
 - [x] Establish the native interaction and routing failure using fresh Ghidra, installed resources, the log and a focused reproduction.
 - [x] Add meaningful failing regressions, implement the smallest supported correction, and verify both navigation modes and native restrictions.
-- [ ] Review the final diff and run the full managed and required package/release checks.
+- [x] Review the final diff, resolve the early-character hint finding and run the full managed and required package/release checks.
 - [ ] Build and deploy the tagged 0.3.63 tester release, preserve recordings/game files/saves/settings, and verify public packages/catalog.
 - [ ] Record evidence/handoff and report remaining live-test limits.
 

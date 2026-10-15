@@ -163,9 +163,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 storyCandidate: !conveyorRobot,
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
                     (label is not null || actor.IsActivationCandidate || scriptedAction),
-                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." :
-                    entranceTerminal && story?.Flag(0x58, 4) == false && story.PartyContains(3, true) == 0
-                    ? "Robo must be in the active party to deactivate security." : null,
+                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
