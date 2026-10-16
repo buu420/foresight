@@ -5,6 +5,8 @@ Mountain of Woe Station 3, story point 180. The target is exit 1 toward Station 
 also selected by `story:full:woe-summit`. Both have 36 approach points. The
 recorded player positions are 5504,13439,layer 1 and 8755,7111,layer 1. Exit 0
 back to the base still routes successfully.
+Earlier failures in the same report occur at 5472,13055,layer 1 and 5248,12415,layer 1
+(lines 5649/5659 and 9142).
 
 The log has 12,294 lines / 2,838,229 bytes and SHA256
 `8bdb7d88bf5c2516737a0a415da774f7f1dd0c27e22868f030d5cf5ca8dcc50c`.
@@ -34,12 +36,19 @@ The private probe and public fixture combine installed initial Map 186 with
 the 27 actor facts logged at each reported pose. Unlogged facing, render and
 script fields and complete story arrays are synthetic. This reconstructs
 the failure; it does not establish the exact live map or all native flags.
+The earlier two failure poses reuse the 11942 actor frame with the logged
+leader position substituted; this does not claim exact actor captures for
+those earlier moments.
 
 Both onward searches hit the old 131,072-position budget. With 262,144 available,
 the counting probe finds 927- and 788-point paths respectively, after expanding
 132,252 and 141,758 distinct positions. The return routes take 20 and 173 points.
 Fine-coordinate starts require more search than the aligned entry position
 used by the older initial-map audit.
+The two earlier poses also fail under the old budget and succeed under the new
+one, with 922/925-point paths after 130,668/130,667 expanded positions. Their
+return routes take 27/41 points. Expansion counts differ from positions admitted
+to the queue, which is what the ceiling bounds.
 
 The same explicit-budget comparison also succeeds under the installed private
 32-bit .NET runtime. This exercises the routing probe in the game's process
@@ -52,15 +61,16 @@ interaction, target identity or story prerequisite is added or bypassed.
 
 ## Validation limits
 
-The new 16-case regression suite first produced 14 failures and 2 passes on the
-old limit. After the ceiling change, all 16 pass. It exercises both reported
+The initial 16-case regression suite produced 14 failures and 2 passes on the
+old limit. After the ceiling change, all 16 passed. Review found two additional
+logged failure poses; coverage was expanded to 32 passing cases. It exercises all four
 poses through Exits and Story Events in both navigation modes, checks the
 return exit, retains explicit small-budget failure, and drives the navigation
 controller across the mountain using an independent single-frame native
 walking oracle. That oracle was transcribed from the verified movement
 handlers; simulated inputs are not live gameplay.
 
-The complete 3,800-test managed suite passes (Core 226, Mod 2,386, Native 1,178,
+The complete 3,816-test managed suite passes (Core 226, Mod 2,402, Native 1,178,
 Prism 10). The 28 release regressions, 6 deployment-path checks and canonical-path
 check also pass.
 
