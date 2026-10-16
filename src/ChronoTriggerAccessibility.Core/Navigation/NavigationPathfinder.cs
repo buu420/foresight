@@ -15,9 +15,10 @@ public static class NavigationPathfinder
     /// <summary>Ceiling on distinct positions admitted by one search. Each can
     /// retain at most nine headings, including the initial zero heading.</summary>
     // Pixel boundaries needed by narrow field passages add distinct positions.
-    // The full map audit includes reachable Mountain of Woe/Frozen Cliffs routes
-    // exceeding 65,536 positions; retain a finite ceiling covering those maps.
-    public const int DefaultMaximumVisited = 131072;
+    // Mountain of Woe routes from logged fine-coordinate poses exceed 131,072
+    // positions even though the aligned entry pose fits. Cover those detours
+    // while retaining a finite ceiling and honoring smaller caller budgets.
+    public const int DefaultMaximumVisited = 262144;
 
     private readonly record struct SearchNode(NavigationPoint Point, int XDirection, int YDirection);
     public static IReadOnlyList<NavigationPoint>? Find(INavigationGraph graph, NavigationPoint start,
