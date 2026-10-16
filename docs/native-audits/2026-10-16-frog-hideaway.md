@@ -32,6 +32,9 @@ Offsets below are raw Atel file offsets, including its0x1E1 header.
 - At0739, `12 06 08 03 08` requires local06<8. At0740, `04 08 23` calls
   actor4 function3 automatically; this is not a Confirm dispatch. At0743,
   `0B 10` stops actor8's own processing.
+- Native call scheduler RVA164D10 checks the called actor's persistent call
+  and processing gates and requires its current priority to exceed the
+  requested priority2. Unknown or busy priority is not treated as ready.
 - Actor4 function3 begins at061C with dialogue6F, places Frog at0623, shows
   him at0628 with opcode90, and runs his entrance animation. The later
   dialogue and scene remain the native game's responsibility.
@@ -46,7 +49,8 @@ managed source. Ghidra checks the program executable hash before exporting.
 
 `FrogHideawayTargets` admits only the coherent scene141 state with local08=0,
 known globalFF80clear, active native controller8, and the loaded, concealed
-non-party Frog actor4 with its exact native class/visual identity. Unknown
+non-party Frog actor4 with its exact native class/visual identity and native
+call readiness. Unknown
 flags do not mean clear. A paused/removed controller or revealed actor retires
 the target.
 
@@ -68,7 +72,15 @@ actor snapshots derived from the logged values; they are not live replay.
 Both commands must find a route, enter X<8 and avoid exits; loss of native
 player control stops movement. Negative controls cover missing/paused/removed
 controllers, wrong identities, active-party Frog, revealed Frog, later local
-mode, unknown local/global values and incoherent or different scenes.
+mode, unknown local/global values, blocked or busy callee scripts, and
+incoherent or different scenes. All24 hideaway cases and the complete3784-test
+managed suite passed. The28 release regressions,6 deployment-path checks and
+canonical-path check also passed.
+
+An early visit during Frog's first active-party stint can run an unusual
+native branch that hides and repurposes his party actor. The repair retains
+the non-party actor guard; that edge needs a live save to establish its
+player-facing behavior. The reported story102 visit has no active-party Frog.
 
 No game launch, live playthrough, physical controller input, native dialogue
 confirmation or audible screen-reader test was performed for this repair.

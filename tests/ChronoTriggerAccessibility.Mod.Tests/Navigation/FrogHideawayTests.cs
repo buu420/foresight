@@ -89,6 +89,10 @@ public sealed class FrogHideawayTests
     [InlineData("removed-controller")]
     [InlineData("wrong-controller")]
     [InlineData("wrong-frog")]
+    [InlineData("frog-calls-off")]
+    [InlineData("frog-processing-off")]
+    [InlineData("frog-busy")]
+    [InlineData("frog-priority-unknown")]
     [InlineData("party-frog")]
     [InlineData("other-scene")]
     [InlineData("incoherent-scene")]
@@ -131,6 +135,10 @@ public sealed class FrogHideawayTests
             case "removed-controller": controller = controller with { ClassTag = 0x87 }; break;
             case "wrong-controller": controller = controller with { ClassTag = 4 }; break;
             case "wrong-frog": frog = frog with { VisualIndex = 3 }; break;
+            case "frog-calls-off": frog = frog with { ScriptCallsEnabled = false }; break;
+            case "frog-processing-off": frog = frog with { ScriptProcessingEnabled = false }; break;
+            case "frog-busy": frog = frog with { ScriptPriority = 2 }; break;
+            case "frog-priority-unknown": frog = frog with { ScriptPriority = null }; break;
             case "party-frog": frog = frog with { IsPartyMember = true }; break;
         }
         FieldActorSnapshot[] actors = [Actor(0, 7, 0, 65280, 65280), player,
