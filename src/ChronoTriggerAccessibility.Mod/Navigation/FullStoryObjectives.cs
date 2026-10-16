@@ -135,7 +135,7 @@ public static class FullStoryObjectives
             "Tata's house is in Porre in 600 AD, at the south end of the map.")),
 
         Upto(0x69,
-            Sub("frog-medal", "Talk to Frog in his hideaway", [With(141, 4)], Flag(0xF3, 0x10)),
+            Sub("frog-medal", "Talk to Frog in his hideaway", [new(141, [4], [FrogHideawayTargets.Id])], Flag(0xF3, 0x10)),
             Tail("frog-hilt", "Examine the sparkling chest in Frog's hideaway", [With(141, 10)])),
 
         Upto(0x6C, Tail("melchior-shows", "Take both halves of the broken sword to Melchior",

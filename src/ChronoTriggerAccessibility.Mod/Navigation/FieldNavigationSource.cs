@@ -524,6 +524,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 arrivalInstruction: dock.ArrivalInstruction, contactPosition: dock.ContactPosition,
                 actorSlot: dock.ActorSlot);
         }
+        if (!map.TransitionPending && FrogHideawayTargets.Available(field, story))
+        {
+            // Actor8 has no sprite or usable position. Its automatic X<8 test
+            // describes the room's left side; use actual walkable floor there,
+            // never the concealed Frog actor's off-floor coordinates.
+            var points = Enumerable.Range(0, map.Height).SelectMany(y =>
+                    Enumerable.Range(0, Math.Min(8, map.Width)).SelectMany(x => At(x * 256 + 128, y * 256 + 128)))
+                .Where(p => !graph.IsTerminal(p)).Distinct().OrderBy(Distance).Take(64).ToArray();
+            if (points.Length != 0)
+                Add(FrogHideawayTargets.Id, "Left side of the room", NavigationCategory.Objects,
+                    points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
+                    guideAvailable: true, instruction: "Walk into the left side of the room.");
+        }
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);
         if (field.SceneIdCoherent) storyCandidates.AddRange(TyrannoLairTargets.Build(field, map, story));
