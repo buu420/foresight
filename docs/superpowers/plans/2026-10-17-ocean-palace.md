@@ -62,5 +62,5 @@
 
 - [x] Fresh whole-change Opus review and resolve concrete findings with regressions.
 - [x] Version 0.3.67; build native/payload and run full appropriate suites plus release gates.
-- [ ] Deploy with backups, verify installed hashes and saved state, then immutable public release and Mod Manager publication.
-- [ ] Verify anonymous downloads/catalog and document live testing still outstanding.
+- [x] Deploy with backups, verify installed hashes and saved state, then immutable public release and Mod Manager publication.
+- [x] Verify anonymous downloads/catalog and document live testing still outstanding.
