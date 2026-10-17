@@ -60,7 +60,9 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                     ? new FieldTerrainGraph(preview, actors.Where(a => a.Index is 24 or 25 && a.Index != actor.Index).ToArray(),
                         story, scene, terminals, collisions, touchGoals)
                     : Wrap(preview, terminals, collisions, touchGoals);
-                foreach (var contact in Contacts(actor, start.Layer, scene.Id).Concat(nativeTouch ? EdgeContacts(actor, start.Layer) : []))
+                var keepDoor = KeepFieldTargets.IsEntranceDoor(scene.Id, actor, story);
+                foreach (var contact in Contacts(actor, start.Layer, scene.Id)
+                    .Concat(nativeTouch || keepDoor ? EdgeContacts(actor, start.Layer, keepDoor) : []))
                 {
                     if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);
@@ -120,16 +122,16 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         yield return new(x + 128, y + 64, layer);
     }
 
-    private static IEnumerable<NavigationPoint> EdgeContacts(FieldActorSnapshot actor, int layer)
+    private static IEnumerable<NavigationPoint> EdgeContacts(FieldActorSnapshot actor, int layer, bool keepDoor = false)
     {
-        // End of Time's closed stair/door floor keeps the old central contacts
-        // inaccessible. 178980 accepts the leading movement probe before the
+        // End of Time's stairs/door and the keep entrance have closed floor
+        // around their central contacts. 178980 accepts the leading probe before the
         // terrain check: +/-112 in X, -64 in Y for side probes, -112 for up.
         // Reach a real floor point outside the closed tiles, then keep moving
         // toward the live marker until its script opens the captured terrain.
         var x = (actor.FineX - actor.CollisionOffsetX * 16 + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
-        if (actor.Index == 25)
+        if (actor.Index == 25 || keepDoor)
         {
             yield return new(x, y + 256, layer);
             yield break;

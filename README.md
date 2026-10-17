@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.65 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.66 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.65 fixes the route-search limit on Mountain of Woe from the reported player positions. Exits and Story Events now find the onward route in both manual guidance and auto-walk. Native floor, bridge and progression restrictions still apply. All earlier fixes and voice recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.65.md).
+Version 0.3.66 repairs the keep entrance-door route, adds Ozzie's central-chamber story interaction, and gives identical lights unique appearance labels without revealing hidden trap roles. The door-opening cue uses the approved narration voice. Early keep music silence is native. The reported desktop crash remains unconfirmed; the external helper now records memory counters and the game's exit code. All earlier fixes and recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.66.md).
 
 ## Install the beta download
 

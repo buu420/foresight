@@ -45,6 +45,7 @@ public static class StorySceneActionCapture
     public const string EnhasaPlazaScriptSha256 = "A912C2735A866CE4A2CE0009BE97BCAF5CF7E94C1BF67411CCFD0FA64657C880";
     public const string KajarPlazaScriptSha256 = "DCCC62DA4C8A32EE6ED19E470111921DBA0A3F427194E14BF07CB3CB24578960";
     public const string EpochStorageScriptSha256 = "31EB20EC02C914BE51D48F153C1FAE386757EAC1B0F6F1349F0702BE3A532B65";
+    public const string KeepEntranceScriptSha256 = "45383E9FE6637B86C95D4937BE39EB5E9A395BAE48B651B78D210FD80A86B7D1";
 
     private enum Proof { TileCopyQueued, MoveStarted, StaticFrame, Looping, CountedFinished, AnimationReset, TimedMoveStarted }
 
@@ -105,6 +106,11 @@ public static class StorySceneActionCapture
         Book(StorySceneAction.BookCOpens, KajarPlaza, 13, 0x5A4, "E52F2F2F2F161841", KajarC),
         Book(StorySceneAction.BookCCloses, KajarPlaza, 13, 0x594, "E52E2F2E2F161841", KajarC),
         Book(StorySceneAction.PassageOpens, KajarPlaza, 11, 0x525, "E5272C282F110B3B", KajarA) with { Passage = new(17, 11, 19, 15) },
+        // Keep entrance: final opening frame only, never the earlier animation
+        // or actor0's E4 reload. The visible doorway supplies the camera proof.
+        new(StorySceneAction.PassageOpens, 165, 246, 2626, KeepEntranceScriptSha256,
+            14, 0x69E, "E50427072B061A3B", 14, -1, 0, 0xFF, Proof.TileCopyQueued,
+            Book: new(7, 0, 7, 29), Passage: new(6, 26, 10, 31)),
         // Exact Nu (load_enemy 0 -> c263) dispatches in the storage-room introduction
         // and the later player interaction. Ordinary load-time pose reapplication is absent.
         Nu(StorySceneAction.NuApproachesParty, 0x610, "92C0E0", Proof.TimedMoveStarted),

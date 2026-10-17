@@ -172,7 +172,7 @@ public sealed class StoryBookActionCaptureTests
         Assert.Equal(cue.Bytes, Convert.ToHexString(script, (int)cue.Pc + 1, 8));
     }
 
-    private static StoryActionSnapshot Dispatch(TestMemory memory, Cue cue, int opcode = 0xE5)
+    internal static StoryActionSnapshot Dispatch(TestMemory memory, Cue cue, int opcode = 0xE5)
     {
         memory.Word(Context + 0x24, cue.Pc);
         memory.Word(Field + 0x1180, (uint)cue.Actor * 2);
@@ -180,7 +180,7 @@ public sealed class StoryBookActionCaptureTests
         return before;
     }
 
-    private static TestMemory Scene(Cue cue)
+    internal static TestMemory Scene(Cue cue)
     {
         var script = InstalledFieldScripts.Atel(cue.Script);
         var memory = new TestMemory();
@@ -229,7 +229,7 @@ public sealed class StoryBookActionCaptureTests
     }
 
     /// <summary>E5 171C40: seven operand bytes to data+0x2E13E, +0x1211C |= 0x20, yield, next = pc+8.</summary>
-    private static void TileCopy(TestMemory memory, uint pc, string operands)
+    internal static void TileCopy(TestMemory memory, uint pc, string operands)
     {
         memory.Add(Data + 0x2E13E, Convert.FromHexString(operands));
         memory.Word(Actors + 0x1211C, 0x20);

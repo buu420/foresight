@@ -18,6 +18,22 @@ public sealed class FullStoryTargets
         var result = new List<NavigationTarget>();
         foreach (var chapter in FullStoryObjectives.Build(scene, state))
         {
+            // These identical lights have no visible role distinction. Offer
+            // each choice equally instead of selecting the privately known warp.
+            if (chapter.Category == NavigationCategory.StoryEvents && KeepFieldTargets.AmbiguousLights(scene))
+            {
+                var lights = available.Where(t => t.Id.StartsWith("keep-light:", StringComparison.Ordinal)).ToArray();
+                if (lights.Length != 0)
+                {
+                    result.AddRange(lights.Select(t => t with
+                    {
+                        Id = "story:" + t.Id, Label = "Explore " + t.Label, Category = NavigationCategory.StoryEvents,
+                        GuideAvailable = true,
+                        Instruction = t.Instruction ?? "Walk onto the glowing point.",
+                    }));
+                    continue;
+                }
+            }
             var objective = TyrannoLairRoutes.ForRoom(
                 OceanPalaceRoutes.ForRoom(chapter, scene, player, state), scene, player, state);
             // A pillar is an alternative way to reach its destination, not the

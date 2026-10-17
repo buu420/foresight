@@ -139,8 +139,15 @@ public sealed class SceneConnectionRouter
                 result.AddRange(actor.Actions.Where(a => a.Kind == "Warp" && Exists(a.Destination) && a.Available(state, local: false))
                     .Select(a => new Link(scene.Id, ContinuedDestination(scene.Id, actor.Id, a.Destination, state),
                         null, actor.Id, 2, a.Destination)));
-            result.AddRange(scene.Regions.Where(r => r.Kind == "Warp" && Exists(r.Destination) && r.Available(state, local: false))
+            result.AddRange(scene.Regions.Where(r => r.Kind == "Warp" && !KeepFieldTargets.ConcealedRegion(scene.Id, r) &&
+                    Exists(r.Destination) && r.Available(state, local: false))
                 .Select(r => new Link(scene.Id, r.Destination, r.Id, Cost: 2)));
+            // Preserve room-to-room look-ahead across the light puzzle without
+            // identifying which identical light is the warp. No target/actor ID
+            // means this link cannot bind a current-room navigation destination.
+            if (KeepFieldTargets.AmbiguousLights(scene.Id))
+                result.AddRange(scene.Regions.Where(r => r.Kind == "Warp" && Exists(r.Destination) && r.Available(state, local: false))
+                    .Select(r => new Link(scene.Id, r.Destination, null, Cost: 2)));
         }
         // These are look-ahead links only. Actual world-map targets always come
         // from the currently enabled native entrance table and connected land.

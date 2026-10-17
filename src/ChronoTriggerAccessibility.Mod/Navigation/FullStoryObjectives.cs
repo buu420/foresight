@@ -179,9 +179,10 @@ public static class FullStoryObjectives
             Sub("keep-west", "Explore the west wing of the keep", [At(169)], Flag(0xA3, 0x10)),
             Sub("keep-east", "Explore the east wing of the keep", [At(173)], Flag(0xA3, 0x20)),
             Sub("keep-entrance", "Return to the light in the keep's entrance hall", [With(166, 10)], Flag(0xA3, 0x02)),
-            Sub("keep-slash-guards", "Approach the figure in the west wing", [With(169, 9)], Flag(0xA3, 0x40)),
+            Sub("keep-slash-guards", "Talk to the figure in the west wing", [With(169, 9)], Flag(0xA3, 0x40)),
             Sub("keep-slash", "Face Slash in the west wing", [With(169, 11)], Flag(0xA3, 0x04)),
             Sub("keep-flea", "Face Flea in the east wing", [With(173, 11)], Flag(0xA3, 0x08)),
+            Sub("keep-ozzie-corridor", "Approach Ozzie in the central chamber", [With(170, 10)], Flag(0xAC, 0x02)),
             Tail("keep-ozzie", "Follow the entrance-hall warp and pursue Ozzie", [With(174, 10)],
                 "Both lieutenants must be defeated before the entrance-hall light leads farther into the keep.")),
 

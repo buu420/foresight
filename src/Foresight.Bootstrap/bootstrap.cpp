@@ -1,5 +1,24 @@
 // Registry-free attach broker. Its lifetime owns the shared Reloaded pointer lease.
 #include "../ChronoTriggerAccessibility.Launcher/injection.h"
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+
+// Sample the game from this external helper. This remains available when an
+// in-process native failure prevents the accessibility log from being flushed.
+static void LogGameMemory(HANDLE process, Logger& log) noexcept {
+    try {
+        PROCESS_MEMORY_COUNTERS_EX memory{};
+        memory.cb = sizeof(memory);
+        if (!GetProcessMemoryInfo(process, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory))) return;
+        wchar_t message[256]{};
+        swprintf_s(message, L"Game memory: private=%llu bytes; working=%llu bytes; peak-working=%llu bytes; peak-commit=%llu bytes.",
+            static_cast<unsigned long long>(memory.PrivateUsage),
+            static_cast<unsigned long long>(memory.WorkingSetSize),
+            static_cast<unsigned long long>(memory.PeakWorkingSetSize),
+            static_cast<unsigned long long>(memory.PeakPagefileUsage));
+        log.W(message);
+    } catch (...) { /* Diagnostics must not release the live game's pointer lease. */ }
+}
 
 struct Handle {
     HANDLE value = nullptr;
@@ -64,8 +83,22 @@ static int Attach(Logger& log) {
     if (WaitForSingleObject(process.value, 0) != WAIT_TIMEOUT || !SetEvent(ready.value))
         throw std::runtime_error("Game exited or readiness signal failed");
     log.A("Bootstrapper loaded; holding pointer lease until game exit.");
-    WaitForSingleObject(process.value, INFINITE);
-    log.A("Game exited; restoring Reloaded pointer.");
+    DWORD waitResult;
+    do {
+        LogGameMemory(process.value, log);
+        waitResult = WaitForSingleObject(process.value, 60000);
+    } while (waitResult == WAIT_TIMEOUT);
+    if (waitResult != WAIT_OBJECT_0)
+        throw std::runtime_error("Cannot observe game process exit");
+    LogGameMemory(process.value, log);
+    DWORD gameExitCode = 0;
+    if (GetExitCodeProcess(process.value, &gameExitCode)) {
+        wchar_t exitMessage[128]{};
+        swprintf_s(exitMessage, L"Game exited with code 0x%08lX; restoring Reloaded pointer.", gameExitCode);
+        log.W(exitMessage);
+    } else {
+        log.A("Game exited; its exit code is unavailable; restoring Reloaded pointer.");
+    }
     return 0;
 }
 

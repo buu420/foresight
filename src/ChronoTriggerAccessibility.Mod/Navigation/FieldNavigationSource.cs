@@ -89,9 +89,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (copy is not null && FieldTerrainGraph.Preview(map, copy) is { } opened)
                 openedEndOfTimeDoor = new(opened, collisions, touchGoals);
         }
+        var keepEntranceCopy = guideActive ? KeepFieldTargets.EntranceOpening(field, story) : null;
+        var openedKeepEntrance = keepEntranceCopy is not null && FieldTerrainGraph.Preview(map, keepEntranceCopy) is { } keepOpen
+            ? new FieldNavigationGraph(keepOpen, collisions, touchGoals) : null;
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
-        var savePoints = FieldSavePoints.Find(field, story);
+        var savePoints = FieldSavePoints.Find(field, story).Where(s => KeepFieldTargets.SaveIsObservable(field, story, s)).ToArray();
         var savePointActors = savePoints.SelectMany(s => s.Actors).ToHashSet();
         foreach (var actor in field.Actors)
         {
@@ -99,6 +102,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             if (field.SceneIdCoherent && ZealFieldLabels.IsBookEffect(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && KeepFieldTargets.IsRegionLightSprite(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && KeepFieldTargets.LightLabel(field.SceneId, actor) is { } light)
+            {
+                scriptTerminals.Add((KeepFieldTargets.LightId(actor.Index), actor.TileX, actor.TileY, actor.TileX, actor.TileY));
+                Add(KeepFieldTargets.LightId(actor.Index), light, NavigationCategory.Objects,
+                    Position(actor.FineX, actor.FineY), SaveApproach(actor.TileX, actor.TileY),
+                    TileVisible(actor.TileX, actor.TileY), guideAvailable: guideActive && actor.ScriptProcessingEnabled,
+                    instruction: "Walk onto the glowing point.", actorSlot: actor.Index);
+                continue;
+            }
             var book = field.SceneIdCoherent ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var description = FieldVisualLabels.Describe(actor);
             // A lair hole is a Confirm passage drawn as an open pit; a parked one has no contact.
@@ -110,9 +123,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // The catalog cannot infer that handoff from actor9's handler alone.
             var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);
             var entranceTerminal = field.SceneIdCoherent && FutureAreaLabels.IsEntranceSecurityTerminal(field.SceneId, actor);
+            var touchFigure = field.SceneIdCoherent && KeepFieldTargets.IsTouchFigure(field.SceneId, actor, story);
             var scriptedAction = forestGate || entranceTerminal || book is not null || story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
-            var scriptedContact = scriptedAction &&
+            var scriptedContact = touchFigure || scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
             // These pickups have an initialization-time gate in addition to the
             // contact handler. Preserve the audited gate when the sprite lingers.
@@ -170,7 +184,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     entranceTerminal ? "Press Confirm to use the entrance security terminal." :
                     forestGate ? "Press Confirm to enter the Time Gate." :
                     lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
-                contactPosition: battleTouch ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
+                contactPosition: battleTouch || touchFigure ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
                 // set ActorApproach routes to); touch pickups finish by contact instead.
@@ -210,7 +224,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             // Saving is enabled by standing in the checker's tile, so the goals are the lattice
             // nodes that keep the controller's arrival box inside it.
-            Add($"save:{save.Checker}:{save.TileX}:{save.TileY}", FieldSavePoints.Label, NavigationCategory.Objects,
+            var lightLabel = KeepFieldTargets.LightLabel(field.SceneId, save.Checker);
+            if (lightLabel is not null)
+                scriptTerminals.Add((KeepFieldTargets.LightId(save.Checker), save.TileX, save.TileY, save.TileX, save.TileY));
+            Add(lightLabel is not null ? KeepFieldTargets.LightId(save.Checker) : $"save:{save.Checker}:{save.TileX}:{save.TileY}",
+                lightLabel is not null ? lightLabel + ", save point" : FieldSavePoints.Label, NavigationCategory.Objects,
                 Position(save.TileX * 256 + 128, save.TileY * 256 + 128), SaveApproach(save.TileX, save.TileY),
                 TileVisible(save.TileX, save.TileY), guideAvailable: guideActive,
                 instruction: FieldSavePoints.Instruction, arrivalInstruction: FieldSavePoints.ArrivalInstruction);
@@ -234,6 +252,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
+            if (KeepFieldTargets.ConcealedActor(field.SceneId, actor.Index)) continue;
             // Actor36's native A4 branch has an operand the older catalog missed.
             // Its boarding choice is described only by the verified dock provider.
             if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
@@ -245,7 +264,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var landmarkId = $"landmark:{marker}";
             var book = actor.ClassTag == 7 ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
-            var label = book ?? teleportPad ?? EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
+            var keepDoor = keepEntranceCopy is not null && actor.Index == 14;
+            var label = book ?? teleportPad ?? (keepDoor ? KeepFieldTargets.EntranceDoorLabel : null) ??
+                EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
                 FutureAreaLabels.IsTouchLandmark(field.SceneId, actor.Index);
@@ -298,7 +319,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                instruction: liftRestriction ?? (sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
+                instruction: liftRestriction ?? (keepDoor ? "Walk up to the door to open it." :
+                    sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
                     teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
                     ? "Teleportation is currently unavailable." : null),
                 guidanceRestriction: liftRestriction,
@@ -357,6 +379,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var actor in field.Actors)
         {
             if (!InsideMap(actor)) continue;
+            if (KeepFieldTargets.ConcealedEncounter(field.SceneId, actor)) continue;
             if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             // These verified switches are scenery. Their concealed battle
@@ -379,7 +402,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 confirm: touch ? null : ActorConfirm([actor]), actorSlot: actor.Index);
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
-        foreach (var group in sceneInfo.Regions.Where(r =>
+        foreach (var group in sceneInfo.Regions.Where(r => !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
+                     KeepFieldTargets.RegionLightVisible(field, r) &&
                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story)) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
@@ -388,6 +412,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             var region = group.First();
             var pillar = FutureAreaLabels.IsPillar(field.SceneId, region);
+            var keepLight = KeepFieldTargets.RegionLightLabel(field.SceneId, region);
             var goals = new List<NavigationPoint>();
             for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
             for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
@@ -407,6 +432,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 "Encounter" => ("Encounter", NavigationCategory.Enemies),
                 _ => ("Story event", NavigationCategory.Exits),
             };
+            if (keepLight is not null)
+            {
+                regionLabel = keepLight;
+                regionCategory = field.SceneId == 166 ? NavigationCategory.Objects : NavigationCategory.Exits;
+            }
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                 storyOnly: region.Kind is not ("Warp" or "Encounter"), guideAvailable: true,
@@ -906,6 +936,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 if (openedEndOfTimeDoor is not null && graph.ExitAt(px, py) == 0)
                     for (var layer = 1; layer <= 3; layer++)
                         if (openedEndOfTimeDoor.TryPosition(px, py, layer, out var point)) yield return point;
+                if (openedKeepEntrance is not null && graph.ExitAt(px, py) == 1)
+                    for (var layer = 1; layer <= 3; layer++)
+                        if (openedKeepEntrance.TryPosition(px, py, layer, out var point)) yield return point;
             }
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,

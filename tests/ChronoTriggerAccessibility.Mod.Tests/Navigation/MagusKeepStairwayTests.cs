@@ -106,6 +106,33 @@ public sealed class MagusKeepStairwayTests
         Assert.True(result.AutoWalking);
     }
 
+    [Theory]
+    [InlineData(NavigationCommand.Guide)]
+    [InlineData(NavigationCommand.ToggleWalk)]
+    public void StoryGuidanceApproachesOzziesNativeTouchBeforeTheTrapExit(NavigationCommand command)
+    {
+        // Earlier reported central-chamber pose and Ozzie position; installed
+        // initial map94. Other unreported actor state is not reconstructed.
+        var player = FullGameNavigationTests.Actor(1, 10880, 1945, true) with { ClassTag = 0 };
+        var ozzie = Creature(10, 0xA6, 10112, 1791);
+        var field = FullGameNavigationTests.Field(170) with { LeadPlayer = player, Actors = [player, ozzie] };
+        var globals = Enumerable.Range(0, 512).ToDictionary(i => i, _ => 0);
+        globals[0xA3] = 0x7E; // Both wings/bosses complete; AC02 still clear.
+        var state = new FieldStoryState(136, true) { Globals = globals };
+        var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, Installed[170],
+            new(0, 0, 16384, 16384), [], state);
+        var target = Assert.Single(frame.Targets, t => t.Id == "story:full:keep-ozzie-corridor");
+        Assert.NotEmpty(target.ApproachPoints);
+        Assert.NotNull(NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints).Route);
+        var controller = new NavigationController();
+        var selected = frame with { Targets = [target] };
+        for (var i = 0; i < (int)target.Category; i++) controller.Handle(NavigationCommand.NextCategory, selected, 0);
+        var result = controller.Handle(command, selected, 1);
+        Assert.True(result.Guiding, string.Join(" | ", result.Speech));
+        Assert.False(controller.AllowsConfirmWhileFollowing(selected));
+        Assert.DoesNotContain(result.Speech, s => s.Contains("blocking", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void TheLiveGraphReportsTheExactNativeContactSlotAtTheCut()
     {
@@ -169,5 +196,10 @@ public sealed class MagusKeepStairwayTests
         using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(Path.GetDirectoryName(source)!, "magus-keep-stairways-0356.json")));
         return json.RootElement.GetProperty("Maps").EnumerateArray().ToDictionary(e => e.GetProperty("Scene").GetInt32(),
             e => JsonSerializer.Deserialize<FieldMapSnapshot>(e.GetProperty("Map").GetRawText())!);
+    }
+
+    private sealed class NoMemory : ChronoTriggerAccessibility.Native.Memory.IReadableMemory
+    {
+        public bool TryRead(nuint address, Span<byte> destination) => false;
     }
 }

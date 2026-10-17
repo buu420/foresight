@@ -131,12 +131,12 @@ public sealed class FieldSavePointTests
         {
             VisualIndex = 0x79, LoadedFlag = 0,
         };
-        var player = FullGameNavigationTests.Actor(5, 1664, 1663, true) with { ClassTag = 0 };
+        var player = FullGameNavigationTests.Actor(5, 56 * 256 + 128, 52 * 256 + 128, true) with { ClassTag = 0 };
         var field = FullGameNavigationTests.Field(174) with { LeadPlayer = player, Actors = [player, combined] };
         NavigationFrame At(int point) => new FieldNavigationSource(new NoMemory(), _ => { })
-            .Build(field, Room(64, 64), new(0, 0, 16384, 16384), [], Story(point));
-        Assert.DoesNotContain(At(136).Targets, t => t.Label == "Save point");
-        Assert.Single(At(137).Targets, t => t.Label == "Save point");
+            .Build(field, Room(64, 64), new(0, 0, 16384, 16384), [], Story(point, 0x80));
+        Assert.DoesNotContain(At(136).Targets, t => t.Label == "Save point" || t.Label.EndsWith(", save point", StringComparison.Ordinal));
+        Assert.Single(At(137).Targets, t => t.Label == "Glowing point B, save point");
     }
 
     [Fact]
@@ -151,9 +151,9 @@ public sealed class FieldSavePointTests
         var player = FullGameNavigationTests.Actor(5, 56 * 256 + 128, 52 * 256 + 128, true) with { ClassTag = 0 };
         var field = FullGameNavigationTests.Field(174) with { LeadPlayer = player, Actors = [player, combined] };
         var frame = new FieldNavigationSource(new NoMemory(), _ => { })
-            .Build(field, Room(64, 64), new(0, 0, 16384, 16384), [], Story(140));
+            .Build(field, Room(64, 64), new(0, 0, 16384, 16384), [], Story(140, 0x80));
         var objects = frame.Targets.Where(t => t.Category == NavigationCategory.Objects).ToArray();
-        Assert.Equal("Save point", Assert.Single(objects).Label);
+        Assert.Equal("Glowing point B, save point", Assert.Single(objects).Label);
     }
 
     [Fact]
@@ -177,6 +177,14 @@ public sealed class FieldSavePointTests
                 ClassTag = combined ? 4 : 7, VisualIndex = combined ? FieldSavePoints.SparkleVisual : 0, LoadedFlag = 0,
             };
             var player = FullGameNavigationTests.Actor(1, 384, 384, true) with { ClassTag = 0 };
+            var state = Satisfying(region);
+            if (KeepFieldTargets.AmbiguousLights(scene.Id))
+            {
+                // Identical keep lights require the native on-tile saving cue;
+                // a private D0 role alone must not identify the correct light.
+                player = FullGameNavigationTests.Actor(1, x, y, true) with { ClassTag = 0 };
+                state = state with { Globals = new Dictionary<int, int>(state.Globals) { [FieldSavePoints.CanSaveGlobal] = 0x80 } };
+            }
             var actors = new List<FieldActorSnapshot> { player, checker };
             // Every separate sparkle in the census is the slot just below its checker, so the
             // unloaded checker is the first contact on the tile, as in the live scene 29.
@@ -184,9 +192,11 @@ public sealed class FieldSavePointTests
                 actors.Add(FullGameNavigationTests.Actor(region.Actor - 1, x, y) with { VisualIndex = FieldSavePoints.SparkleVisual });
             var field = FullGameNavigationTests.Field(scene.Id) with { LeadPlayer = player, Actors = actors.ToArray() };
             var frame = new FieldNavigationSource(new NoMemory(), _ => { })
-                .Build(field, Room(128, 128), new(0, 0, 32768, 32768), [], Satisfying(region));
-            var save = Assert.Single(frame.Targets, t => t.Label == FieldSavePoints.Label &&
-                t.Id == $"save:{region.Actor}:{region.Left}:{region.Top}");
+                .Build(field, Room(128, 128), new(0, 0, 32768, 32768), [], state);
+            var saveId = KeepFieldTargets.AmbiguousLights(scene.Id) ? KeepFieldTargets.LightId(region.Actor)
+                : $"save:{region.Actor}:{region.Left}:{region.Top}";
+            var save = Assert.Single(frame.Targets, t => t.Id == saveId &&
+                (t.Label == FieldSavePoints.Label || t.Label.EndsWith(", save point", StringComparison.Ordinal)));
             Assert.NotEmpty(save.ApproachPoints);
             Assert.All(save.ApproachPoints, p => Assert.Equal((region.Left, region.Top), (p.X >> 8, p.Y >> 8)));
         }
