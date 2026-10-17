@@ -1099,6 +1099,118 @@
       "sha256": "9f11f2d0661a3e9b1031bc0e5a00fac86978d9ad1ad5647be0e1ec14bcb275e9",
       "duration": 2.644125,
       "bytes": 126962
+    },
+    {
+      "id": "scene-cronocrumbles-named",
+      "text": "Crono turns into a dark silhouette and crumbles away.",
+      "sha256": "d7cbdc2f22ba915cad3d0ec5ef13f5f3a12eec2aa8c4afca147a3097440af9cf",
+      "duration": 2.969208,
+      "bytes": 142566
+    },
+    {
+      "id": "scene-cronocrumbles-appearance",
+      "text": "The red-haired boy turns into a dark silhouette and crumbles away.",
+      "sha256": "1c1d7a5a9c79fca8d596db843451ed61d712ca0dc1e84d6eddad3c9f5c53a9f2",
+      "duration": 3.944458,
+      "bytes": 189378
+    },
+    {
+      "id": "scene-cronoraisesarmsbeforelavos-named",
+      "text": "Crono raises both arms toward Lavos.",
+      "sha256": "80f344367d6957fa9670f6b4e609af8af62a2d43538f5f62b81afa5c7ae9d522",
+      "duration": 2.644125,
+      "bytes": 126962
+    },
+    {
+      "id": "scene-cronoraisesarmsbeforelavos-appearance",
+      "text": "The red-haired boy raises both arms toward Lavos.",
+      "sha256": "49e31348c31c41d15f72af28f21bf2821927c4e6096b1eefb3f450859ddb0c0f",
+      "duration": 3.154958,
+      "bytes": 151482
+    },
+    {
+      "id": "scene-cronoraiseshandstomachine-named",
+      "text": "Crono raises both hands toward the machine.",
+      "sha256": "61399ec5a860972cca496bef158b5f70ce78199180c282f1451d81a5b0622be7",
+      "duration": 2.783458,
+      "bytes": 133650
+    },
+    {
+      "id": "scene-cronoraiseshandstomachine-appearance",
+      "text": "The red-haired boy raises both hands toward the machine.",
+      "sha256": "d45d9b626cdfa6c9910e748f209c4e7047d524c4b1b4413b933651c66cda669e",
+      "duration": 3.294292,
+      "bytes": 158170
+    },
+    {
+      "id": "scene-kniferises",
+      "text": "A glowing red knife rises.",
+      "sha256": "51fed16c4f976caf203ff56df6bfbd997eb43f99c7e4aade006ca3e44ab206ff",
+      "duration": 1.993958,
+      "bytes": 95754
+    },
+    {
+      "id": "scene-knifeshootsintomachine",
+      "text": "The knife shoots up into the machine.",
+      "sha256": "1bb49510c7f86200066f18b850efa6b19f215e34208076cebe0a2cf2753a9430",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "scene-swordappearsinmachine",
+      "text": "A sword appears in the machine.",
+      "sha256": "ce3b31c268041fc553a62910043c9810279bcfa2e0ff6d409f3d6985801bb524",
+      "duration": 1.947542,
+      "bytes": 93526
+    },
+    {
+      "id": "scene-schalaholdsouthands",
+      "text": "Schala holds out both hands.",
+      "sha256": "f3f19a1a01c5f2aa0a14a77eadc5711ab560be25cfb2713ad011e4686ac267f0",
+      "duration": 2.272625,
+      "bytes": 109130
+    },
+    {
+      "id": "scene-partygoneschalakneels",
+      "text": "Schala kneels alone, head bowed.",
+      "sha256": "49c35c59bf1c49367988614ffbebbb1ff1b806f07465423abf340dad6f574a79",
+      "duration": 3.340708,
+      "bytes": 160398
+    },
+    {
+      "id": "scene-magusstandswhereprophetwas",
+      "text": "The hooded Prophet is gone. Magus stands in his place.",
+      "sha256": "7906e131a273d1c61754458c20999950451f2a14748cad8fb874a69f7556a67f",
+      "duration": 3.851583,
+      "bytes": 184920
+    },
+    {
+      "id": "scene-schalaknockedtoknees",
+      "text": "Schala drops to her knees.",
+      "sha256": "ebcb56f90a4bdd792eee688d5a81911b5504656cee6bb6822a56c57a0e2fc228",
+      "duration": 2.319042,
+      "bytes": 111358
+    },
+    {
+      "id": "scene-magusthrowndown",
+      "text": "Magus is thrown backward, face down.",
+      "sha256": "665ad3f990d9b1842493f2218b0db3cda66e636c3af6ac0c8687333474e5114c",
+      "duration": 2.690583,
+      "bytes": 129192
+    },
+    {
+      "id": "scene-munespinsandvanishes",
+      "text": "Mune spins around and vanishes.",
+      "sha256": "9224b3d2cd2609ff44c3d6ca47eb5d5a5fb537cb84e9a751b92c70669e13863f",
+      "duration": 2.458375,
+      "bytes": 118046
+    },
+    {
+      "id": "scene-masaspinsandvanishes",
+      "text": "Masa spins around and vanishes.",
+      "sha256": "2d5eda67116163df0635c4af87ca93613061b9ed33b17a374164bf5e78914e24",
+      "duration": 2.597667,
+      "bytes": 124732
     }
   ],
   "movieNarration": [
@@ -1137,6 +1249,24 @@
       "bytes": 1202842,
       "sampleRate": 24000,
       "samples": 601399
+    },
+    {
+      "movie": "007.dat",
+      "decodedSha256": "6860fc51185dbcc2009ecbe57154cc0e10879f811ee1f99df9908051af399704",
+      "resource": "movie-narration-007.wav",
+      "sha256": "5d1811e1ee869f8acf94a5361fb088bf180332cbf8933e41e858b18d25fdd813",
+      "bytes": 2596234,
+      "sampleRate": 24000,
+      "samples": 1298095
+    },
+    {
+      "movie": "007-en.dat",
+      "decodedSha256": "c84685bc35f79f25e20c2fa637df20acb0bfabd22648314a83f5409434b00b52",
+      "resource": "movie-narration-007.wav",
+      "sha256": "5d1811e1ee869f8acf94a5361fb088bf180332cbf8933e41e858b18d25fdd813",
+      "bytes": 2596234,
+      "sampleRate": 24000,
+      "samples": 1298095
     }
   ]
 }

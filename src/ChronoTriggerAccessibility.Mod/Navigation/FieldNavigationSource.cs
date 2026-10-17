@@ -58,6 +58,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     public NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldViewport viewport,
         IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null, Func<int, int, bool>? treasureGrid = null)
     {
+        map = OceanPalaceTargets.Map(field, map);
         var identity = $"{field.Engine:X8}:{field.SceneId}";
         if (scene != identity)
         {
@@ -102,6 +103,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             if (field.SceneIdCoherent && ZealFieldLabels.IsBookEffect(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && (OceanPalaceTargets.ConcealedSprite(field.SceneId, actor) ||
+                OceanPalaceTargets.ParkedCast(field.SceneId, actor, story))) continue;
             if (field.SceneIdCoherent && KeepFieldTargets.IsRegionLightSprite(field.SceneId, actor)) continue;
             if (field.SceneIdCoherent && KeepFieldTargets.LightLabel(field.SceneId, actor) is { } light)
             {
@@ -112,8 +115,33 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     instruction: "Walk onto the glowing point.", actorSlot: actor.Index);
                 continue;
             }
+            // The bridge switch is the drawn panel; the knob beneath it runs the switch on
+            // contact. One row at the panel, finished at the knob while its contact is available.
+            if (field.SceneIdCoherent && OceanPalaceTargets.BridgePanel(field.SceneId, actor))
+            {
+                var knob = field.Actors.FirstOrDefault(a => OceanPalaceTargets.BridgeKnob(field.SceneId, a) && a.IsUsable &&
+                    a.IsDrawn && InsideMap(a) && a.ScriptCallsEnabled && (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0);
+                GameNavigationCatalog.Action[] contact = knob is null || story is null ? [] :
+                    GameNavigationCatalog.ActorInfo(field.SceneId, knob)?.Actions.Where(a => a.Touch && a.Available(story)).ToArray() ?? [];
+                IReadOnlyList<NavigationPoint> goals = contact.Length == 0 ? [] : InteractionPositions(TouchApproach(knob!), contact, true);
+                if (goals.Count != 0) touchGoals.Add((knob!.Index, goals));
+                var inactive = contact.Length == 0 ? OceanPalaceTargets.InactiveSwitch : null;
+                var panel = Position(actor.FineX, actor.FineY);
+                var shown = viewport.Contains(panel.X, panel.Y);
+                Add($"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}", "Floor switch", NavigationCategory.Objects,
+                    panel, goals, shown, guideAvailable: guideActive && inactive is null,
+                    instruction: inactive, guidanceRestriction: inactive, actorSlot: actor.Index);
+                // The bridge objective names the knob's own slot.
+                if (inactive is null)
+                    Add($"actor:{knob!.Index}:{knob.ClassTag}:{knob.VisualIndex}", "Floor switch", NavigationCategory.Objects,
+                        panel, goals, shown, storyOnly: true, guideAvailable: guideActive, actorSlot: knob.Index);
+                continue;
+            }
             var book = field.SceneIdCoherent ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var description = FieldVisualLabels.Describe(actor);
+            // Verified switch and control slots keep their native finish and availability.
+            if (field.SceneIdCoherent && OceanPalaceTargets.ObjectLabel(field.SceneId, actor) is { } oceanObject)
+                description = (oceanObject, NavigationCategory.Objects);
             // A lair hole is a Confirm passage drawn as an open pit; a parked one has no contact.
             var lairHole = field.SceneIdCoherent && ReptiteLairTargets.IsHole(field.SceneId, actor);
             if (lairHole && ReptiteLairTargets.IsParked(actor)) continue;
@@ -147,6 +175,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 ZealFieldLabels.Actor(field.SceneId, actor) ?? nu ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
+            // These names identify a character the player can see; alone they are not a destination.
+            var onScreenName = field.SceneIdCoherent ? StoryCharacterLabels.OnScreenName(field.SceneId, actor, story) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
                 actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
@@ -155,6 +185,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
             approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
+            var seen = viewport.Contains(position.X, position.Y) || discovered.ContainsKey(id);
+            var npcRegion = guideActive ? OceanPalaceTargets.NpcRegion(field, actor, story, seen) ??
+                OceanPalaceStoryTargets.NpcRegion(field, actor, story) : null;
+            if (npcRegion is not null) approaches = RegionPoints(npcRegion);
             var battles = FieldEncounters.Available(field, actor, story, scriptInfo);
             // A trap drawn as an ordinary object keeps its appearance. Its outcome is
             // learned by interacting, not announced by putting it in Enemies in advance.
@@ -176,7 +210,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 storyOnly: encounterOnly,
                 storyCandidate: !conveyorRobot,
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
-                    (label is not null || actor.IsActivationCandidate || scriptedAction),
+                    (label is not null && label != onScreenName || actor.IsActivationCandidate || scriptedAction || npcRegion is not null),
                 instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
@@ -188,7 +222,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
                 // set ActorApproach routes to); touch pickups finish by contact instead.
-                confirm: touchOnly || conveyorRobot ? null : ActorConfirm(Anchors(actor)),
+                confirm: touchOnly || conveyorRobot || npcRegion is not null ? null : ActorConfirm(Anchors(actor)),
                 followUntilInteraction: field.SceneIdCoherent && field.SceneId == 221 &&
                     actor.Index is 12 or 13 && actor.ClassTag == 5 && actor.VisualIndex == 134 &&
                     story is { Point: >= 51 and < 54 } && story.Flag(0xEC, 0x10) == true && story.Flag(0xEC, 0x40) == false,
@@ -273,7 +307,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
-            if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index);
+            if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
+                OceanPalaceTargets.MarkerLabel(field.SceneId, actor);
             if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
@@ -315,15 +350,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var bike = FutureAreaLabels.IsBike(field.SceneId, actor.Index);
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage(landmarkId, actor);
-            var liftRestriction = FutureAreaLabels.FactoryLiftRestriction(field.SceneId, actor.Index, story);
+            var restriction = FutureAreaLabels.FactoryLiftRestriction(field.SceneId, actor.Index, story) ??
+                OceanPalaceTargets.WallSwitchBlocked(field, actor);
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
                 guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                instruction: liftRestriction ?? (keepDoor ? "Walk up to the door to open it." :
+                instruction: restriction ?? (keepDoor ? "Walk up to the door to open it." :
                     sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
                     teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
                     ? "Teleportation is currently unavailable." : null),
-                guidanceRestriction: liftRestriction,
+                guidanceRestriction: restriction,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
@@ -380,6 +416,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             if (!InsideMap(actor)) continue;
             if (KeepFieldTargets.ConcealedEncounter(field.SceneId, actor)) continue;
+            if (OceanPalaceTargets.ConcealedSprite(field.SceneId, actor)) continue;
             if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             // These verified switches are scenery. Their concealed battle
@@ -403,7 +440,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
-                     KeepFieldTargets.RegionLightVisible(field, r) &&
+                     KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story)) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
@@ -413,11 +450,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var region = group.First();
             var pillar = FutureAreaLabels.IsPillar(field.SceneId, region);
             var keepLight = KeepFieldTargets.RegionLightLabel(field.SceneId, region);
-            var goals = new List<NavigationPoint>();
-            for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
-            for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
-                goals.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
-            var points = goals.OrderBy(Distance).Distinct().Take(64).ToArray();
+            var points = RegionPoints(region);
             if (points.Length == 0) continue;
             if (region.Kind == "Warp" && !pillar) scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
             // Encounters are the script's own battle triggers (native D8 under a
@@ -439,7 +472,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             }
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
-                storyOnly: region.Kind is not ("Warp" or "Encounter"), guideAvailable: true,
+                storyOnly: region.Kind is not ("Warp" or "Encounter") ||
+                    OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
                 arrivalInstruction: pillar ? FutureAreaLabels.PillarInstruction(story!) : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
@@ -581,8 +615,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         // Preserve its full staged proof. A marker in another disconnected room
         // cannot make every guide target in that room available from here.
         var stagedPart = CanReachStagedPart();
-        bool Disconnected(NavigationTarget t) => !stagedPart && !t.IsStoryNote &&
-            t.ApproachPoints.Count != 0 && t.ApproachPoints.All(p => regions.Connected(player, p) == false);
+        bool Disconnected(NavigationTarget t) =>
+            field.SceneIdCoherent && OceanPalaceTargets.DifferentRoom(field.SceneId, player, t) ||
+            !stagedPart && !t.IsStoryNote && t.ApproachPoints.Count != 0 &&
+            t.ApproachPoints.All(p => regions.Connected(player, p) == false);
         // Atel_0164 gates these two exterior doorways through scene303's
         // Confirm wall switches. No touch-opening copy covers either exit.
         // Other maps can have automatic doors whose staged goals need their
@@ -732,6 +768,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             for (var layer = 1; layer <= 3; layer++)
                 if (graph.TryPosition(x, y, layer, out var point)) yield return point;
+        }
+        NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
+        {
+            var points = new List<NavigationPoint>();
+            for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
+            for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
+                points.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
+            return points.OrderBy(Distance).Distinct().Take(64).ToArray();
         }
         /// <summary>Resolve the audited and script-proven actors that receive Confirm for this
         /// one, only while both native actors match their identities and permit their scripts

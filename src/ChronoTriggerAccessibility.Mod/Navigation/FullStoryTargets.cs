@@ -34,8 +34,8 @@ public sealed class FullStoryTargets
                     continue;
                 }
             }
-            var objective = TyrannoLairRoutes.ForRoom(
-                OceanPalaceRoutes.ForRoom(chapter, scene, player, state), scene, player, state);
+            var objective = OceanPalaceStoryTargets.ForScene(TyrannoLairRoutes.ForRoom(
+                OceanPalaceRoutes.ForRoom(chapter, scene, player, state, available), scene, player, state), scene);
             // A pillar is an alternative way to reach its destination, not the
             // intended era itself. Vehicle look-ahead must evaluate that destination.
             var goals = fieldOnly && objective.Goals.Any(g => g.Scene != FullStoryObjectives.EndOfTime)

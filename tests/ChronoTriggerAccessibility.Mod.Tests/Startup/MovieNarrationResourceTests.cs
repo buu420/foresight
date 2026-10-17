@@ -13,8 +13,19 @@ public sealed class MovieNarrationResourceTests : IDisposable
     public void ShippedCinemaMastersIncludeEpochAndEndNoLaterThanTheirMovies()
     {
         var tracks = MovieNarrationPack.Load();
-        Assert.Equal(["002.dat", "003.dat", "004.dat", "006.dat"], tracks.Select(track => track.Movie.FileName));
+        Assert.Equal(["002.dat", "003.dat", "004.dat", "006.dat", "007.dat", "007-en.dat"], tracks.Select(track => track.Movie.FileName));
         Assert.All(tracks, track => Assert.True(track.Samples / (double)track.SampleRate <= track.Movie.DurationSeconds));
+    }
+
+    [Theory]
+    [InlineData("007.dat", "6860FC51185DBCC2009ECBE57154CC0E10879F811EE1F99DF9908051AF399704", 33765590)]
+    [InlineData("007-en.dat", "C84685BC35F79F25E20C2FA637DF20ACB0BFABD22648314A83F5409434B00B52", 33868434)]
+    public void OceanPalaceNarrationRecognizesEachOriginalLanguageVariant(string file, string hash, int bytes)
+    {
+        var movie = Assert.Single(MovieNarrationCatalog.Originals, movie => movie.FileName == file);
+        Assert.Equal(hash, movie.DecodedSha256);
+        Assert.Equal(bytes, movie.DecodedBytes);
+        Assert.Equal(54.0873, movie.DurationSeconds);
     }
 
     [Fact]

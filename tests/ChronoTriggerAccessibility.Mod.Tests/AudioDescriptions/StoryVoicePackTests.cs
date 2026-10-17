@@ -24,7 +24,7 @@ public sealed class StoryVoicePackTests
     [Fact]
     public void EveryNativeDescriptionHasItsVerifiedRecordedPcmInTheBuiltMod()
     {
-        var pack = StoryVoicePack.Load(); Assert.Equal(156, pack.Count);
+        var pack = StoryVoicePack.Load(); Assert.Equal(172, pack.Count);
         foreach (var cue in StoryVoiceCueCatalog.All)
         {
             var clip = pack.Get(new(cue.Text, cue.Id, cue.Text));

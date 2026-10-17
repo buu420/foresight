@@ -73,8 +73,9 @@ planes have isolated occupied bands9..18,29..38,50..59, split into left/right
 rooms. `OceanPalaceRoutes` selects the exact native exit serving the player's
 current section. It sends upper switches through hall405 exits1/7, the central
 switch through407, and lower switches through the great stair and elevator,
-then412 exits2/1. Scene406 exits5/6 connect pairs of upper rooms within the same
-scene ID. Elevator416's compulsory battles end at418 (Atel0224 actor11 DF05A5).
+then412 exits2/1. Scene406 exits4/5 connect the upper rooms and exits6/7 connect
+the bottom rooms within the same scene ID. Elevator416's compulsory battles
+end at418 (Atel0224 actor11 DF05A5).
 This prevents an upper-hall route from mistaking a lower-room switch for an
 adjacent object just because their scene identifiers agree. The live collision
 graph still supplies every movement step.

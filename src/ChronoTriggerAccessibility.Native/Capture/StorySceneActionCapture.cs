@@ -26,6 +26,21 @@ public enum StorySceneAction
     NuApproachesParty,
     NuRaisesArms,
     NuSettlesDown,
+    // Ocean Palace: entrance (Atel_0220), Great Stair (0397), Mammon Machine (0223) and
+    // the Lavos chamber (0230). Appended so the earlier numbers stay stable.
+    MuneSpinsAndVanishes,
+    MasaSpinsAndVanishes,
+    CronoRaisesHandsToMachine,
+    KnifeRises,
+    KnifeShootsIntoMachine,
+    SwordAppearsInMachine,
+    SchalaHoldsOutHands,
+    PartyGoneSchalaKneels,
+    MagusStandsWhereProphetWas,
+    SchalaKnockedToKnees,
+    MagusThrownDown,
+    CronoRaisesArmsBeforeLavos,
+    CronoCrumbles,
 }
 
 /// <summary><c>Subject</c> is the visible actor the action is about; for the curtains that is
@@ -35,9 +50,10 @@ public enum StorySceneAction
 public sealed record StorySceneActionCandidate(StorySceneAction Action, StoryActionSnapshot Before,
     StoryActorState Subject, StoryActorState? Partner, bool RepeatDispatch);
 
-/// <summary>Matches a dispatch to one of seven reviewed anchors in the installed scripts and
+/// <summary>Matches a dispatch to one of the reviewed anchors in the installed scripts and
 /// proves the native result after the original handler. Evidence:
-/// artifacts/research/story-actions-20261009/scene-capture/findings.md.</summary>
+/// artifacts/research/story-actions-20261009/scene-capture/findings.md and, for the Ocean Palace,
+/// artifacts/research/ocean-palace-0367/claude-actions/findings.md.</summary>
 public static class StorySceneActionCapture
 {
     public const string BedroomScriptSha256 = "7AAC21A8D18D4908F4655D070CDD47ECA95939472EE66625CF12FC713B19C765";
@@ -46,6 +62,10 @@ public static class StorySceneActionCapture
     public const string KajarPlazaScriptSha256 = "DCCC62DA4C8A32EE6ED19E470111921DBA0A3F427194E14BF07CB3CB24578960";
     public const string EpochStorageScriptSha256 = "31EB20EC02C914BE51D48F153C1FAE386757EAC1B0F6F1349F0702BE3A532B65";
     public const string KeepEntranceScriptSha256 = "45383E9FE6637B86C95D4937BE39EB5E9A395BAE48B651B78D210FD80A86B7D1";
+    public const string OceanEntranceScriptSha256 = "BF053AD61ED8A210854A330290404D9783A0B5320F1D390D03CD257D8A1D7328";
+    public const string GreatStairScriptSha256 = "A208EBCC9B8869CF0A5F151A20E4EB8A9F05FA8E7442D777C46A7DD0BCD5E7AC";
+    public const string MammonMachineScriptSha256 = "19ED6D7CB22F69A1234CDA6E074EC1D560C036C1A6CA7CBE0261DD46780F6E00";
+    public const string LavosChamberScriptSha256 = "EA42051B8FFE21808700C375319E8F09060BDED7A3335746AC35FF0466A7438F";
 
     private enum Proof { TileCopyQueued, MoveStarted, StaticFrame, Looping, CountedFinished, AnimationReset, TimedMoveStarted }
 
@@ -57,11 +77,29 @@ public static class StorySceneActionCapture
 
     private sealed record Anchor(StorySceneAction Action, int Scene, int Script, int Length, string Sha256,
         int Actor, uint Pc, string Bytes, int Subject, int Partner, int MinStory, int MaxStory, Proof Proof,
-        Identity? Book = null, Tiles? Passage = null, int? SubjectClass = null, int? SubjectVisual = null);
+        Identity? Book = null, Tiles? Passage = null, int? SubjectClass = null, int? SubjectVisual = null,
+        bool ReplacesGesture = false);
 
     private static Anchor Nu(StorySceneAction action, uint pc, string bytes, Proof proof) =>
         new(action, 243, 163, 2159, EpochStorageScriptSha256, 14, pc, bytes, 14, -1, 0xAB, 0xFF, proof,
             SubjectClass: 5, SubjectVisual: 0);
+
+    /// <summary>The executing actor is the visible subject, identified by its exact class tag and
+    /// visual index (tester actor facts and OceanPalaceFixtures); the whole 8-byte window must match.</summary>
+    private static Anchor Ocean(StorySceneAction action, int scene, uint pc, int actor, string bytes,
+        int minStory, int maxStory, Proof proof, int subjectClass, int subjectVisual, bool replacesGesture = false)
+    {
+        var (script, length, sha256) = scene switch
+        {
+            404 => (220, 1173, OceanEntranceScriptSha256),
+            409 => (397, 2861, GreatStairScriptSha256),
+            415 => (223, 3650, MammonMachineScriptSha256),
+            423 => (230, 4852, LavosChamberScriptSha256),
+            _ => throw new ArgumentOutOfRangeException(nameof(scene)),
+        };
+        return new(action, scene, script, length, sha256, actor, pc, bytes, actor, -1, minStory, maxStory, proof,
+            SubjectClass: subjectClass, SubjectVisual: subjectVisual, ReplacesGesture: replacesGesture);
+    }
 
     private const int EnhasaPlaza = 355, KajarPlaza = 357, EnhasaScript = 208, KajarScript = 209;
     private const int EnhasaLength = 2796, KajarLength = 1861;
@@ -118,12 +156,56 @@ public static class StorySceneActionCapture
         Nu(StorySceneAction.NuRaisesArms, 0x639, "AC0C", Proof.StaticFrame),
         Nu(StorySceneAction.NuSettlesDown, 0x61D, "AC0D", Proof.StaticFrame),
         Nu(StorySceneAction.NuSettlesDown, 0x608, "AC0D", Proof.StaticFrame),
+        // Ocean Palace, verified against the installed scripts, rendered sprites and the Steam
+        // playthrough (artifacts/research/ocean-palace-0367/claude-actions/findings.md). Story gates are
+        // the observed points before each native branch moves on: 0220 loads Mune only below C3,
+        // 0397 loads Masa only below C6, 0223 runs the Masamune path at C9 and its aftermath at CB
+        // (set by 0230 at 0x1131), and 0230's chamber path runs at C9 until that write.
+        // Mune (load_enemy 98) and Masa (load_enemy 97) start 92 C0 04 before spinning and hiding.
+        Ocean(StorySceneAction.MuneSpinsAndVanishes, 404, 0x3A1, 9, "92C004171D0F1B17", 0xBD, 0xC2,
+            Proof.TimedMoveStarted, 5, 0x98),
+        Ocean(StorySceneAction.MasaSpinsAndVanishes, 409, 0xAFC, 33, "92C004A601A603A6", 0xC3, 0xC5,
+            Proof.TimedMoveStarted, 5, 0x97),
+        // Crono's raised arms (AA 22, c000 0xAC/0xAD) while the red knife (load_person 67) rises and
+        // shoots into the machine, and the sword (load_person 8B, c146 frame 6) appears there.
+        Ocean(StorySceneAction.CronoRaisesHandsToMachine, 415, 0x49A, 1, "AA221103FC058940", 0xC9, 0xC9,
+            Proof.Looping, 0, 0, replacesGesture: true),
+        Ocean(StorySceneAction.KnifeRises, 415, 0x70C, 9, "92C00CC19900C19A", 0xC9, 0xC9,
+            Proof.TimedMoveStarted, 4, 0x67),
+        Ocean(StorySceneAction.KnifeShootsIntoMachine, 415, 0x720, 9, "92C020AD0888400F", 0xC9, 0xC9,
+            Proof.TimedMoveStarted, 4, 0x67),
+        Ocean(StorySceneAction.SwordAppearsInMachine, 415, 0x753, 10, "AC069CC00288400F", 0xC9, 0xC9,
+            Proof.StaticFrame, 4, 0x8B),
+        // After the movie: Schala (load_person 09) holds out both hands (c016 19/20) and, once the
+        // others are hidden at 0x09BB..0x09CF, kneels alone with her head bowed (c016 18).
+        Ocean(StorySceneAction.SchalaHoldsOutHands, 415, 0x9A3, 12, "AA06AD08040E28AD", 0xCB, 0xCB,
+            Proof.Looping, 4, 9),
+        Ocean(StorySceneAction.PartyGoneSchalaKneels, 415, 0x9DA, 12, "AA05AD10BBD6000C", 0xCB, 0xCB,
+            Proof.Looping, 4, 9),
+        // Magus (PC-as-NPC 06) stands at the hooded Prophet's position after 0A 12 removes him;
+        // Schala kneels (c016 18) after being knocked back; Magus lands face down (c006 anim 08);
+        // Crono raises both arms (c000 0xAC/0xAD), then turns into the c000 F0 silhouette.
+        Ocean(StorySceneAction.MagusStandsWhereProphetWas, 423, 0xBE0, 8, "AA00AD0CBBA3000F", 0xC9, 0xCA,
+            Proof.Looping, 3, 6),
+        Ocean(StorySceneAction.SchalaKnockedToKnees, 423, 0xF0A, 19, "AA057D24BBAB0000", 0xC9, 0xCA,
+            Proof.Looping, 4, 9),
+        Ocean(StorySceneAction.MagusThrownDown, 423, 0xB5F, 8, "AA088938922A10F1", 0xC9, 0xCA,
+            Proof.Looping, 3, 6),
+        Ocean(StorySceneAction.CronoRaisesArmsBeforeLavos, 423, 0x7A0, 1, "AA220FAD040D009C", 0xC9, 0xCA,
+            Proof.Looping, 0, 0, replacesGesture: true),
+        Ocean(StorySceneAction.CronoCrumbles, 423, 0x7D2, 1, "ACF09C4002ACF19C", 0xC9, 0xCA,
+            Proof.StaticFrame, 0, 0),
     ];
 
     private const uint ScriptHeader = 0x12000, ScriptActorOffset = 0x1180;
 
     /// <summary>Cheap filter on a located dispatch: scene, Atel id, executing actor, PC and opcode.</summary>
     public static bool Watches(StoryScriptLocation location) => Find(location) is not null;
+
+    /// <summary>True only at Crono's two anchored Ocean Palace AA 22 instructions. The specific scene
+    /// description replaces the generic arms gesture there: when its proof is not met (for example the
+    /// subject is off camera, or a repeated dispatch is already described) nothing is spoken instead.</summary>
+    public static bool SupersedesGesture(StoryScriptLocation location) => Find(location) is { ReplacesGesture: true };
 
     /// <summary>Pre-native match: the full loaded script equals the installed digest, the
     /// instruction bytes and story gate match, and the subject (and partner) are drawn on screen.</summary>

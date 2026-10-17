@@ -200,6 +200,9 @@ public sealed class StoryActionRuntime
                         : new StoryNarration(sceneText, Unrecorded, sceneText), before.TextboxOpen, observedEpoch);
                     return;
                 }
+                // Crono's anchored Ocean Palace arms poses: only their proven scene description may
+                // speak. An unmatched or repeated dispatch never falls back to the generic gesture.
+                if (StorySceneActionCapture.SupersedesGesture(location)) return;
                 if (!before.ActorState.Drawn || before.ActorState.OnScreen != true) return;
                 var proof = prove(before);
                 if (observedEpoch != epoch || !enabled) return;

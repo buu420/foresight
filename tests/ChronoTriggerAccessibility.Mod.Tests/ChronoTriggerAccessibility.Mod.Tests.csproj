@@ -39,6 +39,7 @@
     <EmbeddedResource Include="Navigation\frog-hideaway-map-0364.json" />
     <EmbeddedResource Include="Navigation\mountain-woe-392-map-0365.json" />
     <EmbeddedResource Include="Navigation\keep-entrance-captures-0366.json" />
+    <EmbeddedResource Include="Navigation\ocean-palace-captures-0367.json" />
     <EmbeddedResource Include="Navigation\denadoro-146-map.json" />
     <EmbeddedResource Include="Navigation\denadoro-143-map-0349.json" />
     <EmbeddedResource Include="Navigation\denadoro-144-map-0349.json" />

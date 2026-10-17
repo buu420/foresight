@@ -237,7 +237,7 @@ public static class FullStoryObjectives
             [With(397, 9)],
             "The base hangs off the south of the 12000 BC map and is reached from the Mudbeast den. The way up runs base, station three, station five, station eight, summit.")),
 
-        Upto(0xBA, Tail("algetty-elder", "Report to the elder in Algetty", [With(382, 13)])),
+        Upto(0xBA, Tail("algetty-elder", "Report to the elder in Algetty", [At(382)])),
 
         Upto(0xBB, Tail("ruby-knife", "Take what Melchior offers in the elder's room",
             [With(382, 10)])),
@@ -255,7 +255,7 @@ public static class FullStoryObjectives
 
         Upto(0xCB, Tail("ocean-palace-lavos", "Face what rises in the Ocean Palace",
             [With(415, 11), At(419), At(420), At(421), At(423)],
-            "Continue to the Mammon Machine. When you regain movement, walk toward Lavos.")),
+            "Continue toward the Mammon Machine.")),
 
         Upto(0xCC, Tail("ocean-palace-end", "Follow the collapse of the Ocean Palace",
             [At(415), At(493)])),

@@ -76,12 +76,21 @@ public static class StoryVoiceCueCatalog
         StorySceneAction.BookAOpens or StorySceneAction.BookACloses or
         StorySceneAction.BookBOpens or StorySceneAction.BookBCloses or
         StorySceneAction.BookCOpens or StorySceneAction.BookCCloses or StorySceneAction.PassageOpens or
-        StorySceneAction.NuApproachesParty or StorySceneAction.NuRaisesArms or StorySceneAction.NuSettlesDown;
+        StorySceneAction.NuApproachesParty or StorySceneAction.NuRaisesArms or StorySceneAction.NuSettlesDown or
+        StorySceneAction.MuneSpinsAndVanishes or StorySceneAction.MasaSpinsAndVanishes or
+        StorySceneAction.CronoRaisesHandsToMachine or StorySceneAction.KnifeRises or
+        StorySceneAction.KnifeShootsIntoMachine or StorySceneAction.SwordAppearsInMachine or
+        StorySceneAction.SchalaHoldsOutHands or StorySceneAction.PartyGoneSchalaKneels or
+        StorySceneAction.MagusStandsWhereProphetWas or StorySceneAction.SchalaKnockedToKnees or
+        StorySceneAction.MagusThrownDown or StorySceneAction.CronoRaisesArmsBeforeLavos or
+        StorySceneAction.CronoCrumbles;
 
     private static string? Name(int sprite) => sprite >= 0 && sprite < Names.Length ? Names[sprite] : null;
     private static string SceneId(StorySceneAction action) => "scene-" + action.ToString().ToLowerInvariant();
     private static bool HasBoyName(StorySceneAction action) => action is
-        StorySceneAction.BoyGetsOutOfBedAndStretches or StorySceneAction.FairCollision or StorySceneAction.BoyGetsUp;
+        StorySceneAction.BoyGetsOutOfBedAndStretches or StorySceneAction.FairCollision or StorySceneAction.BoyGetsUp or
+        StorySceneAction.CronoRaisesHandsToMachine or StorySceneAction.CronoRaisesArmsBeforeLavos or
+        StorySceneAction.CronoCrumbles;
     private static StoryActionSnapshot Frame(int sprite) => new(
         new(0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0xAA), "AA00000000000000",
         new(0, 0, sprite, 1, 0, 0, 0, 0, 0, 0, 0, 0, true, true), 0x100, 0, 0, 0, -1);

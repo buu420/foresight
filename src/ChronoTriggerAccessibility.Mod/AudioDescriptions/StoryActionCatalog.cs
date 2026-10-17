@@ -36,6 +36,21 @@ public static class StoryActionCatalog
             StorySceneAction.NuApproachesParty => "The Nu walks up to the party.",
             StorySceneAction.NuRaisesArms => "The Nu raises both arms and opens its mouth wide.",
             StorySceneAction.NuSettlesDown => "The Nu settles down beneath the Epoch.",
+            // Ocean Palace: only the proven physical change, in the scene that shows it. The white
+            // room, flashes, lights and other unproven effects are deliberately not mentioned.
+            StorySceneAction.MuneSpinsAndVanishes => "Mune spins around and vanishes.",
+            StorySceneAction.MasaSpinsAndVanishes => "Masa spins around and vanishes.",
+            StorySceneAction.CronoRaisesHandsToMachine => $"{Boy()} raises both hands toward the machine.",
+            StorySceneAction.KnifeRises => "A glowing red knife rises.",
+            StorySceneAction.KnifeShootsIntoMachine => "The knife shoots up into the machine.",
+            StorySceneAction.SwordAppearsInMachine => "A sword appears in the machine.",
+            StorySceneAction.SchalaHoldsOutHands => "Schala holds out both hands.",
+            StorySceneAction.PartyGoneSchalaKneels => "Schala kneels alone, head bowed.",
+            StorySceneAction.MagusStandsWhereProphetWas => "The hooded Prophet is gone. Magus stands in his place.",
+            StorySceneAction.SchalaKnockedToKnees => "Schala drops to her knees.",
+            StorySceneAction.MagusThrownDown => "Magus is thrown backward, face down.",
+            StorySceneAction.CronoRaisesArmsBeforeLavos => $"{Boy()} raises both arms toward Lavos.",
+            StorySceneAction.CronoCrumbles => $"{Boy()} turns into a dark silhouette and crumbles away.",
             _ => throw new ArgumentOutOfRangeException(nameof(candidate)),
         };
     }

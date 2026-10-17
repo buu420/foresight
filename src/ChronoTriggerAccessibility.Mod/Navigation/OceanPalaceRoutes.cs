@@ -9,8 +9,12 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 internal static class OceanPalaceRoutes
 {
     public static FullStoryObjective ForRoom(FullStoryObjective objective, int scene, NavigationPoint player,
-        FieldStoryState state)
+        FieldStoryState state, IReadOnlyList<NavigationTarget> available)
     {
+        // Atel0499 actor0 starts the Algetty scene on entry while global 0x1A0 bit 0x20 is
+        // set; the scene sets 0xBA itself. No walking goal exists until it ends.
+        if (objective.Id == "full:algetty-elder" && scene == 382 && state.Flag(0x1A0, 0x20) == true)
+            return objective with { Goals = [], Instruction = "The scene here runs by itself; continue through its dialogue." };
         var step = objective.Id switch
         {
             "full:palace-east-switch" => 0,
@@ -37,10 +41,23 @@ internal static class OceanPalaceRoutes
             406 => SmallRoom(),
             407 => step == 2 ? objective : Exit(0, 1),
             408 => Exit(lower ? 2 : 0),
-            409 when lower && state.Point < 198 => Actor(33) with { Label = "Speak to Masa on the great stair" },
+            // Atel0397 hides Masa until controller7 finishes the last stairway
+            // encounter and applies 7C42. Follow the native stair exit while he
+            // is absent, so the ordinary battle/visibility sequence can run.
+            409 when lower && state.Point < 198 => available.Any(t => t.ApproachPoints.Count != 0 &&
+                (t.Id == "landmark:33" || t.Id.StartsWith("actor:33:", StringComparison.Ordinal)))
+                ? Actor(33) with { Label = "Speak to Masa on the great stair" }
+                : Exit(1) with { Label = "Continue down the great stair" },
             409 => Exit(lower ? 1 : 0),
             410 => Exit(lower ? 1 : 0),
-            411 => lower ? Actor(10) : Exit(0),
+            // Atel0221 actor16 wins Confirm's scan (17D230) at every point in reach
+            // of the control until actor9's ambush row has run. Follow that row
+            // until the control itself has Confirm goals.
+            411 when lower => (Ready(10) ? Actor(10) : Target(OceanPalaceTargets.ElevatorAmbush)) with
+            {
+                Label = "Take the elevator down",
+            },
+            411 => Exit(0),
             417 => Exit(0),
             418 => lower ? Exit(0) : Actor(9),
             412 => step switch
@@ -63,8 +80,11 @@ internal static class OceanPalaceRoutes
             var row = y < 24 ? 0 : y < 44 ? 1 : 2;
             if (step == 0 && row == 0) return left ? Actor(10) : Exit(5);
             if (step == 1 && row == 2) return left ? Exit(6) : Actor(16);
-            if (step == 3 && row == 1 && left) return Actor(22);
-            if (step == 4 && row == 1 && !left) return Actor(26);
+            // While the two people stand in its passage, the switch's next native
+            // interaction is the visible creature in front of them (Atel0394
+            // actor25/29 contact). Its live row disappears with the battle.
+            if (step == 3 && row == 1 && left) return Blocked(22, 25) ? Target("actor-encounter:25") : Actor(22);
+            if (step == 4 && row == 1 && !left) return Blocked(26, 29) ? Target("actor-encounter:29") : Actor(26);
             return row switch
             {
                 0 => Exit(left ? 0 : 1),
@@ -78,5 +98,11 @@ internal static class OceanPalaceRoutes
             Goals = [new(scene, [], ids.Select(id => $"exit:{id}").ToArray())],
         };
         FullStoryObjective Actor(int id) => objective with { Goals = [new(scene, [id], [])] };
+        FullStoryObjective Target(string id) => objective with { Goals = [new(scene, [], [id])] };
+        bool Ready(int id) => available.Any(t => t.ApproachPoints.Count != 0 &&
+            (t.Id == $"landmark:{id}" || t.Id.StartsWith($"actor:{id}:", StringComparison.Ordinal)));
+        bool Blocked(int wall, int creature) =>
+            available.Any(t => t.Id == $"landmark:{wall}" && OceanPalaceTargets.IsBlockedPassage(t.GuidanceRestriction)) &&
+            available.Any(t => t.Id == $"actor-encounter:{creature}" && t.ApproachPoints.Count != 0);
     }
 }
