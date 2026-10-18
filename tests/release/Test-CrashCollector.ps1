@@ -1,6 +1,13 @@
-param([string]$CollectorPath = (Join-Path $PSScriptRoot '..\..\tools\support\Collect-Foresight-CrashReport.ps1'))
+param(
+    [string]$CollectorPath = (Join-Path $PSScriptRoot '..\..\tools\support\Collect-Foresight-CrashReport.ps1'),
+    [switch]$RequireWindowsPowerShell
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Write-Output ("Runtime: PowerShell {0}; CLR {1}" -f $PSVersionTable.PSVersion, [Environment]::Version)
+if ($RequireWindowsPowerShell -and ($PSVersionTable.PSVersion.Major -ne 5 -or [Environment]::Version.Major -ne 4)) {
+    throw 'This verification must run in Windows PowerShell 5.1 on .NET Framework.'
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 if (Test-Path -LiteralPath $CollectorPath) { . $CollectorPath }
 else { function Invoke-ForesightCrashCollection { throw 'The crash collector has not been implemented.' } }
@@ -43,6 +50,17 @@ function Get-WinEvent {
     Assert-True ($FilterHashtable.Id -contains 1000 -and $FilterHashtable.Id -contains 1001 -and $FilterHashtable.Id -contains 1026) 'Crash event types missing.'
     if ($script:EventMode -eq 'denied') { throw [UnauthorizedAccessException]::new('fixture event access denied') }
     if ($script:EventMode -eq 'none') { return }
+    if ($script:EventMode -eq 'extended') {
+        Assert-True ($FilterHashtable.Id -contains 1023 -and $FilterHashtable.Id -contains 1025 -and $FilterHashtable.Id -contains 1002) 'Fatal runtime and hang event IDs are missing.'
+        foreach ($id in @(1023, 1025)) {
+            $fatal = New-CrashEvent $id 'Chrono Trigger.exe' '.NET Runtime'
+            $fatal.RawXml = '<Event><EventData><Data>Application: Chrono Trigger.exe&#10;Fatal runtime error.</Data></EventData></Event>'
+            $fatal
+        }
+        New-CrashEvent 1002 'Chrono Trigger.exe' 'Application Hang'
+        New-CrashEvent 1000 'Chrono Trigger.exe' 'Unrelated Provider'
+        return
+    }
     if ($script:EventMode -eq 'formats') {
         $wer = New-CrashEvent 1001 'Chrono Trigger.exe' 'Windows Error Reporting'
         $wer.RawXml = '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData><Data Name="P1">Chrono Trigger.exe</Data><Data Name="P4">libcocos2d.dll</Data></EventData></Event>'
@@ -67,6 +85,12 @@ function Get-WinEvent {
     New-CrashEvent 1000 'Other Game.exe'
 }
 $script:SteamFixtureRoot = $null
+$script:FixtureGameRunning = $false
+function Get-Process {
+    [CmdletBinding()] param([string]$Name)
+    Assert-True ($Name -eq 'Chrono Trigger') 'Unexpected process query.'
+    if ($script:FixtureGameRunning) { [pscustomobject]@{ ProcessName = 'Chrono Trigger' } }
+}
 function Get-ItemProperty {
     [CmdletBinding()] param([string]$LiteralPath)
     if ($script:SteamFixtureRoot -and $LiteralPath -eq 'HKCU:\Software\Valve\Steam') {
@@ -260,6 +284,63 @@ Test-Case 'The CMD launcher forwards literal paths, writes a ZIP and propagates 
             }
         } finally { $process.Dispose() }
     }
+}
+Test-Case 'Every report manifest path resolves in a portable ZIP with forward slashes' {
+    $r = Invoke-ForesightCrashCollection -GameRoot $game -ReloadedLogDirectory $logs -OutputDirectory $out
+    $archive = [IO.Compression.ZipFile]::OpenRead($r.ArchivePath)
+    try {
+        foreach ($entry in $archive.Entries) { Assert-True (-not $entry.FullName.Contains('\')) 'ZIP entry contains a backslash.' }
+        $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
+        foreach ($log in $report.Logs) { Assert-True ($null -ne $archive.GetEntry($log.ArchivePath)) 'Log manifest path does not resolve.' }
+        foreach ($event in $report.WindowsEvents.Records) {
+            Assert-True ($null -ne $archive.GetEntry($event.XmlPath)) 'Event XML manifest path does not resolve.'
+            Assert-True ($null -ne $archive.GetEntry($event.MessagePath)) 'Event text manifest path does not resolve.'
+        }
+    } finally { $archive.Dispose() }
+}
+Test-Case 'Steam discovery skips an unavailable drive before a reachable library' {
+    $external = Join-Path ([IO.Path]::GetTempPath()) ('Foresight offline discovery ' + [guid]::NewGuid().ToString('N'))
+    $steam = Join-Path $external 'Steam'
+    $library = Join-Path $external 'reachable'
+    $libraryGame = Join-Path $library 'steamapps\common\Chrono Trigger'
+    Write-Fixture (Join-Path $libraryGame 'Chrono Trigger.exe') 'fixture'
+    $unused = @(90..70 | ForEach-Object { ([char]$_).ToString() + ':\' } | Where-Object { -not [IO.Directory]::Exists($_) })[0]
+    $vdf = '"libraryfolders" { "1" { "path" "' + ($unused + 'offline').Replace('\', '\\') + '" } "2" { "path" "' + $library.Replace('\', '\\') + '" } }'
+    Write-Fixture (Join-Path $steam 'steamapps\libraryfolders.vdf') $vdf
+    $script:SteamFixtureRoot = $steam
+    Push-Location -LiteralPath $steam
+    try { Assert-True ((Resolve-ForesightCollectorGameRoot -StartDirectory $steam) -ceq $libraryGame) 'An offline library prevented finding the game.' }
+    finally { Pop-Location; $script:SteamFixtureRoot = $null }
+}
+Test-Case 'Relative path arguments follow the current PowerShell directory and tolerate a trailing quote' {
+    Push-Location -LiteralPath $testRoot
+    try {
+        $r = Invoke-ForesightCrashCollection -GameRoot 'game [literal] with spaces' -ReloadedLogDirectory 'raw Reloaded logs' -OutputDirectory 'relative reports"' -SkipWindowsEvents
+        $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
+        Assert-True ($report.GameRoot -ceq $game) 'Relative game root used the process start directory.'
+        Assert-True ($r.ArchivePath.StartsWith((Join-Path $testRoot 'relative reports'))) 'Relative output did not follow PowerShell location.'
+    } finally { Pop-Location }
+}
+Test-Case 'Fatal CLR and hang records collect while unrelated providers are excluded' {
+    $script:EventMode = 'extended'
+    try {
+        $r = Invoke-ForesightCrashCollection -GameRoot $game -ReloadedLogDirectory $logs -OutputDirectory $out
+        $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
+        Assert-True (@($report.WindowsEvents.Records).Count -eq 3) 'Fatal/hang events were lost, or another provider was included.'
+        Assert-True (@($report.WindowsEvents.Records | Where-Object Id -eq 1025).Count -eq 1) 'FailFast record missing.'
+    } finally { $script:EventMode = 'matching' }
+}
+Test-Case 'Report flags a running game and native logs newer than the last gameplay file' {
+    $script:FixtureGameRunning = $true
+    $oldTime = [IO.File]::GetLastWriteTimeUtc($gameplay)
+    [IO.File]::SetLastWriteTimeUtc($gameplay, [datetime]::UtcNow.AddDays(-2))
+    try {
+        $r = Invoke-ForesightCrashCollection -GameRoot $game -ReloadedLogDirectory $logs -OutputDirectory $out -SkipWindowsEvents
+        $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
+        Assert-True $report.SessionIndicators.GameRunning 'Running game was not recorded.'
+        Assert-True $report.SessionIndicators.NativeLogsNewerThanNewestGameplay 'Newer native logs were not flagged.'
+        Assert-True (@($report.SessionIndicators.Warnings).Count -ge 1) 'Possible lost crash-session evidence was not explained.'
+    } finally { $script:FixtureGameRunning = $false; [IO.File]::SetLastWriteTimeUtc($gameplay, $oldTime) }
 }
 Write-Output "$script:Passed passed; $script:Failed failed. Artifacts: $testRoot"
 if ($script:Failed) { exit 1 }

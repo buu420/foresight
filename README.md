@@ -214,7 +214,7 @@ The public package contains `Foresight-SHA256SUMS.txt` with every shipped file's
 
 If startup reports missing or changed files, close the game and reinstall the complete package. If another mod already owns `winmm.dll`, do not overwrite it; the loaders need a compatibility arrangement. Start the screen reader before launching the game. The first expected announcement is “Square Enix.”
 
-For a crash, run the [crash collector](tools/support/README.txt). It copies recent raw Chrono Trigger logs and matching Windows crash entries into a ZIP under Desktop\Foresight Diagnostics, with missing sources recorded explicitly. It leaves existing files unchanged and does not upload anything.
+For a crash, run the [crash collector](tools/support/README.txt) before restarting the game: a new launch replaces bootstrap/proxy logs. It copies recent raw Chrono Trigger logs and matching Windows crash entries into a ZIP under Desktop\Foresight Diagnostics, with missing sources and session indicators recorded explicitly. Reports may contain local paths, usernames, computer name and gameplay text. The collector leaves existing files unchanged and does not transmit files; existing Desktop sync or backup software may copy its output.
 
 For an accessibility error or failed route, keep the latest log and report the screen, location and action that preceded it. Beta coverage is described above; a complete catalog is not proof of a complete successful playthrough.
 

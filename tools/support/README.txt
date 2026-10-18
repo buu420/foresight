@@ -1,12 +1,15 @@
 Foresight Crash Collector 1.0.0
 
 1. Extract all three files from this ZIP into a folder.
-2. After a crash, run "Collect Foresight Crash Logs.cmd".
+2. After a crash, BEFORE restarting the game, run "Collect Foresight Crash Logs.cmd".
 3. Send back the new Foresight-Crash-Report ZIP in Desktop\Foresight Diagnostics,
    with the game location, action and approximate crash time.
 
 The window stays open and prints the exact ZIP path. Collection does not start
-or stop the game. It reads the three newest raw Chrono Trigger Reloaded logs,
+or stop the game. Starting the game replaces bootstrap/proxy logs, so collect
+first. report.json flags a running game and compares log modification times;
+timestamps alone cannot prove that logs belong to the same session.
+It reads the three newest raw Chrono Trigger Reloaded logs,
 bootstrap.log, proxy.log, and matching Windows Application crash entries from
 the last three days. Existing logs are left unchanged. Missing or unreadable
 sources are listed in report.json. The unpacked report is kept next to its ZIP.
@@ -25,6 +28,8 @@ Optional parameters:
 -GameplayLogCount 5          Collect up to 10 recent Chrono Trigger sessions.
 -SkipWindowsEvents          Collect logs only, recording that events were skipped.
 
-The ZIP may contain local paths, usernames and gameplay text from the logs.
+The ZIP may contain local paths, usernames, computer name and gameplay text.
 It contains no saves, settings, recordings, game data or executable, and it
-does not upload anything. This is a diagnostic utility, not a crash fix.
+does not transmit files. Your existing sync/backup software may copy the output
+folder, including a Desktop synced by OneDrive. This utility collects diagnostics;
+the game crash still requires diagnosis.
