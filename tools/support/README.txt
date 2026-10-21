@@ -1,4 +1,4 @@
-Foresight Crash Collector 1.0.0
+Foresight Crash Collector 1.1.0
 
 1. Extract all three files from this ZIP into a folder.
 2. After a crash, BEFORE restarting the game, run "Collect Foresight Crash Logs.cmd".
@@ -10,13 +10,13 @@ or stop the game. Starting the game replaces bootstrap/proxy logs, so collect
 first. report.json flags a running game and compares log modification times;
 timestamps alone cannot prove that logs belong to the same session.
 It reads the three newest raw Chrono Trigger Reloaded logs,
-bootstrap.log, proxy.log, and matching Windows Application crash entries from
+bootstrap.log, proxy.log, render-texture.log (when available), and matching Windows Application crash entries from
 the last three days. Existing logs are left unchanged. Missing or unreadable
 sources are listed in report.json. The unpacked report is kept next to its ZIP.
 
 Steam libraries and a game folder containing this utility are detected
 automatically. If the game folder is not found, gameplay logs and Windows
-events can still be collected, but bootstrap/proxy logs will be marked missing.
+events can still be collected, but game-folder logs will be marked missing.
 For a custom location, open PowerShell in this folder and run:
 
 .\Collect-Foresight-CrashReport.ps1 -GameRoot "D:\SteamLibrary\steamapps\common\Chrono Trigger"

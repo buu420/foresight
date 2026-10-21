@@ -47,6 +47,8 @@ public sealed class Mod : ModBase
         var gameRoot = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
         var movieAudio = new MovieAudioTracksHook(hooks, gameRoot, dispatcher.RecordDiagnostic,
             text => dispatcher.Publish(new NavigationAnnouncement(text)));
+        var textureDiagnostics = new RenderTextureDiagnosticsHook(hooks, gameRoot,
+            context.ModConfig.ModVersion ?? "unknown", dispatcher.RecordDiagnostic);
         var storyAssets = StoryActionAssets.VerifyAsync(gameRoot, dispatcher.RecordDiagnostic);
         var composition = CreateCompleteAccessibilityComposition(
             nativeFactory,
@@ -59,7 +61,7 @@ public sealed class Mod : ModBase
                     gameRoot, token, movieAudio.OpeningReady), token)), movieAudio,
             storyAssetsReady: () => storyAssets.IsCompletedSuccessfully && storyAssets.Result,
             narrate: dispatcher.PublishNarration, stopNarration: dispatcher.CancelNarration,
-            movies: movieAudio.Movies);
+            movies: movieAudio.Movies, textureDiagnostics: textureDiagnostics);
         completeComposition = composition;
         startupTitleHookSet = composition.StartupTitleHookSet;
         newGameHookSet = composition.NewGameHookSet;
@@ -137,7 +139,8 @@ public sealed class Mod : ModBase
         Func<bool>? storyAssetsReady = null,
         Action<StoryNarration>? narrate = null,
         Action? stopNarration = null,
-        IMovieLifecycle? movies = null)
+        IMovieLifecycle? movies = null,
+        IHookRegistration? textureDiagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(hookFactory);
         ArgumentNullException.ThrowIfNull(asmHookFactory);
@@ -356,6 +359,7 @@ public sealed class Mod : ModBase
             .Concat(shopHooks.Registrations)
             .Concat(raceHooks.Registrations)
             .Concat(movieAudio is null ? [] : new[] { movieAudio })
+            .Concat(textureDiagnostics is null ? [] : new[] { textureDiagnostics })
             .ToArray();
         var participants = new IHookActivationObserver[]
         {

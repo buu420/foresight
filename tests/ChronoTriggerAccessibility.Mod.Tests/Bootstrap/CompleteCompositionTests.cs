@@ -17,13 +17,17 @@ public sealed class CompleteCompositionTests
 {
     private const nuint ImageBase = 0x400000;
 
-    [Fact]
-    public void IntegratedCompositionPreparesEachAuditedHookOnceAndActivatesEveryParticipant()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void IntegratedCompositionPreparesEachAuditedHookOnceAndActivatesEveryParticipant(bool textureDiagnostics)
     {
         var factory = new RecordingFactory();
         var dispatcher = new RecordingDispatcher();
+        var diagnostics = new DiagnosticRegistration();
         var composition = ChronoTriggerAccessibility.Mod.Mod.CreateCompleteAccessibilityComposition(
-            factory, factory, factory, new StartupMemory(), dispatcher, new OpeningMovieTimeline());
+            factory, factory, factory, new StartupMemory(), dispatcher, new OpeningMovieTimeline(),
+            textureDiagnostics: textureDiagnostics ? diagnostics : null);
         var build = new VerifiedBuild(ImageBase, GameVersionCatalog.Hooks.ToDictionary(
             contract => contract.Id, contract => ImageBase + contract.Rva));
         var errors = new ErrorRecorder();
@@ -33,6 +37,8 @@ public sealed class CompleteCompositionTests
         Assert.Equal(176, factory.Created.Count);
         Assert.Equal(build.HookAddresses.OrderBy(entry => entry.Key), factory.Created.OrderBy(entry => entry.Key));
         Assert.All(composition.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
+        Assert.Equal(textureDiagnostics ? 1 : 0, diagnostics.PrepareCount);
+        if (textureDiagnostics) Assert.Contains(diagnostics.Prepared, composition.Installer.PreparedHooks);
 
         composition.Installer.ActivateAll();
 
@@ -46,6 +52,19 @@ public sealed class CompleteCompositionTests
         Assert.All(composition.Installer.PreparedHooks, hook => Assert.False(hook.IsActive));
         Assert.Empty(dispatcher.Failures);
         Assert.Empty(errors.Errors);
+    }
+
+    private sealed class DiagnosticRegistration : IHookRegistration
+    {
+        public string Name => "Optional texture diagnostic fixture";
+        public int PrepareCount { get; private set; }
+        public IPreparedHook Prepared { get; } = new OptionalTextureDiagnosticHook(
+            new PreparedProbe("Optional texture fixture", []), () => { }, _ => { });
+        public IPreparedHook Prepare(IVerifiedGameBuild build, UnmanagedBoundaryGuard boundary)
+        {
+            PrepareCount++;
+            return Prepared;
+        }
     }
 
     private sealed record VerifiedBuild(

@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.69 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.70 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.69 keeps Up held at Death Peak's pushed shelter trees after automatic arrival, including while browsing navigation. You choose when to take manual control or start another route. It also includes the previous shelter and wind feedback, Ocean Palace visibility and Blackbird duct repairs. See [this build's changes and testing notes](docs/releases/v0.3.69.md).
+Version 0.3.70 is a diagnostic tester build for the map-texture allocation failure identified in six crash dumps. It records failed requests and memory information for the next report; it does not fix the crash yet. Previous Death Peak, Ocean Palace and Blackbird fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.70.md).
 
 ## Install the beta download
 
@@ -214,6 +214,7 @@ The public package contains `Foresight-SHA256SUMS.txt` with every shipped file's
 
 - `Accessibility/Logs/proxy.log` records native startup.
 - `Accessibility/Logs/bootstrap.log` records validation, injection and the configuration lease.
+- `Accessibility/Logs/render-texture.log` appends session readiness and failed native texture requests for crash diagnosis. A new launch preserves earlier records.
 - The newest Chrono Trigger log in `%APPDATA%\Reloaded-Mod-Loader-II\Logs\` records hooks, the Prism backend and announcements. Search for `[chrono.trigger.accessibility]`.
 
 If startup reports missing or changed files, close the game and reinstall the complete package. If another mod already owns `winmm.dll`, do not overwrite it; the loaders need a compatibility arrangement. Start the screen reader before launching the game. The first expected announcement is “Square Enix.”

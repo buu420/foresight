@@ -261,7 +261,7 @@ function Invoke-ForesightCrashCollection {
     $logs = [Collections.Generic.List[object]]::new()
     $missing = [Collections.Generic.List[object]]::new()
     $sources = [Collections.Generic.List[object]]::new()
-    foreach ($native in @(@('Bootstrap', 'bootstrap.log'), @('Proxy', 'proxy.log'))) {
+    foreach ($native in @(@('Bootstrap', 'bootstrap.log'), @('Proxy', 'proxy.log'), @('RenderTexture', 'render-texture.log'))) {
         $path = $null
         if ($resolvedGame) { $path = Join-Path $resolvedGame ('Accessibility\Logs\' + $native[1]) }
         if ($path -and [IO.File]::Exists($path)) {
@@ -319,7 +319,7 @@ function Invoke-ForesightCrashCollection {
     Write-Host 'Reading Chrono Trigger Windows crash entries...'
     $windows = Get-ForesightCollectorWindowsEvents -StagingDirectory $staging -Days $Days -Skip:$SkipWindowsEvents
     $report = [ordered]@{
-        CollectorVersion = '1.0.0'; CollectedUtc = [datetime]::UtcNow.ToString('o')
+        CollectorVersion = '1.1.0'; CollectedUtc = [datetime]::UtcNow.ToString('o')
         GameRoot = $resolvedGame; GameDiscoveryError = $discoveryError; ForesightVersion = $version
         WindowsVersion = [Environment]::OSVersion.VersionString
         GameplayDirectory = $ReloadedLogDirectory; GameplayLogLimit = $GameplayLogCount

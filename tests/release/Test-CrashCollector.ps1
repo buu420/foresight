@@ -106,6 +106,7 @@ $out = Join-Path $testRoot 'reports'
 Write-Fixture (Join-Path $game 'Chrono Trigger.exe') 'fixture executable; never started'
 Write-Fixture (Join-Path $game 'Accessibility\Logs\bootstrap.log') '[2026-10-17 23:28:23.354] Game exited with code 0xC0000005; restoring Reloaded pointer.'
 Write-Fixture (Join-Path $game 'Accessibility\Logs\proxy.log') 'native ready'
+Write-Fixture (Join-Path $game 'Accessibility\Logs\render-texture.log') '{"kind":"render-texture-failure","width":1216,"height":800}'
 Write-Fixture (Join-Path $game 'Reloaded-II\Mods\chrono.trigger.accessibility\ModConfig.json') '{"ModId":"chrono.trigger.accessibility","ModVersion":"0.3.67"}'
 Write-Fixture (Join-Path $game 'save.dat') 'keep my save'
 Write-Fixture (Join-Path $game 'settings.ini') 'keep my settings'
@@ -129,6 +130,8 @@ Test-Case 'Copies complete raw gameplay and helper logs while excluding saves an
     Assert-True ((Read-ZipText $script:Result.ArchivePath $raw[0].ArchivePath) -ceq $fullText) 'Gameplay log was truncated or changed.'
     Assert-True (@($report.Logs | Where-Object Kind -eq 'Bootstrap').Count -eq 1) 'Missing bootstrap log.'
     Assert-True (@($report.Logs | Where-Object Kind -eq 'Proxy').Count -eq 1) 'Missing proxy log.'
+    Assert-True (@($report.Logs | Where-Object Kind -eq 'RenderTexture').Count -eq 1) 'Missing render-texture failure diagnostics.'
+    Assert-True ((Read-ZipText $script:Result.ArchivePath 'logs/render-texture.log') -ceq '{"kind":"render-texture-failure","width":1216,"height":800}') 'Texture diagnostics were changed.'
     $zip = [IO.Compression.ZipFile]::OpenRead($script:Result.ArchivePath)
     try {
         Assert-True (@($zip.Entries | Where-Object FullName -match 'save|settings|recording|Other Game|ff7|\.exe$').Count -eq 0) 'Unrelated/private game files were collected.'
@@ -161,7 +164,7 @@ Test-Case 'Event access errors still produce logs and an explicit unavailable st
         $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
         Assert-True ($report.WindowsEvents.Status -eq 'unavailable') 'Denied event access was reported as no crashes.'
         Assert-True ($report.WindowsEvents.Error -match 'access denied') 'Event access failure was lost.'
-        Assert-True (@($report.Logs).Count -eq 3) 'An event error prevented collecting the logs.'
+        Assert-True (@($report.Logs).Count -eq 4) 'An event error prevented collecting the logs.'
     } finally { $script:EventMode = 'matching' }
 }
 Test-Case 'Missing gameplay and native logs are reported instead of silently omitted' {
@@ -199,7 +202,7 @@ Test-Case 'An exclusively locked log is explicit while other sources still colle
     try {
         $r = Invoke-ForesightCrashCollection -GameRoot $game -ReloadedLogDirectory $logs -OutputDirectory $out -SkipWindowsEvents
         $report = Read-ZipText $r.ArchivePath 'report.json' | ConvertFrom-Json
-        Assert-True (@($report.Logs).Count -eq 2) 'Helper logs were lost after one source was locked.'
+        Assert-True (@($report.Logs).Count -eq 3) 'Helper logs were lost after one source was locked.'
         $unreadable = @($report.MissingSources | Where-Object Kind -eq 'Gameplay')
         Assert-True ($unreadable.Count -eq 1 -and $unreadable[0].Reason.Length -gt 0) 'Locked log was silently omitted.'
     } finally { $stream.Dispose() }
@@ -279,7 +282,7 @@ Test-Case 'The CMD launcher forwards literal paths, writes a ZIP and propagates 
                 $archives = @(Get-ChildItem -LiteralPath $cliOutput -File -Filter '*.zip')
                 Assert-True ($archives.Count -eq 1) 'Launcher did not produce its report ZIP.'
                 $report = Read-ZipText $archives[0].FullName 'report.json' | ConvertFrom-Json
-                Assert-True (@($report.Logs).Count -eq 3) 'CLI did not forward the supplied paths.'
+                Assert-True (@($report.Logs).Count -eq 4) 'CLI did not forward the supplied paths.'
                 Assert-True ($report.WindowsEvents.Status -eq 'skipped') 'CLI did not forward the event option.'
             }
         } finally { $process.Dispose() }
