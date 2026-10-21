@@ -83,6 +83,10 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>Only automatic walking maintains this verified contact on arrival.
     /// Manual guidance still stops and explains the native player action.</summary>
     public NavigationHold? ArrivalHold { get; init; }
+    /// <summary>Fresh, verified legs for an explicitly selected automatic assist.
+    /// The field coordinator chooses when a validated shelter hold may continue;
+    /// these legs are not separately presented as discovered destinations.</summary>
+    public IReadOnlyList<NavigationTarget> AutomaticStages { get; init; } = [];
     public NavigationTransition? Transition { get; init; }
     /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
     /// in Confirm range and follow again when it moves. Only the player's own Confirm

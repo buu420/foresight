@@ -9,6 +9,30 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class WorldNavigationSourceTests
 {
     [Fact]
+    public void AvailableDeathPeakEntranceOffersANonSpatialOptInBeforeTheDownhillPush()
+    {
+        var frame = WindEntranceWorld();
+        var arm = Assert.Single(frame.Targets, t => t.Id == "death-peak:arm");
+        Assert.True(arm.IsStoryNote);
+        Assert.True(arm.GuideAvailable);
+        Assert.False(arm.Visible);
+        Assert.Empty(arm.ApproachPoints);
+        Assert.Equal(arm, frame.Targets.First(t => t.Category == NavigationCategory.Exits));
+        Assert.Contains("enter", arm.Instruction!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static NavigationFrame WindEntranceWorld()
+    {
+        var world = Snapshot([Entrance(9, 25, 19, 6, 244, 400, 304)]);
+        world = world with
+        {
+            Motion = world.Motion with { World = 2 }, StoryPoint = 212,
+            Story = new FieldStoryState(212, true) { Globals = new Dictionary<int, int> { [0x7C] = 7 } },
+        };
+        return Source().Build(world, _ => "Death Peak");
+    }
+
+    [Fact]
     public void SameNamedWorldEntrancesRemainDistinguishableWhenNativeRecordOrderChanges()
     {
         var one = Entrance(6, 25, 19, 6, 12, 400, 304);

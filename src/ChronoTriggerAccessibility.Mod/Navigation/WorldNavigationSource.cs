@@ -133,6 +133,16 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
         exitLabels.Apply(targets);
+        if (world.Motion.World == 2 && world.Story?.Global(0x7C) is { } windFlags && (windFlags & 2) != 0 &&
+            targets.Any(t => destinations.TryGetValue(t.Id, out var destination) && destination == 244 &&
+                (t.Visible || t.Discovered || t.GuideAvailable)))
+            targets.Insert(0, new(DeathPeakClimbAssist.ArmId, "Arm Death Peak climbing assist",
+                NavigationCategory.Exits, player, [], false, false)
+            {
+                GuideAvailable = true, IsStoryNote = true,
+                Instruction = "Choose automatic walking here to arm the climb for your next Death Peak entrance. " +
+                    "Enter the mountain yourself, then release all buttons until walking starts. Other actions cancel the climb. Choose this option again to disarm it.",
+            });
         return new(identity, true, player, targets.AsReadOnly(), graph, NavigationUnits.WorldStep)
         { AreaName = string.IsNullOrWhiteSpace(era) ? "World map" : $"World map, {era}" };
 

@@ -33,4 +33,18 @@ public sealed class NavigationAreaTests
         Assert.Equal(NavigationDirection.None,result.Direction);
         Assert.False(result.AutoWalking);
     }
+
+    [Fact]
+    public void WindEntranceAnnouncesTheAvailableAssistOnceWithTheArea()
+    {
+        var speech = new List<string>();
+        var announcer = new NavigationAreaAnnouncer(speech.Add, _ => { });
+        var frame = DeathPeakClimbAssistTests.LiveFrame();
+        announcer.Observe(frame); announcer.Observe(frame);
+        Assert.Contains("assist", Assert.Single(speech), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Exits", speech[0]);
+        announcer.Reset(); speech.Clear();
+        announcer.Observe(frame with { Targets = frame.Targets.Where(t => t.Id != "death-peak:climb").ToArray() });
+        Assert.DoesNotContain("assist", Assert.Single(speech), StringComparison.OrdinalIgnoreCase);
+    }
 }

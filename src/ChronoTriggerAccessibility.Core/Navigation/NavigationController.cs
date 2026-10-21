@@ -177,6 +177,41 @@ public sealed class NavigationController
         return Result(speech, frame.Player);
     }
 
+    /// <summary>Start the fresh destination explicitly armed by the player before
+    /// entering a timed area. Ordinary selection still uses Handle.</summary>
+    public NavigationResult StartAutomaticTarget(string id, NavigationFrame frame, long nowMilliseconds)
+    {
+        var target = frame.Targets.FirstOrDefault(t => t.Id == id && Available(t));
+        if (!frame.CanNavigate || target is null) return Cancel("the armed destination is unavailable");
+        Stop();
+        category = target.Category;
+        selection = target.Id;
+        return Handle(NavigationCommand.ToggleWalk, frame, nowMilliseconds);
+    }
+
+    /// <summary>Replace an already validated automatic shelter hold with its next
+    /// fresh leg. This cannot start or resume an inactive/manual route.</summary>
+    public NavigationResult ContinueAutomaticRoute(NavigationFrame frame, long nowMilliseconds)
+    {
+        var target = CurrentDestination(frame);
+        if (!IsHolding || scene != frame.Scene || !frame.CanNavigate ||
+            !holding!.Contains(frame.Player) || target is null ||
+            !string.IsNullOrWhiteSpace(target.GuidanceRestriction))
+            return Cancel("shelter continuation is unavailable");
+        var speech = new List<string>();
+        clock = nowMilliseconds;
+        Stop();
+        destination = target;
+        if (Plan(frame, speech))
+        {
+            guiding = walking = true;
+            lastPosition = observedPosition = frame.Player;
+            lastProgress = lastManualActivity = nowMilliseconds;
+            Follow(frame, nowMilliseconds, speech);
+        }
+        return Result(speech, frame.Player);
+    }
+
     private static string Arrival(NavigationTarget target) => target.ArrivalAnnouncement ?? $"Arrived at {target.Label}." +
         (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? "" : " " + target.ArrivalInstruction);
 

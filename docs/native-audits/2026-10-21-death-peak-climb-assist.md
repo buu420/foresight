@@ -1,0 +1,27 @@
+# Death Peak wind climbing assistance
+
+The user approved an explicitly started assist on October 21: normal movement and Run between verified shelters, automatic departures on visible wind cues, manual cancellation, and stops for native control loss or required interactions. It changes departure timing only for the new assistance destination. Individual shelter routes keep their existing behavior.
+
+## Native evidence
+
+The supported executable and Cocos hashes remain unchanged. Atel0052 actor0 protects lower X53..57/Y48..54 while global7C bit1 is set and upper X54..58/Y30..37 unconditionally. Bit2 records the lower doll's transformation. The copied tree geometry and fine-X hold intervals were audited in [the existing shelter-hold audit](2026-10-20-death-peak-hold.md).
+
+The new captured-map fixture comes from the tester's October 21 route-evidence snapshot at local 14:27:21. Its collision, terrain and layer planes match the installed-map Transformed fixture. Its active north exit has native index0, destination245 and cells X54..57/Y17. Assistance requires that readable native destination; it does not substitute a static destination when capture is missing. The supplied two dump copies are identical and are one crash, separate from the navigation evidence.
+
+The source constructs graph-proven lower and upper trunk contacts from the live map. A just-transformed tree uses its trunk for assistance even when the native calm patch remains. The first destination is a guide, not a claim that offscreen trees were seen or discovered. Without readable lower protection and the native north exit, the assist is omitted. A drawn, untransformed doll yields only the lower shelter leg, stopping for player interaction.
+
+## Runtime behavior
+
+Fresh stage metadata accompanies the explicit Exits destination. A scoped coordinator projects the current leg into that destination. The ordinary navigation controller still plans and steers every leg. It can continue only from an automatic hold that has already passed native frame, contact bounds, layer and target-proof checks. It never synthesizes Confirm. A nearby exposed restart chooses cover by distance to the verified hold bounds before attempting another exposed section.
+
+The 2300 AD world offers a non-spatial preparation option only when the captured story flags allow lower cover and a currently offered native entrance leads to244. Explicitly selecting automatic walking on that note arms one future entrance; it produces no world movement or Confirm. Native loading pauses may preserve a pending arm, but a different field, manual action on arrival, foreground loss, disable or menu suspension cancels it. A held entry Confirm is passed unchanged while the start waits for release. Returning to the world consumes even an unstarted field attempt, preventing automatic retries. The arm is consumed before planning. Cancellation of a pending arm records its reason for the next ready navigation frame, rather than silently leaving the player expecting a start.
+
+A shelter departure requires a gust observed while holding, followed by a fresh non-building calm reading from the same field identity and an available native run setting. A calm reading on arrival does not prove enough calm remains. An edge during menu browsing or another navigation command is consumed, preventing delayed departure after closing a menu. A blocked next route retains the current shelter until another complete cue permits a new check. When only wind or Run capture fails, a separately proven ordinary shelter hold remains active, but its cue history is cleared and no departure is possible. A diagnostic records the pose, snapshot or null and both wind fields. Loss of native control, map/contact proof, foreground or context still cancels and never silently restarts assistance.
+
+Climbing reuses the existing audited run-setting rules before leaving cover. Ghidra175C90 shows held Dash makes modes0/2 walk; the selected assist owns that bit during travel. Mode1 always gets Dash for running, independent of its current toggle. At the spawn pose the native terrain probe can reject a sample until movement starts. The first shelter approach may therefore use ordinary movement with unknown wind/floor data on unforced or gentle tiles; the fresh map's steep push16 tiles still require readable Run state. A known disabled running setting still refuses the start. Losing wind data after a wind-timed departure cancels the exposed leg. Unavailable Run state on the steep slope stops movement, while a separately verified existing hold is retained with an explanation. The native toggle remains under the game's control. Stationary tree holds keep plain Up, as established by the earlier native audit. Manual wind feedback retains the fact that walking cannot overcome push16, without an imperative to press a button during automatic movement.
+
+## Verification boundary
+
+Real field-map fixtures, the real field source, navigation controller and runtime test stage construction, hold/edge continuation, both trees, manual guidance, input cancellation, menu behavior, unknown state, retained calm floor and required doll interaction. The full solution suite is run before packaging.
+
+These are offline checks. Physical controller input, actual gust/contact stability and audible speech require tester gameplay. The separate render-texture failure diagnostics remain observations; fragmented virtual address space is a strong lead, not a proven allocator owner or a fixed crash.

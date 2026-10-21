@@ -12,7 +12,9 @@ public sealed class DeathPeakWindFeedbackTests
         var speech = new List<string>();
         var feedback = new FieldFloorFeedback(speech.Add, _ => { });
         feedback.Observe(Floor(16, false));
-        Assert.Contains("Run to climb", Assert.Single(speech));
+        Assert.Contains("pushes", Assert.Single(speech));
+        Assert.DoesNotContain("Run to climb", speech[0]);
+        Assert.Contains("running", speech[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("downhill", feedback.Status);
         feedback.Observe(Floor(0, false));
         Assert.Contains("push stops", speech[1]);
@@ -36,7 +38,8 @@ public sealed class DeathPeakWindFeedbackTests
         Assert.Contains("Gust passed", Assert.Single(speech));
         feedback.Reset();
         feedback.Observe(Floor(16, false));
-        Assert.Contains("Run to climb", speech[1]);
+        Assert.Contains("pushes", speech[1]);
+        Assert.DoesNotContain("Run to climb", speech[1]);
     }
 
     [Fact]
@@ -58,7 +61,8 @@ public sealed class DeathPeakWindFeedbackTests
         var speech = new List<string>();
         var feedback = new FieldFloorFeedback(speech.Add, _ => { });
         feedback.Observe(Floor(16, null));
-        Assert.Contains("Run to climb", Assert.Single(speech));
+        Assert.Contains("pushes", Assert.Single(speech));
+        Assert.DoesNotContain("Run to climb", speech[0]);
         Assert.Contains("downhill", feedback.Status);
         Assert.DoesNotContain("gust", feedback.Status!, StringComparison.OrdinalIgnoreCase);
         feedback.Observe(null);

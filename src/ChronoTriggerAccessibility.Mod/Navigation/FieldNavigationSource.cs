@@ -688,6 +688,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 Instruction = restriction + (string.IsNullOrWhiteSpace(target.Instruction) ? "" : " " + target.Instruction),
             };
         }
+        if (DeathPeakTargets.Climb(field, map, viewport, story, graph, targets) is { } climb)
+            targets.Insert(0, climb);
         ReportInventory();
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,

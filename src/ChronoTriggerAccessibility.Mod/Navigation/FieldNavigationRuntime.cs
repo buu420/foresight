@@ -18,9 +18,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     Func<nint, VehicleKind, NavigationFrame?>? vehicleCapture = null,
     Func<nint, VehicleKind, bool>? vehicleActive = null, NavigationGamepad? gamepad = null,
     Action<nint>? observeFieldInput = null, Func<string?>? fieldStatus = null,
-    Func<NavigationFrame, NavigationResult, FieldNavigationPad>? adjustFieldInput = null)
+    Func<NavigationFrame, NavigationResult, FieldNavigationPad>? adjustFieldInput = null,
+    Func<FieldFloorSnapshot?>? fieldFloor = null)
 {
     private readonly NavigationController controller = new();
+    private readonly DeathPeakClimbAssist climb = new();
     private readonly HashSet<string> routeEvidence = [];
     private readonly object gate = new();
     private bool enabled;
@@ -39,6 +41,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private bool controllerInputAllowed;
     private string? controllerMenuScene;
     private long lastControllerPoll = -1;
+    private bool climbArmed, climbArmEnteredField;
+    private string? climbArmCancellation;
 
     /// <summary>Called before physical controller state is mapped into game actions.
     /// Commands are tentative until ProcessInput validates a fresh frame at the
@@ -161,7 +165,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
 
     public void Enable()
     {
-        lock (gate) { enabled = true; lastCall = -1; controllerInputAllowed = false; keyboard.Suspend(); gamepad?.Suspend(); }
+        lock (gate) { enabled = true; climbArmed = climbArmEnteredField = false; lastCall = -1; controllerInputAllowed = false; keyboard.Suspend(); gamepad?.Suspend(); }
     }
 
     public void Disable()
@@ -169,7 +173,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate) { enabled = false; Suspend("accessibility disabled"); }
     }
 
-    public void Suspend(string reason)
+    public void Suspend(string reason, bool preserveClimbArm = false)
     {
         lock (gate)
         {
@@ -178,6 +182,8 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             controllerMenuScene = null;
             var wasActive = controller.IsActive;
             var cancellation = controller.Cancel(reason);
+            climb.Reset();
+            if (!preserveClimbArm) CancelClimbArm(reason);
             keyboard.Suspend();
             gamepad?.Suspend();
             // Revoke input before calling external motion, logging or speech code.
@@ -186,6 +192,13 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             if (wasActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
             Emit(cancellation);
         }
+    }
+
+    private void CancelClimbArm(string reason)
+    {
+        if (climbArmed)
+            climbArmCancellation = $"The armed Death Peak climb was cancelled: {reason}. Arm it again before entering.";
+        climbArmed = climbArmEnteredField = false;
     }
 
     public void ResetDiscoveries()
@@ -212,18 +225,25 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     lastCall = now;
                     return originalPad;
                 }
+                if (climbArmed)
+                {
+                    if (current == NavigationMode.Field) climbArmEnteredField = true;
+                    else if (climbArmEnteredField || current is NavigationMode.Epoch or NavigationMode.Dactyl)
+                        CancelClimbArm(climbArmEnteredField ? "the mountain was left before starting" : "vehicle travel started");
+                }
                 NavigationFrame? transitionFrame = null;
                 if (lastCall >= 0 && (now < lastCall || now - lastCall > 250))
                 {
                     if (current == NavigationMode.Field && mode == NavigationMode.Field && engine == currentEngine && controller.HasPendingTransition)
                         transitionFrame = capture(currentEngine);
-                    if (transitionFrame is null || !controller.CanContinueTransition(transitionFrame, now)) Suspend("player input was paused");
+                    if (transitionFrame is null || !controller.CanContinueTransition(transitionFrame, now))
+                        Suspend("player input was paused", preserveClimbArm: climbArmed && current is NavigationMode.Field or NavigationMode.World);
                 }
                 if (gamepad?.HasOwner == true && (lastControllerPoll < 0 || now < lastControllerPoll ||
                     now - lastControllerPoll > 250)) Suspend("controller disconnected");
                 if (engine != 0 && (engine != currentEngine || mode != current))
                 {
-                    Suspend("area changed");
+                    Suspend("area changed", preserveClimbArm: climbArmed && current is NavigationMode.Field or NavigationMode.World);
                     lastObservation = -1;
                 }
                 mode = current;
@@ -233,13 +253,14 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 if (current == NavigationMode.Field) observeFieldInput?.Invoke(currentEngine);
                 var commands = keyboard.Poll().ToList();
                 var padActions = gamepad?.Poll() ?? [];
-                if (commands.Count != 0 || originalPad != 0 && gamepad?.IsOpen == true)
+                if (commands.Count != 0 || ManualWalkingInput(originalPad, current) != 0 && gamepad?.IsOpen == true)
                 {
                     gamepad?.Suspend();
                     controllerMenuScene = null;
                     padActions = [];
                 }
-                if (!controller.IsActive && commands.Count == 0 && padActions.Count == 0 && gamepad?.IsOpen != true)
+                if (!controller.IsActive && commands.Count == 0 && padActions.Count == 0 && gamepad?.IsOpen != true &&
+                    !(climbArmed && current == NavigationMode.Field) && climbArmCancellation is null)
                 {
                     Action<nint>? observer = current switch
                     {
@@ -258,10 +279,20 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 var frame = transitionFrame ?? CaptureFrame(currentEngine, current);
                 if (frame is null || !frame.CanNavigate && !controller.CanContinueTransition(frame, now))
                 {
-                    Suspend("navigation state is unavailable");
+                    Suspend("navigation state is unavailable", preserveClimbArm: climbArmed && current is NavigationMode.Field or NavigationMode.World);
                     if (commands.Count != 0 || padActions.Count != 0) speak("Navigation is unavailable here.");
                     return originalPad;
                 }
+                if (current == NavigationMode.Field)
+                {
+                    if (!controller.IsActive || controller.TargetId != DeathPeakClimbAssist.TargetId) climb.Reset();
+                    frame = climb.Project(frame);
+                }
+                else if (current == NavigationMode.World && climbArmed)
+                    frame = frame with { Targets = frame.Targets.Select(t => t.Id == DeathPeakClimbAssist.ArmId
+                        ? t with { Label = "Cancel armed Death Peak climbing assist",
+                            Instruction = "The climb is armed. Enter Death Peak yourself, then release all buttons until walking starts. Other actions cancel the climb. Choose this option again to cancel." }
+                        : t).ToArray() };
                 if (controllerMenuScene is not null && frame.Scene != controllerMenuScene)
                 {
                     Suspend("area changed");
@@ -288,12 +319,75 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     return originalPad;
                 }
                 var speech = new List<string>(result.Speech);
+                if (current == NavigationMode.Field && climbArmed)
+                {
+                    if (!frame.Targets.Any(t => t.Id == DeathPeakClimbAssist.TargetId) || commands.Count != 0 ||
+                        padActions.Count != 0 || (originalPad & ~(8u | 0x80u)) != 0)
+                    {
+                        CancelClimbArm(!frame.Targets.Any(t => t.Id == DeathPeakClimbAssist.TargetId)
+                            ? "the climbing route is unavailable in this area"
+                            : "another movement, action or navigation command was used at entry");
+                    }
+                    else if ((originalPad & 0x80u) == 0)
+                    {
+                        // Consume the one-entry arm before planning, so failure or
+                        // a later knockback cannot silently start another attempt.
+                        climbArmed = climbArmEnteredField = false;
+                        result = controller.StartAutomaticTarget(DeathPeakClimbAssist.TargetId, frame, now);
+                        speech.AddRange(result.Speech);
+                    }
+                }
+                if (current == NavigationMode.Field)
+                {
+                    var floor = fieldFloor?.Invoke();
+                    if (climb.Validate(frame, controller, result, floor) is { } reason)
+                    {
+                        result = controller.Cancel(reason);
+                        speech.AddRange(result.Speech);
+                    }
+                    else if (floor is { } wind)
+                    {
+                        if (climb.Advance(frame, controller, wind,
+                            gamepad?.IsOpen != true && commands.Count == 0 && padActions.Count == 0, out var announcement))
+                        {
+                            frame = climb.Project(frame);
+                            result = controller.ContinueAutomaticRoute(frame, now);
+                            if (result.AutoWalking) speech.Add(announcement!);
+                            speech.AddRange(result.Speech);
+                        }
+                        else if (announcement is not null) speech.Add(announcement);
+                    }
+                    if (climb.TakeNotice() is { } notice)
+                    {
+                        speech.Add(notice);
+                        diagnostic($"Climbing assist paused: player={frame.Player}; floor={floor?.ToString() ?? "null"}; " +
+                            $"gust={floor?.WindGusting?.ToString() ?? "null"}; building={floor?.WindBuilding?.ToString() ?? "null"}; {notice}");
+                    }
+                }
                 var processedCommands = new List<NavigationCommand>();
                 void Handle(NavigationCommand command)
                 {
                     processedCommands.Add(command);
+                    // Refresh clears a selection on a world-context change.
+                    // Resolve its default before interpreting the preparation note.
+                    if (current == NavigationMode.World && command == NavigationCommand.ToggleWalk && controller.TargetId is null)
+                        controller.Handle(NavigationCommand.Repeat, frame, now);
+                    if (current == NavigationMode.World && command == NavigationCommand.ToggleWalk &&
+                        controller.TargetId == DeathPeakClimbAssist.ArmId)
+                    {
+                        result = controller.Cancel("climb preparation selected");
+                        climbArmCancellation = null;
+                        climbArmed = !climbArmed;
+                        climbArmEnteredField = false;
+                        speech.Add(climbArmed
+                            ? "Death Peak climbing assist armed. Enter the mountain yourself, then release all buttons until walking starts. Other actions cancel the climb. Choose this option again to cancel."
+                            : "Death Peak climbing assist disarmed.");
+                        return;
+                    }
                     if (command == NavigationCommand.Repeat && current == NavigationMode.Field && fieldStatus?.Invoke() is { } status)
                         speech.Add(status);
+                    if (command == NavigationCommand.Repeat && current == NavigationMode.Field && climb.Status is { } climbStatus)
+                        speech.Add(climbStatus);
                     // A new manual turn or recovery message also answers a repeat.
                     if (command == NavigationCommand.Repeat && result.Guiding &&
                         !result.AutoWalking && result.Speech.Count != 0) return;
@@ -340,22 +434,43 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 }
                 controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
                 foreach (var command in commands) Handle(command);
+                if (current == NavigationMode.Field && climb.Validate(frame, controller, result, fieldFloor?.Invoke()) is { } climbReason)
+                {
+                    result = controller.Cancel(climbReason);
+                    speech.AddRange(result.Speech);
+                    resetMotion?.Invoke();
+                }
+                if (climb.TakeNotice() is { } startNotice)
+                {
+                    speech.Add(startNotice);
+                    var startFloor = fieldFloor?.Invoke();
+                    diagnostic($"Climbing assist paused: player={frame.Player}; floor={startFloor?.ToString() ?? "null"}; " +
+                        $"gust={startFloor?.WindGusting?.ToString() ?? "null"}; building={startFloor?.WindBuilding?.ToString() ?? "null"}; {startNotice}");
+                }
                 var movementPad = DirectionBits(result.Direction);
                 // At the audited tree, plain Up either cancels the native south
                 // push while walking or meets both trunk corners while running.
                 // Climbing's run requirement must not release a stationary hold.
                 if (current == NavigationMode.Field && result.AutoWalking && !controller.IsHolding &&
-                    movementPad != 0 && adjustFieldInput is not null)
+                    movementPad != 0 && (adjustFieldInput is not null || controller.TargetId == DeathPeakClimbAssist.TargetId))
                 {
-                    var adjusted = adjustFieldInput(frame, result);
+                    var adjusted = controller.TargetId == DeathPeakClimbAssist.TargetId
+                        ? DeathPeakClimbAssist.RunningInput(frame, result, fieldFloor?.Invoke())
+                        : adjustFieldInput!(frame, result);
                     if (adjusted.StopReason is { } reason)
                     {
                         result = controller.Cancel(reason);
+                        climb.Reset();
                         speech.AddRange(result.Speech);
                         resetMotion?.Invoke();
                         movementPad = 0;
                     }
                     else movementPad = adjusted.Pad;
+                }
+                if (climbArmCancellation is { } armCancellation)
+                {
+                    speech.Add(armCancellation);
+                    climbArmCancellation = null;
                 }
                 if (processedCommands.Count != 0 || speech.Count != 0 ||
                     (controller.IsActive && (lastDiagnostic < 0 || now < lastDiagnostic || now - lastDiagnostic >= 250)))
@@ -375,13 +490,20 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 synchronizeFootsteps?.Invoke(flight ? null : result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
                 if (current != NavigationMode.Field) worldDirection = movementPad;
-                return originalPad | movementPad;
+                // The explicitly selected assist owns Run. In modes0/2 a held
+                // physical Dash requests walking, which defeats an uphill leg.
+                // All other manual actions already cancelled above; preserve them.
+                var delivered = current == NavigationMode.Field && result.AutoWalking &&
+                    controller.TargetId == DeathPeakClimbAssist.TargetId ? originalPad & ~8u : originalPad;
+                return delivered | movementPad;
             }
             catch (Exception exception)
             {
                 // Clear movement authority even when capture or speech throws. The shared
                 // unmanaged guard reports a speech failure; no stale pad survives a fault.
                 controller.Cancel("navigation error");
+                climb.Reset();
+                climbArmed = climbArmEnteredField = false;
                 keyboard.Suspend();
                 gamepad?.Suspend();
                 controllerInputAllowed = false;

@@ -192,7 +192,7 @@ public sealed class Mod : ModBase
             ResetMotion, World, context => World(context), footsteps.SetGuidance,
             Flight, worldSource.IsVehicleActive, navigationGamepad,
             context => floors.Observe(FieldFloorCapture.Capture(memory, (nuint)context)), () => floors.Status,
-            (frame, result) => FieldFloorMovement.Adjust(frame, result, floors.Current));
+            (frame, result) => FieldFloorMovement.Adjust(frame, result, floors.Current), () => floors.Current);
         nuint raceImage = 0;
         var raceToneFailure = 0;
         var raceCapture = new BikeRaceCapture(memory);

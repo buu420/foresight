@@ -375,7 +375,7 @@ public sealed class DeathPeakNavigationTests
         Actor(9, 14208, 12287) with { ClassTag = 4, VisualIndex = 185, DrawMode = 1 };
 
     internal static NavigationFrame Frame(int? flags, int gust = 0, FieldViewport? viewport = null,
-        FieldActorSnapshot? doll = null, bool live = false)
+        FieldActorSnapshot? doll = null, bool live = false, FieldMapSnapshot? map = null)
     {
         var leader = Actor(6, 55 * 256 + 128, 61 * 256 + 128) with { ClassTag = 0, IsPartyMember = true };
         var script = Actor(0, 0, 0) with { ClassTag = 7, DrawMode = 0 };
@@ -387,13 +387,13 @@ public sealed class DeathPeakNavigationTests
             Globals = new Dictionary<int, int> { [0x7C] = flags.Value },
             Locals = new Dictionary<int, int> { [12] = gust },
         };
-        return new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, Map(flags ?? 0, live),
+        return new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, map ?? Map(flags ?? 0, live),
             viewport ?? new(0, 0, 64 * 256, 64 * 256), [], story);
     }
 
     /// <summary>DollPresent: startup 01E4 and 0200. Transformed: a reload after bit2 (01E4, 01F1).
     /// LiveTransformed: DollPresent followed by actor9's 02E7 copy, before any reload.</summary>
-    private static FieldMapSnapshot Map(int flags, bool live = false)
+    internal static FieldMapSnapshot Map(int flags, bool live = false)
     {
         using var input = typeof(DeathPeakNavigationTests).Assembly.GetManifestResourceStream(
             "ChronoTriggerAccessibility.Mod.Tests.Navigation.death-peak-244-map-0368.json")!;

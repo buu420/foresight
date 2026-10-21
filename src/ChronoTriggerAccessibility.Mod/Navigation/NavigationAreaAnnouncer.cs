@@ -12,7 +12,8 @@ public sealed class NavigationAreaAnnouncer(Action<string> speak, Action<string>
         scene = frame.Scene;
         var name = frame.AreaName.Trim().TrimEnd('.');
         diagnostic($"Navigation area entered: {frame.Scene}; {name}.");
-        speak(name + ".");
+        speak(name + "." + (frame.Targets.Any(t => t.Id == DeathPeakClimbAssist.TargetId && t.GuideAvailable)
+            ? " Shelter assist is first in Exits." : ""));
         return frame;
     }
 }

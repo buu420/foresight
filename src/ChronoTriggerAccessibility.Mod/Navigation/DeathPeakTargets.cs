@@ -23,7 +23,7 @@ public static class DeathPeakTargets
         scene == 244 && actor is { Index: DollActor, ClassTag: DollClass, VisualIndex: DollVisual, IsUsable: true, IsDrawn: true };
 
     public static IEnumerable<NavigationTarget> Build(FieldNavigationSnapshot field, FieldMapSnapshot map,
-        FieldViewport viewport, FieldStoryState? story, FieldNavigationGraph graph)
+        FieldViewport viewport, FieldStoryState? story, FieldNavigationGraph graph, bool climbing = false)
     {
         if (!field.SceneIdCoherent || field.SceneId != 244 || map.TransitionPending) yield break;
         // An unreadable global leaves the lower state unknown: say nothing about it.
@@ -45,7 +45,8 @@ public static class DeathPeakTargets
         {
             // Only the live map's own push-free floor: the retained 0200 patch, never a future copy.
             // Interior samples keep the one-eighth-tile arrival box on that floor.
-            var calm = Points(LowerLeft, LowerTop, LowerRight, LowerBottom).Where(Calm).Take(64).ToArray();
+            var calm = climbing && doll is null ? [] :
+                Points(LowerLeft, LowerTop, LowerRight, LowerBottom).Where(Calm).Take(64).ToArray();
             var visible = doll is { } shown
                 ? viewport.Contains(shown.FineX, shown.FineY)
                 : Footprint(left, right, treeTop, treeBottom);
@@ -130,13 +131,56 @@ public static class DeathPeakTargets
             Enumerable.Range(treeTop, treeBottom - treeTop + 1).Any(y =>
                 Enumerable.Range(left, right - left + 1).Any(x => viewport.Contains(x * 256 + 128, y * 256 + 128)));
 
-        static NavigationTarget Target(string id, string label, NavigationPoint[] goals, bool visible,
+        NavigationTarget Target(string id, string label, NavigationPoint[] goals, bool visible,
             (int, int)? xRange, string instruction, string arrival) =>
             new("death-peak:shelter:" + id, label, NavigationCategory.Objects, goals[0], goals, visible, visible)
             {
-                GuideAvailable = visible, ArrivalXRange = xRange, Instruction = instruction, ArrivalInstruction = arrival,
+                GuideAvailable = visible || climbing, ArrivalXRange = xRange, Instruction = instruction, ArrivalInstruction = arrival,
                 ArrivalAnnouncement = xRange is null ? null :
                     $"Hold Up now. Arrived at {label}. The slope keeps pushing between gusts. Choose when to leave cover.",
             };
+    }
+
+    public static NavigationTarget? Climb(FieldNavigationSnapshot field, FieldMapSnapshot map,
+        FieldViewport viewport, FieldStoryState? story, FieldNavigationGraph graph,
+        IReadOnlyList<NavigationTarget> targets)
+    {
+        if (!field.SceneIdCoherent || field.SceneId != 244 || map.PlayerLayer != 1 || map.TransitionPending ||
+            story?.Global(0x7C) is not { } flags || (flags & 2) == 0 ||
+            map.ExitDestinations?.TryGetValue(0, out var next) != true || next != 245) return null;
+        var shelters = Build(field, map, viewport, story, graph, climbing: true).ToArray();
+        var lower = shelters.FirstOrDefault(t => t.Id == "death-peak:shelter:lower");
+        if (lower is null) return null;
+        NavigationTarget[] stages;
+        if ((flags & 4) == 0)
+        {
+            // Reaching the native calm patch is useful, but speaking to the doll
+            // must still be the player's action before the tree exists.
+            stages = [lower with { ArrivalInstruction = "Sheltered below the doll. Choose Doll in navigation to approach and face it, then press Confirm yourself. Restart the climbing assist after the tree appears." }];
+        }
+        else
+        {
+            var upper = shelters.FirstOrDefault(t => t.Id == "death-peak:shelter:upper");
+            var exit = targets.FirstOrDefault(t => t.Id == "exit:0" && t.ApproachPoints.Count != 0 &&
+                string.IsNullOrWhiteSpace(t.GuidanceRestriction));
+            if (lower.ArrivalHold is null || upper?.ArrivalHold is null || exit is null) return null;
+            stages = [Waiting(lower), Waiting(upper), exit];
+        }
+        return stages[0] with
+        {
+            Id = DeathPeakClimbAssist.TargetId, Label = "Climb windy slope with shelter assist",
+            Category = NavigationCategory.Exits, GuideAvailable = true, AutomaticStages = stages,
+            Instruction = "Start automatic walking to climb between shelters and wait for gusts to pass. " +
+                "The assist uses your native Run setting; enable running if it asks. Move manually or stop navigation to cancel. " +
+                "Manual guidance routes to shelter only; use the individual shelter destinations to choose each leg yourself.",
+        };
+
+        static NavigationTarget Waiting(NavigationTarget target) => target with
+        {
+            ArrivalHold = target.ArrivalHold! with
+            {
+                Instruction = $"Holding Up at {target.Label}. Waiting for the next gust to pass. Move manually or stop navigation to cancel.",
+            },
+        };
     }
 }

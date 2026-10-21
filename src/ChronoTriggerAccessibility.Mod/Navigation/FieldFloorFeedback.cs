@@ -90,7 +90,8 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
         var direction = floor.ForceX < 0 ? "west" : floor.ForceX > 0 ? "east" : floor.ForceY < 0 ? "north" : "downhill";
         var speed = Math.Max(Math.Abs(floor.ForceX), Math.Abs(floor.ForceY));
         return "Wind pushes you " + direction + "." +
-            (speed == 16 ? " Run to climb against it." : speed == 32 ? " You cannot move against this push." : "");
+            (speed == 16 ? " Walking cannot climb against this push; running can." :
+                speed == 32 ? " You cannot move against this push." : "");
     }
     private static string Describe(FieldFloorSnapshot floor)
     {
