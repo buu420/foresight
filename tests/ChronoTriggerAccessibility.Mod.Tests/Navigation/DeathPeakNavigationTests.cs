@@ -371,10 +371,10 @@ public sealed class DeathPeakNavigationTests
     }
 
     // Atel_0052 actor9: load_person B9 (class 4) at tile (55,47); fine position from the tester log.
-    private static FieldActorSnapshot Doll() =>
+    internal static FieldActorSnapshot Doll() =>
         Actor(9, 14208, 12287) with { ClassTag = 4, VisualIndex = 185, DrawMode = 1 };
 
-    private static NavigationFrame Frame(int? flags, int gust = 0, FieldViewport? viewport = null,
+    internal static NavigationFrame Frame(int? flags, int gust = 0, FieldViewport? viewport = null,
         FieldActorSnapshot? doll = null, bool live = false)
     {
         var leader = Actor(6, 55 * 256 + 128, 61 * 256 + 128) with { ClassTag = 0, IsPartyMember = true };

@@ -31,14 +31,14 @@ public static class DeathPeakTargets
         {
             if ((flags & 4) != 0)
             {
-                foreach (var target in Shelter("Lower shelter tree", 53, 57, 53, 43, 48, null)) yield return target;
+                foreach (var target in Shelter("Lower shelter tree", 53, 57, 54, 43, 48, null)) yield return target;
             }
             else if (field.Actors.FirstOrDefault(a => IsDrawnDoll(field.SceneId, a)) is { } doll)
             {
-                foreach (var target in Shelter("Shelter below the doll", 53, 57, 53, 43, 48, doll)) yield return target;
+                foreach (var target in Shelter("Shelter below the doll", 53, 57, 54, 43, 48, doll)) yield return target;
             }
         }
-        foreach (var target in TrunkShelter("upper", "Upper shelter tree", 54, 30, 58, 36, 26, 31)) yield return target;
+        foreach (var target in TrunkShelter("upper", "Upper shelter tree", 54, 30, 58, 37, 26, 31)) yield return target;
 
         IEnumerable<NavigationTarget> Shelter(string label, int left, int right, int bottom, int treeTop, int treeBottom,
             FieldActorSnapshot? doll)
@@ -72,7 +72,7 @@ public static class DeathPeakTargets
             // the trunk and leave cover. Walk the live graph north to the actual
             // collision stop, rather than assuming a standing coordinate.
             var centreX = (left + right + 1) * 128;
-            if (!graph.TryPosition(centreX, bottom * 256 + 128, map.PlayerLayer, out var start)) yield break;
+            if (!graph.TryPosition(centreX, (bottom - 1) * 256 + 128, map.PlayerLayer, out var start)) yield break;
             // The live map must hold the copied trunk directly above that stop.
             if (graph.TryPosition(centreX, treeBottom * 256 + 128, map.PlayerLayer, out _)) yield break;
             var walked = WalkNorth(start, left, top, right, bottom);
@@ -84,7 +84,13 @@ public static class DeathPeakTargets
                 // two-pixel arrival box can otherwise pass beside it.
                 (centreX - 16, centreX + 15),
                 "Hold Up against the tree for shelter. The slope pushes constantly, even between gusts. Choose when to leave cover.",
-                "Hold Up now. The downhill wind pushes constantly, even between gusts. Choose when to leave cover.");
+                "Hold Up now. The downhill wind pushes constantly, even between gusts. Choose when to leave cover.") with
+            {
+                ArrivalHold = new(NavigationDirection.North,
+                    new(centreX - 16, top * 256, map.PlayerLayer),
+                    new(centreX + 15, (bottom + 1) * 256 - 1, map.PlayerLayer),
+                    "Holding Up for shelter. Take manual control or start another route when you choose to leave."),
+            };
         }
 
         // The northward walk that a held Up follows, ending at its collision stop. Empty when it leaves cover.

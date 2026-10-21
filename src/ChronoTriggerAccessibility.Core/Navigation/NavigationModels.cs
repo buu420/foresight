@@ -50,6 +50,16 @@ public sealed record NavigationTransition(string Id, string Label, NavigationPoi
         point.Y / NavigationUnits.LocalStep == Landing.Y / NavigationUnits.LocalStep;
 }
 
+/// <summary>Audited directional contact that maintains native shelter after an
+/// automatic arrival. The live target must keep proving the same bounds.</summary>
+public sealed record NavigationHold(NavigationDirection Direction, NavigationPoint Minimum,
+    NavigationPoint Maximum, string Instruction)
+{
+    public bool Contains(NavigationPoint point) => Direction != NavigationDirection.None &&
+        point.Layer == Minimum.Layer && point.Layer == Maximum.Layer &&
+        point.X >= Minimum.X && point.X <= Maximum.X && point.Y >= Minimum.Y && point.Y <= Maximum.Y;
+}
+
 public sealed record NavigationTarget(string Id, string Label, NavigationCategory Category,
     NavigationPoint Position, IReadOnlyList<NavigationPoint> ApproachPoints, bool Visible, bool Discovered)
 {
@@ -70,6 +80,9 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>An optional inclusive horizontal interval required at final arrival.
     /// A narrow native shelter can need closer alignment than the ordinary distance box.</summary>
     public (int Minimum, int Maximum)? ArrivalXRange { get; init; }
+    /// <summary>Only automatic walking maintains this verified contact on arrival.
+    /// Manual guidance still stops and explains the native player action.</summary>
+    public NavigationHold? ArrivalHold { get; init; }
     public NavigationTransition? Transition { get; init; }
     /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
     /// in Confirm range and follow again when it moves. Only the player's own Confirm

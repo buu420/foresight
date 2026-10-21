@@ -617,7 +617,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add(shelter.Id, shelter.Label, shelter.Category, shelter.Position, shelter.ApproachPoints, shelter.Visible,
                 storyCandidate: false, guideAvailable: shelter.GuideAvailable, instruction: shelter.Instruction,
                 arrivalInstruction: shelter.ArrivalInstruction, arrivalXRange: shelter.ArrivalXRange,
-                arrivalAnnouncement: shelter.ArrivalAnnouncement);
+                arrivalAnnouncement: shelter.ArrivalAnnouncement, arrivalHold: shelter.ArrivalHold);
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);
         if (field.SceneIdCoherent) storyCandidates.AddRange(TyrannoLairTargets.Build(field, map, story));
@@ -1007,7 +1007,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
             NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
             string? guidanceRestriction = null, int? actorSlot = null,
-            (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null)
+            (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null,
+            NavigationHold? arrivalHold = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -1016,6 +1017,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
+                    ArrivalHold = arrivalHold,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1029,6 +1031,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
+                    ArrivalHold = arrivalHold,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1041,6 +1044,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
+                ArrivalHold = arrivalHold,
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,

@@ -312,8 +312,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     switch (action)
                     {
                         case NavigationPadAction.Open:
-                            result = controller.Cancel("navigation menu opened");
-                            resetMotion?.Invoke();
+                            if (!controller.IsHolding)
+                            {
+                                result = controller.Cancel("navigation menu opened");
+                                resetMotion?.Invoke();
+                            }
                             speech.Clear();
                             speech.Add($"Navigation menu. {controller.CurrentCategoryLabel}.");
                             Handle(NavigationCommand.Repeat);
@@ -338,7 +341,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
                 foreach (var command in commands) Handle(command);
                 var movementPad = DirectionBits(result.Direction);
-                if (current == NavigationMode.Field && result.AutoWalking && movementPad != 0 && adjustFieldInput is not null)
+                // At the audited tree, plain Up either cancels the native south
+                // push while walking or meets both trunk corners while running.
+                // Climbing's run requirement must not release a stationary hold.
+                if (current == NavigationMode.Field && result.AutoWalking && !controller.IsHolding &&
+                    movementPad != 0 && adjustFieldInput is not null)
                 {
                     var adjusted = adjustFieldInput(frame, result);
                     if (adjusted.StopReason is { } reason)

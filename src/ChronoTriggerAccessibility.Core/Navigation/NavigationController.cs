@@ -11,6 +11,7 @@ public sealed class NavigationController
     private int nextPoint;
     private bool guiding;
     private bool walking;
+    private NavigationHold? holding;
     private NavigationPoint lastPosition;
     private long lastProgress;
     private NavigationDirection announcedDirection;
@@ -51,6 +52,7 @@ public sealed class NavigationController
     private long clock;
 
     public bool IsActive => guiding;
+    public bool IsHolding => guiding && walking && holding is not null;
     /// <summary>The destination being guided to, or else the selected one.</summary>
     public string? TargetId => destination?.Id ?? selection;
     public bool HasPendingTransition => guiding && transition is not null;
@@ -71,7 +73,8 @@ public sealed class NavigationController
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
         $"goal={PointText(route is { Count: > 0 } ? route[^1] : null)}; approaches={plannedApproaches}; stage={intermediateId ?? "none"}" +
-        (facingStarted is null ? "" : $"; facing={facingDirection}");
+        (facingStarted is null ? "" : $"; facing={facingDirection}") +
+        (holding is null ? "" : $"; holding={holding.Direction}");
     private bool TakesAnExit => intermediateId?.StartsWith("exit:", StringComparison.Ordinal) == true;
     private static string PointText(NavigationPoint? point) => point is { } p ? $"({p.X},{p.Y},{p.Layer})" : "none";
 
@@ -94,7 +97,7 @@ public sealed class NavigationController
         {
             case NavigationCommand.PreviousCategory:
             case NavigationCommand.NextCategory:
-                Stop();
+                if (!IsHolding) Stop();
                 var categoryCount = Enum.GetValues<NavigationCategory>().Length;
                 category = (NavigationCategory)(((int)category + (command == NavigationCommand.NextCategory ? 1 : categoryCount - 1)) % categoryCount);
                 selection = null;
@@ -105,7 +108,7 @@ public sealed class NavigationController
                 break;
             case NavigationCommand.PreviousTarget:
             case NavigationCommand.NextTarget:
-                Stop();
+                if (!IsHolding) Stop();
                 SelectDefault(targets);
                 if (targets.Count != 0)
                 {
@@ -121,23 +124,29 @@ public sealed class NavigationController
                 break;
             case NavigationCommand.Guide:
             case NavigationCommand.ToggleWalk:
-                if (command == NavigationCommand.ToggleWalk && walking)
+                if (command == NavigationCommand.ToggleWalk && walking &&
+                    (!IsHolding || selection == destination?.Id && category == destination?.Category))
                 {
                     Stop();
                     speech.Add("Navigation stopped.");
                     break;
                 }
                 SelectDefault(targets);
-                destination = targets.Find(target => target.Id == selection);
-                if (destination is null)
+                var target = targets.Find(target => target.Id == selection);
+                var previousShelter = IsHolding ? CurrentDestination(frame) : null;
+                Stop();
+                if (target is null)
                 {
                     speech.Add(EmptyCategory());
+                    RestoreShelter(previousShelter, frame, speech);
                     break;
                 }
-                var target = destination;
-                Stop();
                 destination = target;
-                if (!Plan(frame, speech) && creatureBlockedSince is null) break;
+                if (!Plan(frame, speech) && creatureBlockedSince is null)
+                {
+                    RestoreShelter(previousShelter, frame, speech);
+                    break;
+                }
                 guiding = true;
                 walking = command == NavigationCommand.ToggleWalk;
                 lastPosition = frame.Player;
@@ -188,17 +197,30 @@ public sealed class NavigationController
             Stop();
             speech.Add("Navigation stopped: player control is unavailable.");
         }
-        if (guiding && !CanContinueTransition(frame, now) && !Eligible(frame).Any(target => target.Id == destination?.Id))
+        var currentTarget = CurrentDestination(frame);
+        if (guiding && !CanContinueTransition(frame, now) && currentTarget is null)
         {
             Stop();
             speech.Add("Navigation stopped: destination is no longer available.");
         }
+        if (IsHolding && (currentTarget?.ArrivalHold != holding || !holding!.Contains(frame.Player) ||
+            !string.IsNullOrWhiteSpace(currentTarget?.GuidanceRestriction)))
+        {
+            Stop();
+            speech.Add("Navigation stopped: shelter contact is no longer available.");
+        }
     }
 
+    private NavigationTarget? CurrentDestination(NavigationFrame frame) => frame.Targets.FirstOrDefault(target =>
+        target.Id == destination?.Id && target.Category == destination?.Category && Available(target));
+
+    private static bool Available(NavigationTarget target) =>
+        (target.Visible || target.Discovered || target.GuideAvailable ||
+            target.Category == NavigationCategory.StoryEvents && target.IsStoryNote) &&
+        !string.IsNullOrWhiteSpace(target.Id) && !string.IsNullOrWhiteSpace(target.Label);
+
     private List<NavigationTarget> Eligible(NavigationFrame frame) => frame.Targets
-        .Where(target => target.Category == category && (target.Visible || target.Discovered || target.GuideAvailable ||
-            (target.Category == NavigationCategory.StoryEvents && target.IsStoryNote)) &&
-            !string.IsNullOrWhiteSpace(target.Id) && !string.IsNullOrWhiteSpace(target.Label))
+        .Where(target => target.Category == category && Available(target))
         .DistinctBy(target => target.Id).ToList();
 
     private void SelectDefault(List<NavigationTarget> targets)
@@ -211,6 +233,11 @@ public sealed class NavigationController
         var index = targets.FindIndex(target => target.Id == selection);
         if (index < 0) { speech.Add(EmptyCategory()); return; }
         var target = targets[index];
+        if (IsHolding && target.Id == destination?.Id)
+        {
+            speech.Add($"{target.Label}, {index + 1} of {targets.Count}. {holding!.Instruction}");
+            return;
+        }
         if (nativeTransitionStarted is not null)
         {
             speech.Add($"{transition!.Label}. Waiting for the drop to finish.");
@@ -345,6 +372,10 @@ public sealed class NavigationController
 
     private void Follow(NavigationFrame frame, long now, List<string> speech, bool manualInput = false)
     {
+        // A tree is supposed to block the held direction. Ordinary route stall
+        // detection would abandon shelter; Refresh already checked fresh authority,
+        // the live target's proof and the player's native protected bounds.
+        if (IsHolding) return;
         // A keyboard-only player has no callback during native movement. Check
         // the prior approach before replacing it with the first landed position.
         var continueTransition = CanContinueTransition(frame, now);
@@ -355,7 +386,7 @@ public sealed class NavigationController
             observedPosition = frame.Player;
         }
         if (FollowTransition(frame, now, speech, continueTransition)) return;
-        var currentTarget = Eligible(frame).Find(target => target.Id == destination?.Id);
+        var currentTarget = CurrentDestination(frame);
         if (currentTarget is null)
         {
             speech.Add("Navigation stopped: destination is no longer available.");
@@ -476,8 +507,7 @@ public sealed class NavigationController
         }
         if (Arrived(frame.Graph, frame.Player, route[^1]))
         {
-            speech.Add(Arrival(destination));
-            Stop();
+            FinishArrival(frame, speech);
             return;
         }
         var onRoute = AdvanceAlongRoute(frame.Player);
@@ -545,8 +575,7 @@ public sealed class NavigationController
             {
                 if (intermediateId is not null || destination!.ContactDirection != NavigationDirection.None ||
                     destination.ContactAt(route[^1]) is not null || destination.ConfirmAt(route[^1]) is not null) return;
-                speech.Add(Arrival(destination!));
-                Stop();
+                FinishArrival(frame, speech);
                 return;
             }
         }
@@ -766,8 +795,38 @@ public sealed class NavigationController
         }
     }
 
+    private void FinishArrival(NavigationFrame frame, List<string> speech)
+    {
+        if (walking && destination?.ArrivalHold is { } hold && hold.Contains(frame.Player))
+        {
+            holding = hold;
+            route = null;
+            inputDirections = null;
+            speech.Add($"Arrived at {destination.Label}. {hold.Instruction}");
+        }
+        else
+        {
+            speech.Add(Arrival(destination!));
+            Stop();
+        }
+    }
+
+    private void RestoreShelter(NavigationTarget? target, NavigationFrame frame, List<string> speech)
+    {
+        // A failed attempt is not a new route. Retain only the freshly proven
+        // shelter from this input frame; a fault or lost authority never reaches
+        // this recovery path and cannot silently resume movement.
+        if (target?.ArrivalHold is not { } hold || !frame.CanNavigate || !hold.Contains(frame.Player) ||
+            !Available(target) || !string.IsNullOrWhiteSpace(target.GuidanceRestriction)) return;
+        destination = target;
+        holding = hold;
+        guiding = walking = true;
+        speech.Add("Still holding shelter.");
+    }
+
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
-        new(speech.AsReadOnly(), nativeTransitionStarted is not null ? NavigationDirection.None :
+        new(speech.AsReadOnly(), holding is not null ? holding.Direction :
+            nativeTransitionStarted is not null ? NavigationDirection.None :
             walking && transitionContactStarted is not null ? transition!.Direction :
             walking && facingStarted is not null ? facingDirection :
             walking && contactStarted is not null ? contactDirection :
@@ -923,6 +982,7 @@ public sealed class NavigationController
     private void Stop()
     {
         guiding = walking = false;
+        holding = null;
         alignmentPlanRevision = -1;
         route = null;
         inputDirections = null;
