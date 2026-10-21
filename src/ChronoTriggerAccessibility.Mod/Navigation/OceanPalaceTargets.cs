@@ -21,7 +21,9 @@ internal static class OceanPalaceTargets
             // Atel0499 0494/050D 8E 04: Algetty's Schala and Janus after the scene (0xBA).
             (382, 11, 4, 0x09) or (382, 12, 4, 0x0A) or
             // Atel0399 035B 8E 04: the bridge knob beneath its panel (BridgePanel).
-            (412, 9, 4, 0x64);
+            (412, 9, 4, 0x64) or
+            // Atel0222 04FA/055A 8E 00: both Golems wait until Dalton's summon (fn3 8E 22).
+            (414, 15 or 16, 5 or 6, 0x95);
 
     /// <summary>Atel0499 parks the Algetty scene's cast on floorless tile (9,17) below the
     /// doorway while global 0x1A0 bit 0x20 says the scene is pending (set in the Mudbeast

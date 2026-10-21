@@ -65,6 +65,11 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// not a destination for the mod's guidance or automatic walking.</summary>
     public string? GuidanceRestriction { get; init; }
     public string? ArrivalInstruction { get; init; }
+    /// <summary>Complete arrival speech when an immediate action must precede the destination name.</summary>
+    public string? ArrivalAnnouncement { get; init; }
+    /// <summary>An optional inclusive horizontal interval required at final arrival.
+    /// A narrow native shelter can need closer alignment than the ordinary distance box.</summary>
+    public (int Minimum, int Maximum)? ArrivalXRange { get; init; }
     public NavigationTransition? Transition { get; init; }
     /// <summary>An audited moving interaction, such as the Arris Dome rat: stay active
     /// in Confirm range and follow again when it moves. Only the player's own Confirm

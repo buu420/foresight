@@ -16,6 +16,7 @@ public sealed class NavigationController
     private NavigationDirection announcedDirection;
     private int unitsPerTile = 16;
     private long planRevision;
+    private long alignmentPlanRevision = -1;
     private bool waitingForManualStop;
     private NavigationPoint observedPosition;
     private long lastManualActivity;
@@ -167,7 +168,7 @@ public sealed class NavigationController
         return Result(speech, frame.Player);
     }
 
-    private static string Arrival(NavigationTarget target) => $"Arrived at {target.Label}." +
+    private static string Arrival(NavigationTarget target) => target.ArrivalAnnouncement ?? $"Arrived at {target.Label}." +
         (string.IsNullOrWhiteSpace(target.ArrivalInstruction) ? "" : " " + target.ArrivalInstruction);
 
     private void Refresh(NavigationFrame frame, List<string> speech, long now)
@@ -480,12 +481,25 @@ public sealed class NavigationController
             return;
         }
         var onRoute = AdvanceAlongRoute(frame.Player);
+        // Ordinary waypoint tolerance may pass the last node beside a narrow
+        // shelter. Replan the small final correction for spoken guidance too.
+        if (alignmentPlanRevision != planRevision && intermediateId is null && destination.ArrivalXRange is { } finalRange &&
+            (frame.Player.X < finalRange.Minimum || frame.Player.X > finalRange.Maximum) &&
+            Math.Abs((long)frame.Player.X - route[^1].X) <= Math.Max(1, unitsPerTile / 8) &&
+            Math.Abs((long)frame.Player.Y - route[^1].Y) <= Math.Max(1, unitsPerTile / 8))
+        {
+            onRoute = false;
+            // Plan increments its revision after the manual stop pause. Do not
+            // replan that same short alignment every tick while the player waits.
+            alignmentPlanRevision = planRevision + 1;
+        }
         if (nextPoint >= route.Count)
         {
             // A cell goal is reached by entering the cell, not by closing the distance,
             // so the cursor can pass the last waypoint while the player is still outside
             // it. Keep steering at that node rather than stalling on an exhausted route.
-            if (route.Count < 2 || !frame.Graph.IsTerminal(route[^1])) return;
+            if (route.Count < 2 || !frame.Graph.IsTerminal(route[^1]) &&
+                (intermediateId is not null || destination.ArrivalXRange is null)) return;
             nextPoint = route.Count - 1;
         }
         // Progress along a leg can pass multiple small graph waypoints. Only a
@@ -866,6 +880,11 @@ public sealed class NavigationController
     private NavigationDirection Steering(NavigationPoint player)
     {
         var target = route![nextPoint];
+        if (nextPoint == route.Count - 1 && intermediateId is null && destination?.ArrivalXRange is { } range)
+        {
+            if (player.X < range.Minimum) return NavigationDirection.East;
+            if (player.X > range.Maximum) return NavigationDirection.West;
+        }
         var direction = LegDirection(nextPoint);
         var from = route[nextPoint - 1];
         // A native slide already owns its perpendicular displacement. Correcting
@@ -904,6 +923,7 @@ public sealed class NavigationController
     private void Stop()
     {
         guiding = walking = false;
+        alignmentPlanRevision = -1;
         route = null;
         inputDirections = null;
         destination = null;
@@ -955,6 +975,8 @@ public sealed class NavigationController
     private bool Arrived(INavigationGraph graph, NavigationPoint a, NavigationPoint b) =>
         a.Layer == b.Layer && Math.Abs((long)a.X - b.X) <= Math.Max(1, unitsPerTile / 8) &&
         Math.Abs((long)a.Y - b.Y) <= Math.Max(1, unitsPerTile / 8) &&
+        (intermediateId is not null || destination?.ArrivalXRange is not { } range ||
+            a.X >= range.Minimum && a.X <= range.Maximum) &&
         (!graph.IsTerminal(b) || graph.IsSameTerminal(a, b));
     private static double SquaredDistance(NavigationPoint a, NavigationPoint b) =>
         Math.Pow((double)a.X - b.X, 2) + Math.Pow((double)a.Y - b.Y, 2);

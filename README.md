@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.67 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.68 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.67 repairs Ocean Palace routes through the great stair, switches and elevator, identifies introduced story characters, and removes cinematic transitions from Exits. It adds descriptions of verified Palace story actions and the Crono/Lavos movie in the approved narration voice. All earlier fixes and recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.67.md).
+Version 0.3.68 adds Death Peak shelter targets and wind feedback, repairs Mune's visibility at the Ocean Palace entrance, and restores Blackbird duct routes with distinct openings and readable grate views. All earlier fixes and approved voice recordings are retained. See [this build's changes and testing notes](docs/releases/v0.3.68.md).
 
 ## Install the beta download
 
@@ -106,6 +106,10 @@ At the End of Time, **Exits → Pillar of light 1–9** distinguishes the lights
 The hub is announced as **End of Time, Main Room**. In Spekkio's room, **Objects → Door to the main room** identifies the return doorway; **Exits → End of Time platform** routes through it. The return door opens by moving down into it. Verified automatic tile-copy passages use a reachable opening contact and continue only after the game supplies opened floor. Doors requiring a key, switch, story event or Confirm retain those requirements. These changes need live testing. See [closed-door navigation evidence](docs/closed-door-navigation-0347.md).
 
 Repeated exit names receive letter suffixes, such as **Exit A**, **Exit B**, or **Outside, exit A**, in field, world-map and flight navigation. Once assigned, a suffix stays with that target for the current area and navigation mode. A name can gain its first suffix when another exit with that name becomes available.
+
+At Death Peak's windy entrance, **Objects → Shelter below the doll / Lower shelter tree / Upper shelter tree** identifies available shelter. The lower label changes after the doll transforms. Choose one with I for manual guidance or P for automatic walking. The doll's push-free patch allows you to stand still. At a pushed tree, arrival starts with **Hold Up now**: keep Up held because the slope pushes even between gusts. Automatic walking stops on arrival. Keyboard J/L can browse destinations while you keep movement held. Wind changes, strong gusts and the end of a gust are spoken; K repeats current wind and downhill-push advice. Run when climbing against the stronger push, and choose when to leave cover.
+
+In the Blackbird shaft, **Exits** contains the ten actual openings with distinct destination labels. **Interactable Objects** contains numbered **Viewing grates**. Walking over a grate continues along the duct; press Confirm yourself to look through it. A view announces the current room and its return control. **K** repeats the view; Confirm returns to the shaft. R3 navigation is unavailable during a view because the game has suspended normal movement. Crawling footsteps follow actual movement; pressing against a wall and looking through a grate do not produce movement beats.
 
 Use these keys while controlling the party in a local field area, walking on the world map, or flying a vehicle:
 

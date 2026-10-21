@@ -181,11 +181,11 @@ public sealed class Mod : ModBase
         NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));
         var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
         var navigationGamepad = new NavigationGamepad();
-        void ResetMotion() { footsteps.Suspend(); floors.Reset(); }
+        void ResetMotion() { footsteps.Suspend(); floors.Suspend(); }
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); },
+            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); floors.Reset(); },
             ResetMotion, World, context => World(context), footsteps.SetGuidance,
             Flight, worldSource.IsVehicleActive, navigationGamepad,
             context => floors.Observe(FieldFloorCapture.Capture(memory, (nuint)context)), () => floors.Status,
@@ -310,6 +310,8 @@ public sealed class Mod : ModBase
         storyActions = new StoryActionRuntime(
             (context, opcode) =>
                 StoryActionCapture.TryLocate(memory, (nuint)context, opcode, out var location) &&
+                // Atel_0274's look-down pose is grate inspection, spoken by grateViews below.
+                !BlackbirdGrateViewCapture.IsLookPose(location) &&
                 (opcode is 0xAA or 0xAB or 0xE3 || StorySceneActionCapture.Watches(location)) &&
                 StoryActionCapture.TryCapture(memory, location, out var before) ? before : null,
             before => StoryActionCapture.TryProveAnimation(memory, before, out var proof) ? proof : null,
@@ -320,7 +322,19 @@ public sealed class Mod : ModBase
             before => StorySceneActionCapture.TryMatch(memory, before, out var candidate) ? candidate : null,
             candidate => StorySceneActionCapture.TryComplete(memory, candidate),
             before => StoryActionCapture.TryProvePlayerControlRestored(memory, before), narrate, stopNarration, movies);
-        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions);
+        // Grate views clear FieldState+108C, so the field input hook (175A40) is idle; the
+        // script dispatcher still runs and carries the view's own E3/E0 instructions.
+        var grateViews = new BlackbirdGrateViewRuntime(
+            (context, opcode) => BlackbirdGrateViewCapture.Capture(memory, (nuint)context, opcode),
+            scene =>
+            {
+                var name = navigationText.FieldName(navigationImageBase, scene);
+                return string.IsNullOrWhiteSpace(name) || name.StartsWith('(') ? null : name;
+            },
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
+            () => NavigationKeyboard.IsGameForeground() && NavigationKeyboard.IsKeyDown(0x4B),
+            dispatcher.RecordDiagnostic);
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions, grateViews);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)

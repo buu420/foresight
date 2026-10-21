@@ -1,6 +1,7 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Mod.Minigames;
+using ChronoTriggerAccessibility.Mod.Navigation;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
 using ChronoTriggerAccessibility.Mod.Startup;
@@ -14,15 +15,18 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
     private readonly IntroTraceRecorder recorder;
     private readonly IokaContestRuntime? contest;
     private readonly StoryActionRuntime? storyActions;
+    private readonly BlackbirdGrateViewRuntime? grateViews;
     private bool prepared;
 
     public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder,
-        IokaContestRuntime? contest = null, StoryActionRuntime? storyActions = null)
+        IokaContestRuntime? contest = null, StoryActionRuntime? storyActions = null,
+        BlackbirdGrateViewRuntime? grateViews = null)
     {
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         this.recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
         this.contest = contest;
         this.storyActions = storyActions;
+        this.grateViews = grateViews;
         Registrations = Array.AsReadOnly<IHookRegistration>([this]);
     }
 
@@ -47,6 +51,8 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
                 if (contest is null) TraceAndCall();
                 else contest.Dispatch(context, opcode, TraceAndCall);
             }
+            // Before the original: an E0 return must be read before the scene changes.
+            grateViews?.Dispatch(context, opcode);
             if (storyActions is null) ContestAndCall();
             else storyActions.Dispatch(context, opcode, ContestAndCall);
         });
@@ -64,6 +70,7 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         recorder.Enable();
         contest?.Enable();
         storyActions?.Enable();
+        grateViews?.Enable();
     }
-    public void AfterHooksDisabled() { storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
+    public void AfterHooksDisabled() { grateViews?.Disable(); storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
 }

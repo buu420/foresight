@@ -58,6 +58,21 @@ public sealed class FootstepTrackerTests
         Assert.False(tracker.Update(Frame(416), 0x100, 333));
     }
 
+    // The Blackbird shaft crawl is the ordinary field mover (175A40: 16 units a frame from
+    // the pad's 0xF00 bits). The October 19 log crawled 14 tiles west on row 26 holding
+    // left with A (pad 0x280) and counted 14 beats; a push with no direction stays silent.
+    [Fact]
+    public void ShaftCrawlingWithConfirmHeldCountsEachTileWhileAPushDoesNot()
+    {
+        var tracker = new FootstepTracker();
+        var beats = 0;
+        for (var i = 0; i <= 14 * 16; i++)
+            if (tracker.Update(Frame(15488 - i * 16, 6911), 0x280, i * 16)) beats += tracker.Steps;
+        Assert.Equal(14, beats);
+        for (var i = 1; i <= 64; i++)
+            Assert.False(tracker.Update(Frame(15488 - 14 * 256 - i * 32, 6911), 0, (14 * 16 + i) * 16));
+    }
+
     [Fact]
     public void ScriptedMotionWithoutAcceptedMovementIsSilent()
     {

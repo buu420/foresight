@@ -251,7 +251,7 @@ public static class FullStoryObjectives
             Sub("palace-lower-west", "Activate the first lower-level wall switch", [With(406, 22)], Flag(0x162, 0x10)),
             Sub("palace-lower-east", "Activate the other lower-level wall switch", [With(406, 26)], Flag(0x162, 0x20)),
             Sub("palace-bridge", "Step on the floor switch to extend the bridge", [With(412, 9)], Flag(0x162, 0x80)),
-            Tail("golem-twins", "Cross the bridge and face the Golem Twins", [At(414)])),
+            Tail("golem-twins", "Cross the bridge and continue along the walkway", [At(414)])),
 
         Upto(0xCB, Tail("ocean-palace-lavos", "Face what rises in the Ocean Palace",
             [With(415, 11), At(419), At(420), At(421), At(423)],

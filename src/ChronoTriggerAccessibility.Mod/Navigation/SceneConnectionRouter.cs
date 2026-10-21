@@ -139,8 +139,9 @@ public sealed class SceneConnectionRouter
                 result.AddRange(actor.Actions.Where(a => a.Kind == "Warp" && Exists(a.Destination) && a.Available(state, local: false))
                     .Select(a => new Link(scene.Id, ContinuedDestination(scene.Id, actor.Id, a.Destination, state),
                         null, actor.Id, 2, a.Destination)));
+            // A shaft grate only shows the room below and returns to the same grate.
             result.AddRange(scene.Regions.Where(r => r.Kind == "Warp" && !KeepFieldTargets.ConcealedRegion(scene.Id, r) &&
-                    Exists(r.Destination) && r.Available(state, local: false))
+                    !BlackbirdDuctTargets.IsGrate(scene.Id, r) && Exists(r.Destination) && r.Available(state, local: false))
                 .Select(r => new Link(scene.Id, r.Destination, r.Id, Cost: 2)));
             // Preserve room-to-room look-ahead across the light puzzle without
             // identifying which identical light is the warp. No target/actor ID

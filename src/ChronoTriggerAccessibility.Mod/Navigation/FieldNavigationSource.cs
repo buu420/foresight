@@ -175,6 +175,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
                 ZealFieldLabels.Actor(field.SceneId, actor) ?? nu ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
+            if (field.SceneIdCoherent && DeathPeakTargets.IsDrawnDoll(field.SceneId, actor)) label = "Doll";
             // These names identify a character the player can see; alone they are not a destination.
             var onScreenName = field.SceneIdCoherent ? StoryCharacterLabels.OnScreenName(field.SceneId, actor, story) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
@@ -185,7 +186,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
             approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
-            var seen = viewport.Contains(position.X, position.Y) || discovered.ContainsKey(id);
+            // A sprite rises from its feet: Mune's and Masa's heads show before their feet enter the window.
+            var inView = viewport.Contains(position.X, position.Y) ||
+                field.SceneIdCoherent && OceanPalaceSight.TwinHeadShown(field.SceneId, actor, viewport);
+            var seen = inView || discovered.ContainsKey(id);
             var npcRegion = guideActive ? OceanPalaceTargets.NpcRegion(field, actor, story, seen) ??
                 OceanPalaceStoryTargets.NpcRegion(field, actor, story) : null;
             if (npcRegion is not null) approaches = RegionPoints(npcRegion);
@@ -206,7 +210,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 EncounterApproaches(actor, battles, out _).Count != 0;
             Add(id, label ?? (field.SceneIdCoherent ? FieldContentFacts.ActorLabel(field.SceneId, actor, description.Category) : null) ??
                 (field.SceneIdCoherent ? ReptiteLairTargets.CreatureAppearance(field.SceneId, actor) : null) ??
-                description.Label, description.Category, position, approaches, viewport.Contains(position.X, position.Y),
+                description.Label, description.Category, position, approaches, inView,
                 storyOnly: encounterOnly,
                 storyCandidate: !conveyorRobot,
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
@@ -287,6 +291,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
             if (KeepFieldTargets.ConcealedActor(field.SceneId, actor.Index)) continue;
+            if (BlackbirdDuctTargets.ConcealedLandmark(field.SceneId, actor.Index, map)) continue;
             // Actor36's native A4 branch has an operand the older catalog missed.
             // Its boarding choice is described only by the verified dock provider.
             if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
@@ -308,7 +313,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
             if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
-                OceanPalaceTargets.MarkerLabel(field.SceneId, actor);
+                OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index);
             if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
@@ -363,7 +368,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
-                    field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." : null,
+                    field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." :
+                    BlackbirdDuctTargets.ArrivalInstruction(field.SceneId, actor.Index),
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[landmarkId] = Anchors(actor);
         }
@@ -439,7 +445,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 confirm: touch ? null : ActorConfirm([actor]), actorSlot: actor.Index);
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
-        foreach (var group in sceneInfo.Regions.Where(r => !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
+        foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
+                     !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story)) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
@@ -452,7 +459,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var keepLight = KeepFieldTargets.RegionLightLabel(field.SceneId, region);
             var points = RegionPoints(region);
             if (points.Length == 0) continue;
-            if (region.Kind == "Warp" && !pillar) scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
+            // A shaft grate warps only on Confirm, so a route may cross it.
+            var grate = BlackbirdDuctTargets.IsGrate(field.SceneId, region);
+            if (region.Kind == "Warp" && !pillar && !grate) scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
             // Encounters are the script's own battle triggers (native D8 under a
             // leader-coordinate guard), so they carry the trigger's location but no
             // party, name or reward. Offer the trigger and leave the fight to the
@@ -470,11 +479,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 regionLabel = keepLight;
                 regionCategory = field.SceneId == 166 ? NavigationCategory.Objects : NavigationCategory.Exits;
             }
+            if (grate) (regionLabel, regionCategory) = (BlackbirdDuctTargets.GrateLabel(field.SceneId, region, map), NavigationCategory.Objects);
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                 storyOnly: region.Kind is not ("Warp" or "Encounter") ||
                     OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
-                arrivalInstruction: pillar ? FutureAreaLabels.PillarInstruction(story!) : null);
+                instruction: grate ? BlackbirdDuctTargets.GrateInstruction : null,
+                arrivalInstruction: pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -498,6 +509,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var label = (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id)
                 ? "Opening behind the bookcase" : null) ??
                 (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
+                (field.SceneIdCoherent ? BlackbirdDuctTargets.ExitLabel(field.SceneId, id, map) : null) ??
                 FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
             var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
@@ -601,6 +613,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                     guideAvailable: true, instruction: "Walk into the left side of the room.");
         }
+        foreach (var shelter in DeathPeakTargets.Build(field, map, viewport, story, graph))
+            Add(shelter.Id, shelter.Label, shelter.Category, shelter.Position, shelter.ApproachPoints, shelter.Visible,
+                storyCandidate: false, guideAvailable: shelter.GuideAvailable, instruction: shelter.Instruction,
+                arrivalInstruction: shelter.ArrivalInstruction, arrivalXRange: shelter.ArrivalXRange,
+                arrivalAnnouncement: shelter.ArrivalAnnouncement);
         foreach (var id in discovered.Keys.Where(id => !activeIds.Contains(id)).ToArray()) discovered.Remove(id);
         foreach (var id in guideGeometry.Keys.Where(id => !activeIds.Contains(id)).ToArray()) guideGeometry.Remove(id);
         if (field.SceneIdCoherent) storyCandidates.AddRange(TyrannoLairTargets.Build(field, map, story));
@@ -989,13 +1006,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             IReadOnlyList<NavigationPoint> approaches, bool visible, bool storyOnly = false, bool storyCandidate = true,
             bool guideAvailable = false, string? instruction = null, string? arrivalInstruction = null,
             NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
-            string? guidanceRestriction = null, int? actorSlot = null)
+            string? guidanceRestriction = null, int? actorSlot = null,
+            (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
                 visible || discovered.ContainsKey(id))
                 {
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
+                    ArrivalXRange = arrivalXRange,
+                    ArrivalAnnouncement = arrivalAnnouncement,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1007,6 +1027,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
+                    ArrivalXRange = arrivalXRange,
+                    ArrivalAnnouncement = arrivalAnnouncement,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
