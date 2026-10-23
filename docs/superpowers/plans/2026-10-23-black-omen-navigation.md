@@ -49,12 +49,16 @@ Files: `FieldNavigationSource.cs`, scoped target/route helper, `ClassicOptionalO
 ## Task3: Review, package and local deployment
 
 - [x] Review the complete change with a fresh Opus5.5 review; resolve important findings with meaningful regressions.
-- [ ] Run the full solution suite and appropriate package checks, update version/release notes/native audit and build Release.
-- [ ] Package a verified tester ZIP, deploy owned files with the game closed, verify installed hashes and preserve saves/settings/narration.
-- [ ] Record paths, exact checks and unperformed live tests in a handoff. Public publication requires a separate user release request.
+- [x] Run the full solution suite and appropriate package checks, update version/release notes/native audit and build Release.
+- [x] Package a verified tester ZIP, deploy owned files with the game closed, verify installed hashes and preserve saves/settings/narration.
+- [x] Record paths, exact checks and unperformed live tests in a handoff. Public publication requires a separate user release request.
 
 ## Execution Rulings
 
 Implementation stays in the established Chrono Trigger task checkout on `engine-accessibility-0332`; the parallel Claude task is read-only. This retains the installed-game resource corpus, ignored loader dependencies and working fixture paths. Unrelated untracked `.claude/` and `docs/claude-code-cli-setup.md` are outside scope.
 
 The user has approved the written behavior above. Routine implementation decisions use the existing C# native-backed architecture and do not require repeated confirmation.
+
+## Completion Evidence
+
+Version0.3.72 payload was built from source commit `a70bbdb67bc7cbc83eda94408e541c9cfb39e9e0`. The Opus5.5 review's opening-frame defect was reproduced and resolved;52 focused and4,512 solution tests passed. The final packaged DLLs passed an isolated x86 replay including native yielded opening frames. All275 standalone files and28 mod files match the installed candidate; deployment verification passed303 checks and all229 protected files are unchanged. Detailed receipts and live-test limits are in `artifacts/handoffs/2026-10-23-foresight-0372.md`. This plan closure is documentation only; it does not rebuild or alter the verified payload.
