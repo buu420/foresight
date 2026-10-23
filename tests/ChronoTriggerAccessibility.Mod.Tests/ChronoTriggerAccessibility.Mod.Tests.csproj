@@ -47,6 +47,8 @@
     <EmbeddedResource Include="Navigation\death-peak-265-map.json" />
     <EmbeddedResource Include="Navigation\death-peak-244-map-0368.json" />
     <EmbeddedResource Include="Navigation\death-peak-244-live-0371.json" />
+    <EmbeddedResource Include="Navigation\black-omen-initial-maps-0372.json" />
+    <EmbeddedResource Include="Navigation\black-omen324-reconstructed-0372.json" />
     <EmbeddedResource Include="Navigation\mammon-415-map.json" />
     <EmbeddedResource Include="Navigation\arris-rat-map-0342.json" />
     <EmbeddedResource Include="Navigation\flea-173-map.json" />

@@ -74,6 +74,9 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>A visible moving hazard remains readable by position, but is
     /// not a destination for the mod's guidance or automatic walking.</summary>
     public string? GuidanceRestriction { get; init; }
+    /// <summary>The destination's audited native opening script is currently running.
+    /// Wait without movement for a fresh completed capture, with a bounded timeout.</summary>
+    public bool PassageOpening { get; init; }
     public string? ArrivalInstruction { get; init; }
     /// <summary>Complete arrival speech when an immediate action must precede the destination name.</summary>
     public string? ArrivalAnnouncement { get; init; }

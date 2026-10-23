@@ -19,6 +19,7 @@ public sealed class NavigationController
     private long planRevision;
     private long alignmentPlanRevision = -1;
     private bool waitingForManualStop;
+    private bool nativePassageOpening;
     private NavigationPoint observedPosition;
     private long lastManualActivity;
     private long instructionRevision;
@@ -434,6 +435,26 @@ public sealed class NavigationController
             Stop();
             return;
         }
+        var wasOpening = nativePassageOpening;
+        nativePassageOpening = currentTarget.PassageOpening;
+        if (nativePassageOpening)
+        {
+            destination = currentTarget;
+            // A yielded native opening can change priority and move the player
+            // beyond the approach box before its completion local is written.
+            // Its live script proof, rather than proximity, owns this short wait.
+            if (passageWaitStarted is null)
+            {
+                passageWaitStarted = now;
+                speech.Add("Waiting for the passage to open.");
+            }
+            if (now < passageWaitStarted.Value || now - passageWaitStarted.Value >= 3000)
+            {
+                speech.Add("Navigation stopped: the passage did not open.");
+                Stop();
+            }
+            return;
+        }
         // Rejected standing points belong to the actor's previous position, not to a
         // moving chase for its whole lifetime.
         if (currentTarget.FollowUntilInteraction && currentTarget.Position != destination?.Position)
@@ -441,7 +462,7 @@ public sealed class NavigationController
         // The chosen approach remains valid when a wide exit exposes additional
         // cells or their order changes. Do not restart speech for alternative goals.
         var leftContact = passageWaitStarted is not null && route is not null && !Arrived(frame.Graph, frame.Player, route[^1]);
-        var mustReplan = leftContact || route is null || (intermediateId is null
+        var mustReplan = wasOpening || leftContact || route is null || (intermediateId is null
             ? !currentTarget.ApproachPoints.Contains(route[^1])
             : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
         destination = currentTarget;
@@ -861,6 +882,7 @@ public sealed class NavigationController
 
     private NavigationResult Result(List<string> speech, NavigationPoint player = default) =>
         new(speech.AsReadOnly(), holding is not null ? holding.Direction :
+            nativePassageOpening ? NavigationDirection.None :
             nativeTransitionStarted is not null ? NavigationDirection.None :
             walking && transitionContactStarted is not null ? transition!.Direction :
             walking && facingStarted is not null ? facingDirection :
@@ -868,7 +890,7 @@ public sealed class NavigationController
             walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
-            ManualLeg = guiding && !walking && nativeTransitionStarted is null && transitionContactStarted is null &&
+            ManualLeg = guiding && !walking && !nativePassageOpening && nativeTransitionStarted is null && transitionContactStarted is null &&
                 !waitingForManualStop && route is not null && nextPoint < route.Count
                 ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision)
                     { ExpectedSteps = manualLegBeats } : null
@@ -1024,6 +1046,7 @@ public sealed class NavigationController
         destination = null;
         announcedDirection = NavigationDirection.None;
         waitingForManualStop = false;
+        nativePassageOpening = false;
         manualLegBeats = 0;
         intermediateId = null;
         intermediateContact = null;

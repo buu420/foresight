@@ -1,12 +1,14 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.71 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.72 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.71 adds an optional Death Peak climbing assist that holds at the shelter trees and continues when a gust passes. The map-texture crash diagnostics remain included; the rendering crash is still unresolved. See [this build's changes and testing notes](docs/releases/v0.3.71.md).
+Version 0.3.72 repairs Black Omen teleport-pad targets, the northern door after the lower elevator and the local Story Events route. The Death Peak assist remains available. The rendering crash is still unresolved. See [this build's changes and testing notes](docs/releases/v0.3.72.md).
+
+In the reported Black Omen pad rooms, **Interactable Objects → Teleport pad to…** identifies the native pad and its destination. A pad that needs reactivating gives room-specific directions before you return. After the lower elevator, **Interactable Objects → Northern door** guides you to its opening contact; walk up to open it. **Story Events → Continue through Black Omen** follows the local forward control in these rooms. Manual guidance and automatic walking use the same native contacts.
 
 ## Install the beta download
 

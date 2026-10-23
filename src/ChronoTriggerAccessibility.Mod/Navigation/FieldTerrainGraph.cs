@@ -22,6 +22,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         FieldActorCollisionRules? collisions = null,
         IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null) =>
         actors.Any(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember && a.ScriptCallsEnabled &&
+            (scene.Id != 324 || a.Index != 20 || BlackOmenTargets.CanOpenFinalDoor(scene.Id, a, story)) &&
             scene.Actors.Any(m => m.Matches(a) && m.Actions.Any(c => c.Touch && c.Kind == "Terrain" &&
                 c.Copy is { } copy && ActionAvailable(scene.Id, a.Index, c, story) && HasChanges(map, copy))))
             ? new FieldTerrainGraph(map, actors, story, scene, terminals, collisions, touchGoals) : Wrap(map, terminals, collisions, touchGoals);
@@ -38,6 +39,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // Only native class-7 touch handlers, with their current guards and call
         // gates. Confirm switches and hidden sprites are not automatic passages.
         var candidates = actors.Where(a => a.ClassTag == 7 && a.IsUsable && !a.IsPartyMember && a.ScriptCallsEnabled &&
+            (scene.Id != 324 || a.Index != 20 || BlackOmenTargets.CanOpenFinalDoor(scene.Id, a, story)) &&
             a.FineX >= 0 && a.FineY >= 0 && a.TileX < map.Width && a.TileY < map.Height)
             .Select(a => (Actor: a, Actions: scene.Actors.FirstOrDefault(m => m.Matches(a))?.Actions
                 .Where(c => c.Touch && c.Kind == "Terrain" && c.Copy is not null && ActionAvailable(scene.Id, a.Index, c, story)).ToArray() ?? []))
@@ -61,8 +63,9 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                         story, scene, terminals, collisions, touchGoals)
                     : Wrap(preview, terminals, collisions, touchGoals);
                 var keepDoor = KeepFieldTargets.IsEntranceDoor(scene.Id, actor, story);
+                var edgeDoor = keepDoor || start.Layer == 1 && BlackOmenTargets.CanOpenFinalDoor(scene.Id, actor, story);
                 foreach (var contact in Contacts(actor, start.Layer, scene.Id)
-                    .Concat(nativeTouch || keepDoor ? EdgeContacts(actor, start.Layer, keepDoor) : []))
+                    .Concat(nativeTouch || edgeDoor ? EdgeContacts(actor, start.Layer, edgeDoor) : []))
                 {
                     if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);

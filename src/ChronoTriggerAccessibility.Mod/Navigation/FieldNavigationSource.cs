@@ -58,7 +58,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     public NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldViewport viewport,
         IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null, Func<int, int, bool>? treasureGrid = null)
     {
-        map = OceanPalaceTargets.Map(field, map);
+        map = BlackOmenTargets.Map(field, OceanPalaceTargets.Map(field, map));
         var identity = $"{field.Engine:X8}:{field.SceneId}";
         if (scene != identity)
         {
@@ -93,6 +93,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var keepEntranceCopy = guideActive ? KeepFieldTargets.EntranceOpening(field, story) : null;
         var openedKeepEntrance = keepEntranceCopy is not null && FieldTerrainGraph.Preview(map, keepEntranceCopy) is { } keepOpen
             ? new FieldNavigationGraph(keepOpen, collisions, touchGoals) : null;
+        var omenDoorCopy = guideActive && map.PlayerLayer == 1 ? BlackOmenTargets.DoorOpening(field, story) : null;
+        var omenDoorOpening = guideActive && map.PlayerLayer == 1 && field.Actors.Any(a =>
+            BlackOmenTargets.OpeningFinalDoor(field.SceneId, a, story));
+        var openedOmenDoor = omenDoorCopy is not null && FieldTerrainGraph.Preview(map, omenDoorCopy) is { } omenOpen
+            ? new FieldNavigationGraph(omenOpen, collisions, touchGoals) : null;
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
         var savePoints = FieldSavePoints.Find(field, story).Where(s => KeepFieldTargets.SaveIsObservable(field, story, s)).ToArray();
@@ -303,8 +308,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var landmarkId = $"landmark:{marker}";
             var book = actor.ClassTag == 7 ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
+            var omenDoor = field.SceneIdCoherent && BlackOmenTargets.IsFinalDoor(field.SceneId, actor);
             var keepDoor = keepEntranceCopy is not null && actor.Index == 14;
-            var label = book ?? teleportPad ?? (keepDoor ? KeepFieldTargets.EntranceDoorLabel : null) ??
+            var label = book ?? teleportPad ?? (omenDoor ? "Northern door" : null) ?? (keepDoor ? KeepFieldTargets.EntranceDoorLabel : null) ??
                 EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
@@ -334,7 +340,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 .SelectMany(a => ActorApproach(a, Position(a.FineX, a.FineY))).Distinct().ToArray();
             var terrainContact = (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
-            if (terrainContact)
+            if (terrainContact || omenDoor)
             {
                 // A door marker can lie beyond its own closed floor. Publish
                 // goals on its guarded native copy as well as the live floor;
@@ -356,15 +362,19 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (scripted.Any(a => a.Touch && a.Kind == "Warp"))
                 ProtectContactPassage(landmarkId, actor);
             var restriction = FutureAreaLabels.FactoryLiftRestriction(field.SceneId, actor.Index, story) ??
-                OceanPalaceTargets.WallSwitchBlocked(field, actor);
+                OceanPalaceTargets.WallSwitchBlocked(field, actor) ??
+                (omenDoor ? BlackOmenTargets.DoorRestriction(actor, story) : null);
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
-                TileVisible(actor.TileX, actor.TileY), storyOnly: knownTouch || touch && scripted.Length == 0,
-                guideAvailable: guideActive && (!touch || scripted.Length != 0),
-                instruction: restriction ?? (keepDoor ? "Walk up to the door to open it." :
+                TileVisible(actor.TileX, actor.TileY), storyOnly: !omenDoor && (knownTouch || touch && scripted.Length == 0),
+                guideAvailable: guideActive && (omenDoor || !touch || scripted.Length != 0),
+                instruction: restriction ?? (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
+                    omenDoor || keepDoor ? "Walk up to the door to open it." :
                     sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
                     teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
                     ? "Teleportation is currently unavailable." : null),
                 guidanceRestriction: restriction,
+                passageOpening: omenDoor && omenDoorOpening,
+                arrivalAnnouncement: omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
@@ -448,20 +458,25 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
-                     (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story)) &&
+                     (BlackOmenTargets.IsPad(field.SceneId, r) ||
+                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story))) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
                          (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
-                         (!FutureAreaLabels.IsPillar(field.SceneId, r) || a.ClassTag == 7 && a.ScriptProcessingEnabled))).GroupBy(r => r.Id))
+                         (!(FutureAreaLabels.IsPillar(field.SceneId, r) || BlackOmenTargets.IsPad(field.SceneId, r)) ||
+                          a.ClassTag == 7 && a.ScriptProcessingEnabled))).GroupBy(r => r.Id))
         {
             var region = group.First();
+            var omenPad = BlackOmenTargets.IsPad(field.SceneId, region);
+            var padRestriction = omenPad ? BlackOmenTargets.PadRestriction(field.SceneId, region, story) : null;
             var pillar = FutureAreaLabels.IsPillar(field.SceneId, region);
             var keepLight = KeepFieldTargets.RegionLightLabel(field.SceneId, region);
             var points = RegionPoints(region);
             if (points.Length == 0) continue;
             // A shaft grate warps only on Confirm, so a route may cross it.
             var grate = BlackbirdDuctTargets.IsGrate(field.SceneId, region);
-            if (region.Kind == "Warp" && !pillar && !grate) scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
+            if (region.Kind == "Warp" && !pillar && !grate && (!omenPad || padRestriction is null))
+                scriptTerminals.Add((region.Id, region.Left, region.Top, region.Right, region.Bottom));
             // Encounters are the script's own battle triggers (native D8 under a
             // leader-coordinate guard), so they carry the trigger's location but no
             // party, name or reward. Offer the trigger and leave the fight to the
@@ -480,12 +495,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 regionCategory = field.SceneId == 166 ? NavigationCategory.Objects : NavigationCategory.Exits;
             }
             if (grate) (regionLabel, regionCategory) = (BlackbirdDuctTargets.GrateLabel(field.SceneId, region, map), NavigationCategory.Objects);
+            if (omenPad) (regionLabel, regionCategory) =
+                ("Teleport pad to " + GameNavigationCatalog.AreaName(region.Destination), NavigationCategory.Objects);
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                 storyOnly: region.Kind is not ("Warp" or "Encounter") ||
                     OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
-                instruction: grate ? BlackbirdDuctTargets.GrateInstruction : null,
-                arrivalInstruction: pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null);
+                instruction: padRestriction ?? (grate ? BlackbirdDuctTargets.GrateInstruction : null),
+                guidanceRestriction: padRestriction,
+                arrivalInstruction: omenPad ? "Step onto the pad to teleport." :
+                    pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -510,6 +529,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? "Opening behind the bookcase" : null) ??
                 (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
                 (field.SceneIdCoherent ? BlackbirdDuctTargets.ExitLabel(field.SceneId, id, map) : null) ??
+                (field.SceneIdCoherent ? BlackOmenTargets.ExitLabel(field.SceneId, id) : null) ??
                 FutureAreaLabels.ExitLabel(field.SceneId, id) ?? OpeningStoryTargets.ExitLabel(field.SceneId, id);
             var optionalLabel = field.SceneIdCoherent ? OptionalGuideAreas.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && optionalLabel is not null) label = optionalLabel;
@@ -528,7 +548,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var visible = points.Where(p => TileVisible(p.X / 256, p.Y / 256)).ToArray();
             var guide = new NavigationTarget(key, label, NavigationCategory.Exits,
                 (visible.Length != 0 ? visible : points.ToArray()).MinBy(Distance), guideGoals,
-                visible.Length != 0, discovered.ContainsKey(key) || visible.Length != 0);
+                visible.Length != 0, discovered.ContainsKey(key) || visible.Length != 0)
+                { PassageOpening = omenDoorOpening && id == 1 };
             guideGeometry[key] = guide;
             storyCandidates.Add(guide);
             if (visible.Length == 0)
@@ -538,6 +559,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 if (discovered.TryGetValue(key, out var old)) targets.Add(old with
                 {
                     Visible = false, Discovered = true,
+                    PassageOpening = omenDoorOpening && id == 1,
                     ApproachPoints = old.ApproachPoints.Where(p => StillExitGoal(p, id)).ToArray(),
                 });
                 continue;
@@ -550,7 +572,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var footprint = ConnectedExitFootprint(points, visible.Concat(retained));
             var approaches = retained.Concat(footprint.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
-            Add(key, label, NavigationCategory.Exits, position, approaches, true, storyCandidate: false, guideAvailable: optionalGuide);
+            Add(key, label, NavigationCategory.Exits, position, approaches, true, storyCandidate: false, guideAvailable: optionalGuide,
+                passageOpening: omenDoorOpening && id == 1);
         }
         if (field.SceneIdCoherent)
         foreach (var passage in FutureScriptedPassage.ForScene(field.SceneId, story, field.Actors))
@@ -790,7 +813,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
-            var points = new List<NavigationPoint>();
+            var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
             for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
             for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
                 points.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
@@ -1002,6 +1025,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 if (openedKeepEntrance is not null && graph.ExitAt(px, py) == 1)
                     for (var layer = 1; layer <= 3; layer++)
                         if (openedKeepEntrance.TryPosition(px, py, layer, out var point)) yield return point;
+                if (openedOmenDoor is not null && graph.ExitAt(px, py) == 1 &&
+                    openedOmenDoor.TryPosition(px, py, 1, out var omenPoint)) yield return omenPoint;
             }
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,
@@ -1010,7 +1035,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
             string? guidanceRestriction = null, int? actorSlot = null,
             (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null,
-            NavigationHold? arrivalHold = null)
+            NavigationHold? arrivalHold = null, bool passageOpening = false)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -1019,7 +1044,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
-                    ArrivalHold = arrivalHold,
+                    ArrivalHold = arrivalHold, PassageOpening = passageOpening,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1033,7 +1058,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
-                    ArrivalHold = arrivalHold,
+                    ArrivalHold = arrivalHold, PassageOpening = passageOpening,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1046,7 +1071,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
-                ArrivalHold = arrivalHold,
+                ArrivalHold = arrivalHold, PassageOpening = passageOpening,
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,
