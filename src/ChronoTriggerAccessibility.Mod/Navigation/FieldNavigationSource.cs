@@ -175,7 +175,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var currentName = actor.IsPlayerClass && actor.VisualIndex is >= 0 and < 7
                 ? characterName?.Invoke(actor.VisualIndex) : null;
             var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) : null;
-            var label = book ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
+            var capeEncounter = field.SceneIdCoherent ? NorthCapeTargets.EncounterLabel(field.SceneId, actor, story, characterName) : null;
+            var label = book ?? capeEncounter ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
@@ -220,7 +221,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 storyCandidate: !conveyorRobot,
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
                     (label is not null && label != onScreenName || actor.IsActivationCandidate || scriptedAction || npcRegion is not null),
-                instruction: conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
+                instruction: capeEncounter is not null ? NorthCapeTargets.EncounterInstruction :
+                    conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :

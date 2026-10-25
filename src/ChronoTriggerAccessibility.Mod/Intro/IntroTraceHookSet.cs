@@ -16,17 +16,19 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
     private readonly IokaContestRuntime? contest;
     private readonly StoryActionRuntime? storyActions;
     private readonly BlackbirdGrateViewRuntime? grateViews;
+    private readonly BekklerMimicRuntime? mimic;
     private bool prepared;
 
     public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder,
         IokaContestRuntime? contest = null, StoryActionRuntime? storyActions = null,
-        BlackbirdGrateViewRuntime? grateViews = null)
+        BlackbirdGrateViewRuntime? grateViews = null, BekklerMimicRuntime? mimic = null)
     {
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         this.recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
         this.contest = contest;
         this.storyActions = storyActions;
         this.grateViews = grateViews;
+        this.mimic = mimic;
         Registrations = Array.AsReadOnly<IHookRegistration>([this]);
     }
 
@@ -51,10 +53,15 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
                 if (contest is null) TraceAndCall();
                 else contest.Dispatch(context, opcode, TraceAndCall);
             }
+            void MimicAndCall()
+            {
+                if (mimic is null) ContestAndCall();
+                else mimic.Dispatch(context, opcode, ContestAndCall);
+            }
             // Before the original: an E0 return must be read before the scene changes.
             grateViews?.Dispatch(context, opcode);
-            if (storyActions is null) ContestAndCall();
-            else storyActions.Dispatch(context, opcode, ContestAndCall);
+            if (storyActions is null) MimicAndCall();
+            else storyActions.Dispatch(context, opcode, MimicAndCall);
         });
         // The factory only prepares an inactive hook. Bind the trampoline before
         // returning it to ReloadedHookInstaller, which owns the later activation.
@@ -71,6 +78,7 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         contest?.Enable();
         storyActions?.Enable();
         grateViews?.Enable();
+        mimic?.Enable();
     }
-    public void AfterHooksDisabled() { grateViews?.Disable(); storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
+    public void AfterHooksDisabled() { mimic?.Disable(); grateViews?.Disable(); storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
 }

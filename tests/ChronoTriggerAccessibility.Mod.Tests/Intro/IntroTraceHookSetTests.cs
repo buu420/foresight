@@ -16,6 +16,28 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Intro;
 public sealed class IntroTraceHookSetTests
 {
     [Fact]
+    public void CopyGameUsesTheExistingOpcodeHookAndResetsWhenHooksAreDisabled()
+    {
+        var factory = new Factory(); var errors = new Errors(); var speech = new List<string>();
+        var recorder = new IntroTraceRecorder(new NoMemory(), _ => { });
+        var action = BekklerMimicAction.Window;
+        var mimic = new BekklerMimicRuntime((_, _) => new(0x1000, 0xA0000, 0xD0000, 0x5000,
+            0x382, 1, 0, action), before => factory.Originals > 0 ? new(before, "Y") : null,
+            () => true, speech.Add, _ => { });
+        var hooks = new IntroTraceHookSet(factory, recorder, mimic: mimic);
+        var build = new Build(0x400000, GameVersionCatalog.Hooks.ToDictionary(x => x.Id, x => (nuint)(0x400000 + x.Rva)));
+        hooks.Prepare(build, new(errors, errors)); hooks.AfterHooksActivated();
+        Assert.False(recorder.IsRecording);
+        factory.Detour!(0x1000, 0x4F);
+        action = BekklerMimicAction.Laugh; factory.Detour(0x1000, 0xAA);
+        Assert.Equal(["Y. Laugh. Copy game started."], speech);
+        hooks.AfterHooksDisabled(); factory.Detour(0x1000, 0xAA);
+        hooks.AfterHooksActivated(); factory.Detour(0x1000, 0xAA);
+        Assert.Single(speech); Assert.Equal(4, factory.Originals);
+        Assert.Equal(1, factory.Created); Assert.Empty(errors.Messages);
+    }
+
+    [Fact]
     public void OneOpcodeHookRunsTheNativeGameOnceAndEnablesContestFeedbackIndependentlyOfIntroTracing()
     {
         var factory = new Factory(); var errors = new Errors(); var speech = new List<string>();

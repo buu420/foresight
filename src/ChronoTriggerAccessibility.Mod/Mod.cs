@@ -310,11 +310,19 @@ public sealed class Mod : ModBase
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             () => navigationText.CharacterName(navigationImageBase, 5),
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        var mimic = new BekklerMimicRuntime(
+            (context, opcode) => BekklerMimicCapture.TryCapture(memory, (nuint)context, opcode, out var before) ? before : null,
+            before => BekklerMimicCapture.Complete(memory, before, navigationImageBase),
+            NavigationKeyboard.IsGameForeground,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         storyActions = new StoryActionRuntime(
             (context, opcode) =>
                 StoryActionCapture.TryLocate(memory, (nuint)context, opcode, out var location) &&
                 // Atel_0274's look-down pose is grate inspection, spoken by grateViews below.
                 !BlackbirdGrateViewCapture.IsLookPose(location) &&
+                // The timed copy game owns its four demonstrated gestures; generic
+                // recorded laughter would interrupt the immediate button cue.
+                !BekklerMimicCapture.IsDemonstration(location) &&
                 (opcode is 0xAA or 0xAB or 0xE3 || StorySceneActionCapture.Watches(location)) &&
                 StoryActionCapture.TryCapture(memory, location, out var before) ? before : null,
             before => StoryActionCapture.TryProveAnimation(memory, before, out var proof) ? proof : null,
@@ -337,7 +345,7 @@ public sealed class Mod : ModBase
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
             () => NavigationKeyboard.IsGameForeground() && NavigationKeyboard.IsKeyDown(0x4B),
             dispatcher.RecordDiagnostic);
-        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions, grateViews);
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions, grateViews, mimic);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)
