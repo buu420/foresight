@@ -38,9 +38,11 @@ Files: `FieldFloorMovement.cs`, `FieldFloorFeedback.cs`, `FieldNavigationRuntime
 ## Task3: Review, package and deploy
 
 - [x] Obtain one bounded fresh Opus5.5 whole-change review and resolve important findings with regressions.
-- [ ] Run full tests, version/hash contracts and Release build; commit source before final payload generation.
-- [ ] Replay exact final DLLs in x86, verify tester ZIP, deploy with the game closed, check payload hashes and protected files.
-- [ ] Put tester ZIP/notes in Downloads and write handoff with unperformed live gameplay/controller/speech limits. No public publication without a separate request.
+- [x] Run full tests, version/hash contracts and Release build; commit source before final payload generation.
+- [x] Replay exact final DLLs in x86, verify tester ZIP, deploy with the game closed, check payload hashes and protected files.
+- [x] Put tester ZIP/notes in Downloads and write handoff with unperformed live gameplay/controller/speech limits. No public publication without a separate request.
+
+Final receipts: source build `c7df5911768161cf3060f47e54d10d3afc1cdcc1`;4,619 tests;44 exact-payload x86 contact cases;275 standalone files and28 mod files verified;303 deployment checks;229 protected files unchanged. Candidate and checklist are in Downloads. Handoff: `artifacts/handoffs/2026-10-25-foresight-0374.md`. Any closure commit is documentation only and does not change the payload's source revision.
 
 ## Rulings and evidence ledger
 
