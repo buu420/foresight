@@ -47,5 +47,9 @@ Files: `Native/Capture/BekklerMimicCapture.cs`, `Mod/Minigames/BekklerMimicRunti
 
 - [x] Obtain one fresh Opus5.5 whole-change review and resolve important findings with regressions.
 - [x] Run the full solution and appropriate package checks, bump version, write release/native audit notes and commit source.
-- [ ] Build Release, replay the exact final DLLs in x86, package a tester ZIP, deploy with the game closed and verify installed hashes/protected files.
-- [ ] Put the tester ZIP in Downloads and write a handoff with unperformed live-test limits. Do not publish without a release request.
+- [x] Build Release, replay the exact final DLLs in x86, package a tester ZIP, deploy with the game closed and verify installed hashes/protected files.
+- [x] Put the tester ZIP in Downloads and write a handoff with unperformed live-test limits. Do not publish without a release request.
+
+## Closure
+
+The 0.3.73 payload was built from `3632c3a2cb6d4d0796a9e83f3b834cf8df63feb5`. The Opus5.5 whole-change review and delta review are complete. The first-pose/start self-interruption and held-input description gap were reproduced and resolved. Final verification passed 4,584 tests, zero-warning/error Release build, exact-DLL x86 replay and 303 deployment checks. All275 standalone and28 mod files match the installed candidate;229 protected files are unchanged. The tester ZIP and checklist are in Downloads. Details and live-test limits are in `artifacts/handoffs/2026-10-24-foresight-0373.md`. Public release remains a separate user request. This closure is documentation only and does not rebuild the verified payload.
