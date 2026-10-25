@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.73 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.74 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.73 identifies North Cape's Magus encounter and adds immediate action and button cues to Norstein Bekkler's copy game. The Death Peak assist and Black Omen fixes remain available. The rendering crash is still unresolved. See [this build's changes and testing notes](docs/releases/v0.3.73.md).
+Version 0.3.74 repairs Sunken Desert chest approaches and Run handling, maintains automatic guidance to closed chests on shifting sand, and reduces repeated floor speech. North Cape and Bekkler cues, the Death Peak assist and Black Omen fixes remain available. The rendering crash is still unresolved. See [this build's changes and testing notes](docs/releases/v0.3.74.md).
 
 At North Cape, the encounter's sparkling light is listed as **Magus encounter**, using his current name if renamed. In Bekkler's copy game, each demonstrated pose gives a short cue such as **Y. Laugh.** Button letters follow the game's current configuration. Repeat the action with the normal game controls after its signal; the game keeps its original timing. The native instructions, result and prize dialogue remain readable.
 

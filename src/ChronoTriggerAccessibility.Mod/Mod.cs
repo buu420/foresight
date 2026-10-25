@@ -159,7 +159,9 @@ public sealed class Mod : ModBase
         var areas = new NavigationAreaAnnouncer(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
         var floors = new FieldFloorFeedback(
-            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
+            () => Environment.TickCount64,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text) { Interrupt = false }));
         var footstepSound = new FootstepSound(navigationSpeech.RecordDiagnostic,
             () => navigationSpeech.Publish(new NavigationAnnouncement("Footstep audio is unavailable.")),
             timingInterrupted: () => navigationSpeech.Publish(new NavigationAnnouncement(

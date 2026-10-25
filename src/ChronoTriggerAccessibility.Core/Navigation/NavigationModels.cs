@@ -95,6 +95,12 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// in Confirm range and follow again when it moves. Only the player's own Confirm
     /// input is permitted alongside automatic movement; never synthesize the catch.</summary>
     public bool FollowUntilInteraction { get; init; }
+    /// <summary>Keep navigation to a stationary Confirm target when native ground
+    /// carries the player away. Only automatic walking supplies movement.</summary>
+    public bool KeepInteractionReach { get; init; }
+    /// <summary>Usable contacts favoured over the ordinary shortest approach.
+    /// Unreachable preferred points never remove the remaining live goals.</summary>
+    public IReadOnlyList<NavigationPoint> PreferredApproachPoints { get; init; } = [];
     /// <summary>Audited contact from a reachable standing point. Arrival must
     /// wait for the native objective to advance; proximity alone is insufficient.</summary>
     public NavigationDirection ContactDirection { get; init; }
@@ -159,4 +165,8 @@ public sealed record NavigationResult(IReadOnlyList<string> Speech, NavigationDi
     bool Guiding, bool AutoWalking)
 {
     public NavigationLeg? ManualLeg { get; init; }
+    /// <summary>Fresh route point for opted-in moving-ground steering.</summary>
+    public NavigationPoint? SteeringPoint { get; init; }
+    /// <summary>Ordinary facing input required at the selected stationary contact.</summary>
+    public NavigationDirection InteractionFacing { get; init; }
 }

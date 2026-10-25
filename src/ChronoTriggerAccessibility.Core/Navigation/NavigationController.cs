@@ -43,6 +43,14 @@ public sealed class NavigationController
     private long? pendingStarted;
     private bool chaseInReach;
     private long? lastChaseCue;
+    private NavigationPoint? interactionProgressGoal;
+    private double interactionBestRemaining;
+    private long interactionProgressAt;
+    private long interactionProgressElapsed;
+    private bool interactionProgressActive;
+    private NavigationFloor? guidanceFloor;
+    private int guidanceLayer;
+    private long? lastDriftReplan;
     // Survives Stop(), which a failed plan performs before anyone can read the
     // destination back. Without it the one case this field explains reports zero.
     private int plannedApproaches;
@@ -54,6 +62,8 @@ public sealed class NavigationController
 
     public bool IsActive => guiding;
     public bool IsHolding => guiding && walking && holding is not null;
+    private bool FollowingInteraction => destination?.FollowUntilInteraction == true ||
+        destination?.KeepInteractionReach == true;
     /// <summary>The destination being guided to, or else the selected one.</summary>
     public string? TargetId => destination?.Id ?? selection;
     public bool HasPendingTransition => guiding && transition is not null;
@@ -68,8 +78,9 @@ public sealed class NavigationController
     private bool NearTransition(NavigationPoint point) => transition is not null && point.Layer == transition.Approach.Layer &&
         Math.Abs((long)point.X - transition.Approach.X) <= unitsPerTile && Math.Abs((long)point.Y - transition.Approach.Y) <= unitsPerTile;
     public bool AllowsConfirmWhileFollowing(NavigationFrame frame) => walking &&
-        destination?.FollowUntilInteraction == true && scene == frame.Scene && frame.CanNavigate &&
-        Eligible(frame).Any(t => t.Id == destination.Id && t.FollowUntilInteraction && !t.IsStoryNote);
+        FollowingInteraction && scene == frame.Scene && frame.CanNavigate &&
+        Eligible(frame).Any(t => t.Id == destination!.Id &&
+            (t.FollowUntilInteraction || t.KeepInteractionReach) && !t.IsStoryNote);
     public string CurrentCategoryLabel => CategoryName(category);
     public string DiagnosticState => $"target={destination?.Id ?? selection ?? "none"}; plan={planRevision}; " +
         $"waypoint={nextPoint}/{route?.Count ?? 0}; next={PointText(route is not null && nextPoint < route.Count ? route[nextPoint] : null)}; " +
@@ -155,7 +166,8 @@ public sealed class NavigationController
                 observedPosition = frame.Player;
                 lastManualActivity = nowMilliseconds;
                 speech.Add($"{(walking ? "Walking to" : "Guidance to")} {target.Label}." +
-                    (target.FollowUntilInteraction ? " You can hold Confirm while chasing." : ""));
+                    (target.FollowUntilInteraction ? " You can hold Confirm while chasing." :
+                        walking && target.KeepInteractionReach ? " Automatic walking keeps you in reach. Press Confirm to open it." : ""));
                 Follow(frame, nowMilliseconds, speech);
                 break;
             default:
@@ -221,6 +233,8 @@ public sealed class NavigationController
         ArgumentNullException.ThrowIfNull(frame);
         if (frame.UnitsPerTile is < 1 or > 65536) throw new ArgumentOutOfRangeException(nameof(frame));
         unitsPerTile = frame.UnitsPerTile;
+        guidanceFloor = frame.MovingFloor;
+        guidanceLayer = frame.Player.Layer;
         if (scene != frame.Scene)
         {
             if (guiding) speech.Add("Navigation stopped: area changed.");
@@ -338,7 +352,10 @@ public sealed class NavigationController
         }
         // A goal proven not to reach its Confirm target during this guidance stays excluded.
         var goals = destination!.ApproachPoints.Where(p => !unreachableGoals.Contains(p)).ToArray();
-        var search = NavigationPathfinder.Search(frame.Graph, frame.Player, goals);
+        var preferred = goals.Where(destination.PreferredApproachPoints.Contains).ToArray();
+        var search = NavigationPathfinder.Search(frame.Graph, frame.Player, preferred.Length == 0 ? goals : preferred);
+        if (preferred.Length != 0 && search.Route is null)
+            search = NavigationPathfinder.Search(frame.Graph, frame.Player, goals);
         planRevision++;
         plannedApproaches = goals.Length;
         route = search.Route;
@@ -417,7 +434,8 @@ public sealed class NavigationController
         var continueTransition = CanContinueTransition(frame, now);
         if (frame.CanNavigate)
         {
-            if (!walking && (manualInput || frame.Player != observedPosition || now < lastManualActivity))
+            if (!walking && (manualInput || (destination?.KeepInteractionReach != true || frame.MovingFloor is null) &&
+                frame.Player != observedPosition || now < lastManualActivity))
                 lastManualActivity = now;
             observedPosition = frame.Player;
         }
@@ -465,17 +483,37 @@ public sealed class NavigationController
         var mustReplan = wasOpening || leftContact || route is null || (intermediateId is null
             ? !currentTarget.ApproachPoints.Contains(route[^1])
             : !plannedGoals.Any(currentTarget.ApproachPoints.Contains));
+        // A stationary interaction can move away from the player because its floor
+        // carries them off the exhausted route. Refresh from the actual position.
+        if (currentTarget.KeepInteractionReach && route is { Count: > 0 } &&
+            nextPoint >= route.Count && !Arrived(frame.Graph, frame.Player, route[^1]) &&
+            (walking || currentTarget.AnyConfirmFacings(frame.Player).Count == 0)) mustReplan = true;
         destination = currentTarget;
-        if (destination.FollowUntilInteraction)
+        if (FollowingInteraction)
         {
             var ready = frame.PlayerFacing != NavigationDirection.None &&
                 destination.AnyConfirmFacings(frame.Player).Contains(frame.PlayerFacing);
-            if (ready && !chaseInReach && (lastChaseCue is null || now < lastChaseCue || now - lastChaseCue >= 1000))
+            if (ready && !destination.KeepInteractionReach && !chaseInReach &&
+                (lastChaseCue is null || now < lastChaseCue || now - lastChaseCue >= 1000))
             {
-                speech.Add("In reach. Press Confirm, or keep it held.");
+                speech.Add(destination.KeepInteractionReach
+                    ? destination.ArrivalAnnouncement ?? "In reach. Press Confirm."
+                    : "In reach. Press Confirm, or keep it held.");
                 lastChaseCue = now;
             }
-            chaseInReach = ready;
+            if (!destination.KeepInteractionReach || !ready) chaseInReach = ready;
+        }
+        if (!walking && destination.KeepInteractionReach && route is { Count: > 0 } &&
+            destination.AnyConfirmFacings(frame.Player).Count != 0 &&
+            (lastChaseCue is not null || facingStarted is not null ||
+             destination.AnyConfirmFacings(frame.Player).Contains(frame.PlayerFacing)))
+        {
+            // Manual arrival is the native interaction window, not a tiny
+            // waypoint box that the floor can carry the foot out of mid-cue.
+            nextPoint = route.Count;
+            interactionProgressGoal = null;
+            FinishFacing(frame, now, speech);
+            return;
         }
         frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
         if (creatureBlockedSince is not null && route is null && now < nextCreatureCheck) return;
@@ -497,6 +535,32 @@ public sealed class NavigationController
             if (!Plan(frame, speech)) return;
         }
         if (route is null) return;
+        if (destination.KeepInteractionReach &&
+            !Arrived(frame.Graph, frame.Player, route[^1]))
+        {
+            // A floor can move the player back and forth without advancing the route.
+            // Measure remaining route length, not displacement alone, for this policy.
+            var index = Math.Clamp(nextPoint, 0, route.Count - 1);
+            var remaining = Math.Sqrt(SquaredDistance(frame.Player, route[index]));
+            for (var n = index + 1; n < route.Count; n++) remaining += Math.Sqrt(SquaredDistance(route[n - 1], route[n]));
+            if (interactionProgressGoal != route[^1] || remaining + Math.Max(1, unitsPerTile / 16) < interactionBestRemaining || now < interactionProgressAt)
+            {
+                interactionProgressGoal = route[^1]; interactionBestRemaining = remaining; interactionProgressElapsed = 0;
+            }
+            else if (interactionProgressActive) interactionProgressElapsed += Math.Max(0, now - interactionProgressAt);
+            interactionProgressAt = now;
+            interactionProgressActive = walking || manualInput;
+            if (interactionProgressElapsed >= 1500)
+            {
+                if (!TryAnotherInteractionApproach(frame, now, speech) && guiding)
+                {
+                    speech.Add("Navigation stopped: the shifting ground prevents progress to this interaction.");
+                    Stop();
+                }
+                return;
+            }
+        }
+        else { interactionProgressGoal = null; interactionProgressActive = false; interactionProgressElapsed = 0; }
         if (intermediateId is not null && Arrived(frame.Graph, frame.Player, route[^1]))
         {
             nextPoint = route.Count;
@@ -620,12 +684,22 @@ public sealed class NavigationController
                 }
                 return;
             }
+            if (!walking && !manualInput && destination.KeepInteractionReach && frame.MovingFloor is not null &&
+                lastDriftReplan is { } driftAt && now >= driftAt && now - driftAt < 1500) return;
             if (!Plan(frame, speech)) return;
             if (!walking)
             {
+                lastDriftReplan = now;
+                var sameDriftAdvice = !manualInput && !waitingForManualStop && destination.KeepInteractionReach &&
+                    route!.Count > 1 && GuidanceDirection(nextPoint) != LegDirection(nextPoint) &&
+                    GuidanceDirection(nextPoint) == announcedDirection;
                 waitingForManualStop = false;
-                announcedDirection = NavigationDirection.None;
-                speech.Add("Route updated.");
+                if (sameDriftAdvice) instructionRevision++;
+                else
+                {
+                    announcedDirection = NavigationDirection.None;
+                    speech.Add("Route updated.");
+                }
             }
             if (route!.Count == 1)
             {
@@ -639,7 +713,7 @@ public sealed class NavigationController
         {
             waitingForManualStop = false;
             speech.Add(DescribeRoute(frame.Player, 1));
-            announcedDirection = LegDirection(nextPoint);
+            announcedDirection = GuidanceDirection(nextPoint);
         }
         if (walking)
         {
@@ -650,19 +724,38 @@ public sealed class NavigationController
             }
             else if (now < lastProgress || now - lastProgress >= 1500)
             {
+                // Only this opt-in interaction policy tries another already proven
+                // contact. Neither terrain nor a native encounter is bypassed.
+                if (TryAnotherInteractionApproach(frame, now, speech)) return;
                 speech.Add("Navigation stopped: movement is blocked.");
                 Stop();
                 return;
             }
         }
-        var direction = LegDirection(nextPoint);
+        var direction = GuidanceDirection(nextPoint);
         if (direction != NavigationDirection.None && direction != announcedDirection &&
-            !(walking && destination.FollowUntilInteraction))
+            !(walking && (destination.FollowUntilInteraction || destination.KeepInteractionReach && lastChaseCue is not null)))
         {
             // Manual guidance speaks only the leg the player should follow now.
             speech.Add(DescribeRoute(frame.Player, walking && announcedDirection == NavigationDirection.None ? 3 : 1));
             announcedDirection = direction;
         }
+    }
+
+    private bool TryAnotherInteractionApproach(NavigationFrame frame, long now, List<string> speech)
+    {
+        if (destination?.KeepInteractionReach != true || route is not { Count: > 0 } ||
+            !destination.ApproachPoints.Any(p => p != route[^1] && !unreachableGoals.Contains(p))) return false;
+        unreachableGoals.Add(route[^1]);
+        interactionProgressGoal = null;
+        interactionProgressActive = false;
+        interactionProgressElapsed = 0;
+        if (Plan(frame, speech))
+        {
+            lastPosition = frame.Player; lastProgress = now; stallTiles.Clear();
+            speech.Add("Trying another approach to the interaction.");
+        }
+        return true;
     }
 
     private bool FollowTransition(NavigationFrame frame, long now, List<string> speech, bool owned)
@@ -761,7 +854,7 @@ public sealed class NavigationController
     {
         var target = destination!;
         var goal = route![^1];
-        var reach = target.ConfirmAt(goal)!(frame.Player);
+        var reach = target.KeepInteractionReach ? target.AnyConfirmFacings(frame.Player) : target.ConfirmAt(goal)!(frame.Player);
         if (reach.Count == 0 && target.ConfirmPending?.Invoke(frame.Player) == true)
         {
             // In position, but the game would not give this target Confirm yet. Never claim it
@@ -786,6 +879,15 @@ public sealed class NavigationController
         pendingStarted = null;
         if (reach.Count == 0)
         {
+            if (target.KeepInteractionReach)
+            {
+                // Losing reach through native drift does not invalidate the contact.
+                // Re-enter from the actual position; the bounded progress check above
+                // still tries other native contacts if this route cannot advance.
+                facingStarted = null; facingDirection = NavigationDirection.None;
+                Plan(frame, speech);
+                return;
+            }
             // The actor moved, or another actor now takes Confirm here. Never call this
             // arrival: exclude this goal and try the target's other live goals first.
             unreachableGoals.Add(goal);
@@ -808,12 +910,21 @@ public sealed class NavigationController
         }
         if (frame.PlayerFacing != NavigationDirection.None && reach.Contains(frame.PlayerFacing))
         {
-            if (target.FollowUntilInteraction)
+            if (FollowingInteraction)
             {
+                if (target.KeepInteractionReach && !chaseInReach &&
+                    (lastChaseCue is null || now < lastChaseCue || now - lastChaseCue >= 3000))
+                {
+                    speech.Add(target.ArrivalAnnouncement ?? "In reach. Press Confirm.");
+                    lastChaseCue = now;
+                }
+                chaseInReach = true;
                 // Hold a reachable position without ending pursuit. The next fresh target
                 // moves the goals and restarts steering. Confirm remains the player's input.
-                facingStarted = null;
-                facingDirection = NavigationDirection.None;
+                // A closed chest is a native solid contact. Keep ordinary input
+                // toward it so moving sand does not immediately carry the player off.
+                facingStarted = target.KeepInteractionReach && walking ? now : null;
+                facingDirection = target.KeepInteractionReach && walking ? reach[0] : NavigationDirection.None;
                 lastProgress = now;
                 lastPosition = frame.Player;
                 announcedDirection = NavigationDirection.None;
@@ -890,10 +1001,14 @@ public sealed class NavigationController
             walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
+            SteeringPoint = walking && destination?.KeepInteractionReach == true && route is { Count: > 0 }
+                ? route[Math.Min(nextPoint, route.Count - 1)] : null,
+            InteractionFacing = walking && destination?.KeepInteractionReach == true && facingStarted is not null
+                ? facingDirection : NavigationDirection.None,
             ManualLeg = guiding && !walking && !nativePassageOpening && nativeTransitionStarted is null && transitionContactStarted is null &&
                 !waitingForManualStop && route is not null && nextPoint < route.Count
-                ? new(route[LegEnd(nextPoint)], LegDirection(nextPoint), unitsPerTile, instructionRevision)
-                    { ExpectedSteps = manualLegBeats } : null
+                ? new(route[LegEnd(nextPoint)], GuidanceDirection(nextPoint), unitsPerTile, instructionRevision)
+                    { ExpectedSteps = GuidanceDirection(nextPoint) != LegDirection(nextPoint) ? null : manualLegBeats } : null
         };
 
     private bool AdvanceAlongRoute(NavigationPoint player)
@@ -935,6 +1050,23 @@ public sealed class NavigationController
     private NavigationDirection LegDirection(int index) => inputDirections?.Count == route!.Count - 1
         ? inputDirections[index - 1] : ExactBearing(route[index - 1], route[index]);
 
+    private NavigationDirection GuidanceDirection(int index)
+    {
+        var direction = LegDirection(index);
+        // Keep the graph's approach while reaching a different floor. A lateral
+        // correction can pull the foot off the narrow layer-changing contact.
+        if (walking || destination?.KeepInteractionReach != true || route![^1].Layer != guidanceLayer ||
+            guidanceFloor is not { Speed: 16 } floor) return direction;
+        return (direction, floor.Direction) switch
+        {
+            (NavigationDirection.North, NavigationDirection.East) or (NavigationDirection.West, NavigationDirection.South) => NavigationDirection.NorthWest,
+            (NavigationDirection.North, NavigationDirection.West) or (NavigationDirection.East, NavigationDirection.South) => NavigationDirection.NorthEast,
+            (NavigationDirection.South, NavigationDirection.East) or (NavigationDirection.West, NavigationDirection.North) => NavigationDirection.SouthWest,
+            (NavigationDirection.South, NavigationDirection.West) or (NavigationDirection.East, NavigationDirection.North) => NavigationDirection.SouthEast,
+            _ => direction,
+        };
+    }
+
     private static bool OnSegment(NavigationPoint player, NavigationPoint from, NavigationPoint to, int tolerance)
     {
         if (player.X < (long)Math.Min(from.X, to.X) - tolerance || player.X > (long)Math.Max(from.X, to.X) + tolerance ||
@@ -967,6 +1099,11 @@ public sealed class NavigationController
         var index = nextPoint;
         while (route is not null && index < route.Count && instructions.Count < maximumLegs)
         {
+            if (GuidanceDirection(index) != LegDirection(index))
+            {
+                instructionRevision++;
+                return $"Run {DirectionName(GuidanceDirection(index))} against the sideways drift. Follow the updated directions.";
+            }
             var end = LegEnd(index);
             var direction = LegDirection(index);
             double units = direction is NavigationDirection.West or NavigationDirection.East
@@ -1039,6 +1176,7 @@ public sealed class NavigationController
     private void Stop()
     {
         guiding = walking = false;
+        interactionProgressGoal = null;
         holding = null;
         alignmentPlanRevision = -1;
         route = null;
@@ -1065,6 +1203,9 @@ public sealed class NavigationController
         stallTiles.Clear();
         chaseInReach = false;
         lastChaseCue = null;
+        lastDriftReplan = null;
+        interactionProgressActive = false;
+        interactionProgressElapsed = 0;
     }
 
     private string ContactInstruction() => "Continue " + (contactDirection switch

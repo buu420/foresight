@@ -7,6 +7,9 @@ namespace ChronoTriggerAccessibility.Native.Capture;
 public readonly record struct FieldFloorSnapshot(uint Engine, uint ActorBase, int Scene, int Actor,
     int ForceX, int ForceY, int? RunMode, int? RunToggle)
 {
+    /// <summary>A refused terrain probe disagrees with the bounded committed
+    /// force. The force/Run owner is usable; this does not prove the refused surface.</summary>
+    public bool TerrainSampleRejected { get; init; }
     public bool? WindGusting { get; init; }
     /// <summary>Atel_0052 actor1 is between its calm wait and the gust flag, changing the wind's
     /// scroll and volume. Null when its current script position is unknown.</summary>
@@ -57,9 +60,17 @@ public static class FieldFloorCapture
             {
                 0 => (0, -speed), 1 => (0, speed), 2 => (-speed, 0), _ => (speed, 0),
             };
-            // A rejected terrain probe can retain the previous force. Do not
-            // report a newly sampled tile until the force agrees with it.
-            if (unchecked((int)rawX) != x || unchecked((int)rawY) != y) return null;
+            // 173750 leaves a refused probe in +138 while 1734D0 still applies
+            // the committed +88/+8C next frame. In the audited Desert, retain
+            // that bounded movement fact without calling the probe a surface.
+            var rejected = unchecked((int)rawX) != x || unchecked((int)rawY) != y;
+            if (rejected)
+            {
+                x = unchecked((int)rawX); y = unchecked((int)rawY);
+                if (player.Scene is not (159 or 160 or 161) ||
+                    !(x == 0 && Math.Abs((long)y) is 0 or 8 or 16 or 32 ||
+                      y == 0 && Math.Abs((long)x) is 0 or 8 or 16 or 32)) return null;
+            }
             int? runMode = null, runToggle = null;
             bool? windGusting = null;
             if (player.Scene == 244 && Word(memory, (nuint)player.ActorBase + DeathPeakWindOffset, out var gust) && gust <= 1)
@@ -74,6 +85,9 @@ public static class FieldFloorCapture
                 !Same(memory, engine + EngineMotionPointerOffset, motion) ||
                 !Same(memory, engine + EngineFieldStatePointerOffset, state) ||
                 !Same(memory, engine + EngineRendererPointerOffset, renderer) ||
+                !Same(memory, (nuint)motion + ForceXOffset, rawX) ||
+                !Same(memory, (nuint)motion + ForceYOffset, rawY) ||
+                !Same(memory, (nuint)motion + TerrainFlagsOffset, flags) ||
                 !Same(memory, (nuint)state + FieldStateSceneIdOffset, (uint)player.Scene) ||
                 !Same(memory, (nuint)renderer + RendererSceneIdOffset, (uint)player.Scene) ||
                 !Same(memory, (nuint)state + FieldStatePartySlotTableOffset, (uint)player.Actor * 2) ||
@@ -83,7 +97,7 @@ public static class FieldFloorCapture
                 !Same(memory, (nuint)player.ActorBase + DeathPeakWindOffset, wind ? 1u : 0u)) windGusting = null;
             var windBuilding = windGusting is { } gusting ? WindBuilding(memory, engine, player.ActorBase, gusting) : null;
             return new(player.Engine, player.ActorBase, player.Scene, player.Actor, x, y, runMode, runToggle)
-                { WindGusting = windGusting, WindBuilding = windBuilding };
+                { WindGusting = windGusting, WindBuilding = windBuilding, TerrainSampleRejected = rejected };
         }
         catch { return null; }
     }

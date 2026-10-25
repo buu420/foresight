@@ -43,6 +43,26 @@ public sealed class FieldFloorCaptureTests
     }
 
     [Fact]
+    public void RejectedDesertProbeRetainsTheCommittedForceAndFreshRunAuthority()
+    {
+        var memory=new FloorMemory(0x8B,0,16);
+        memory.Write(0x12010,161);memory.Write(0x132A0,161);
+        var floor=Assert.IsType<FieldFloorSnapshot>(FieldFloorCapture.Capture(memory,0x1000));
+        Assert.Equal(0,floor.ForceX);Assert.Equal(16,floor.ForceY);
+        Assert.Equal(1,floor.RunMode);Assert.Equal(2,floor.RunToggle);
+        Assert.True(floor.TerrainSampleRejected);
+    }
+
+    [Theory]
+    [InlineData(33,0)] [InlineData(16,16)]
+    public void ARejectedDesertSampleStillRejectsImpossibleCommittedForces(int x,int y)
+    {
+        var memory=new FloorMemory(0x8B,x,y);
+        memory.Write(0x12010,161);memory.Write(0x132A0,161);
+        Assert.Null(FieldFloorCapture.Capture(memory,0x1000));
+    }
+
+    [Fact]
     public void UnreadableDashConfigurationDoesNotHideTheFloor()
     {
         var memory = new FloorMemory(0x0B, 16, 0) { RefuseRun = true };

@@ -67,7 +67,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         var collisions = new FieldActorCollisionRules(field);
         var touchGoals = new List<(int Actor, IReadOnlyList<NavigationPoint> Goals)>();
-        var graph = new FieldNavigationGraph(map, collisions, touchGoals);
+        var graph = new FieldNavigationGraph(map, collisions, touchGoals, treasureGrid:
+            field.SceneIdCoherent && SunkenDesertNavigation.IsScene(field.SceneId) ? treasureGrid : null);
         var player = new NavigationPoint(field.LeadPlayer?.FineX ?? 0, field.LeadPlayer?.FineY ?? 0, map.PlayerLayer);
         var targets = new List<NavigationTarget>();
         var storyAnchors = new List<NavigationTarget>();
@@ -245,6 +246,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         foreach (var chest in treasures)
         {
+            var sandChest = field.SceneIdCoherent && chest.IsChest && SunkenDesertNavigation.ChestRoom(field.SceneId);
             var position = Position(chest.FineX, chest.FineY);
             // Approach(position) is the centre of each neighbouring tile, and the one-eighth-tile
             // arrival box never leaves that tile, so the position already satisfies 179940; the
@@ -258,11 +260,22 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // Offer that spot only when the tile directly below cannot be stood on, so an
             // adjacent goal stays the one chosen whenever it exists.
             var below = At(chestTileX * 256 + 128, (chestTileY + 1) * 256 + 128).Any();
-            if (!below && !treasureAt(chestTileX, chestTileY + 1))
+            if ((!below || sandChest) && !treasureAt(chestTileX, chestTileY + 1))
                 chestGoals.AddRange(At(chestTileX * 256 + 128, (chestTileY + 2) * 256 + 128).Where(p => !graph.IsTerminal(p)));
+            var preferred = sandChest ? chestGoals.Where(p =>
+            {
+                var floor = FieldFloorMovement.FromFlags(map.TerrainFlags[p.Y / 256 * map.Width + p.X / 256]);
+                return floor is null || floor.Value.Speed == 16 &&
+                    FieldInteractionRange.TreasureFacings(p.X, p.Y, chestTileX, chestTileY, treasureAt)
+                        .Any(f => FieldFloorMovement.Opposes(f, floor.Value.Direction));
+            }).Distinct().ToArray() : [];
             Add($"chest:{chest.Index}", chest.IsChest ? "Treasure chest" : "Item pickup", NavigationCategory.Objects, position,
                 chestGoals.Distinct().ToArray(), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
                 guideAvailable: guideActive,
+                instruction: sandChest ? SunkenDesertNavigation.ChestInstruction : null,
+                arrivalAnnouncement: sandChest ? SunkenDesertNavigation.ChestArrival : null,
+                keepInteractionReach: sandChest,
+                preferredApproaches: preferred,
                 confirm: new(point => FieldInteractionRange.TreasureFacings(point.X, point.Y, chestTileX, chestTileY, treasureAt), null));
         }
         foreach (var save in savePoints)
@@ -1037,7 +1050,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             NavigationPoint? contactPosition = null, ConfirmRule? confirm = null, bool followUntilInteraction = false,
             string? guidanceRestriction = null, int? actorSlot = null,
             (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null,
-            NavigationHold? arrivalHold = null, bool passageOpening = false)
+            NavigationHold? arrivalHold = null, bool passageOpening = false, bool keepInteractionReach = false,
+            IReadOnlyList<NavigationPoint>? preferredApproaches = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -1050,6 +1064,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
+                    KeepInteractionReach = keepInteractionReach,
+                    PreferredApproachPoints = preferredApproaches ?? [],
                 });
             var output = storyOnly ? storyAnchors : targets;
             if (visible || guideAvailable)
@@ -1064,6 +1080,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
+                    KeepInteractionReach = keepInteractionReach,
+                    PreferredApproachPoints = preferredApproaches ?? [],
                 };
                 if (visible) discovered[id] = target;
                 output.Add(target);
@@ -1077,6 +1095,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,
+                KeepInteractionReach = keepInteractionReach,
+                PreferredApproachPoints = preferredApproaches ?? [],
             });
         }
         /// <summary>The actor and every audited stand-in that runs its script (the same set

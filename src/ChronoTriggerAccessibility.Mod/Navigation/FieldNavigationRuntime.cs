@@ -6,7 +6,10 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// <summary>Which native input boundary currently drives navigation.</summary>
 public enum NavigationMode { Field, World, Epoch, Dactyl }
 
-public readonly record struct FieldNavigationPad(uint Pad, string? StopReason = null);
+public readonly record struct FieldNavigationPad(uint Pad, string? StopReason = null)
+{
+    public bool DashMustBeReleased { get; init; }
+}
 
 /// <summary>Runs only at the game's accepted field-input boundary. It returns one
 /// ordinary pad value; it never holds OS keys or writes player coordinates.</summary>
@@ -434,6 +437,10 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 }
                 controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
                 foreach (var command in commands) Handle(command);
+                // Menu/motion resets can revoke the floor sampled at the beginning
+                // of this same input callback. Revalidate before a new route uses it.
+                if (current == NavigationMode.Field && result.AutoWalking && fieldFloor is not null &&
+                    fieldFloor() is null) observeFieldInput?.Invoke(currentEngine);
                 if (current == NavigationMode.Field && climb.Validate(frame, controller, result, fieldFloor?.Invoke()) is { } climbReason)
                 {
                     result = controller.Cancel(climbReason);
@@ -457,7 +464,9 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                     var adjusted = controller.TargetId == DeathPeakClimbAssist.TargetId
                         ? DeathPeakClimbAssist.RunningInput(frame, result, fieldFloor?.Invoke())
                         : adjustFieldInput!(frame, result);
-                    if (adjusted.StopReason is { } reason)
+                    var movementReason = adjusted.StopReason ??
+                        (adjusted.DashMustBeReleased && (originalPad & 8) != 0 ? SunkenDesertNavigation.ReleaseDash : null);
+                    if (movementReason is { } reason)
                     {
                         result = controller.Cancel(reason);
                         climb.Reset();

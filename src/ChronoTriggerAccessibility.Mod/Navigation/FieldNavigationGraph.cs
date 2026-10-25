@@ -9,7 +9,8 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// movement routine still performs movement.</summary>
 public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisionRules? actors = null,
     IReadOnlyList<(int Actor, IReadOnlyList<NavigationPoint> Goals)>? touchGoals = null,
-    IReadOnlyList<NavigationPoint>? selectedGoals = null) : INavigationGraph
+    IReadOnlyList<NavigationPoint>? selectedGoals = null,
+    Func<int, int, bool>? treasureGrid = null) : INavigationGraph
 {
     private readonly HashSet<int> contactDestinations = selectedGoals is { Count: > 0 } && touchGoals is not null
         ? touchGoals.Where(t => selectedGoals!.Any(t.Goals.Contains)).Select(t => t.Actor).ToHashSet() : [];
@@ -17,10 +18,10 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     private readonly int[] goalYs = selectedGoals?.Select(g => g.Y).Distinct().Order().ToArray() ?? [];
 
     public INavigationGraph ForGoals(IReadOnlyList<NavigationPoint> goals) =>
-        new FieldNavigationGraph(map, actors, touchGoals, goals);
+        new FieldNavigationGraph(map, actors, touchGoals, goals, treasureGrid);
 
     public INavigationGraph? WithoutCreatures => actors?.WithoutCreatures() is { } open
-        ? new FieldNavigationGraph(map, open, touchGoals, selectedGoals) : null;
+        ? new FieldNavigationGraph(map, open, touchGoals, selectedGoals, treasureGrid) : null;
 
     /// <summary>The actor whose native contact refuses the first frame of this edge, walked as
     /// <see cref="TryTraverse"/> walks it (or the slide's one held frame). Terrain is not judged.</summary>
@@ -175,11 +176,11 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
             var probeY = dy < 0 ? y - 112 : y;
             if (dx != 0)
             {
-                if (!TryPosition(x + dx * 112, y, next.Layer, out _) ||
-                    !TryPosition(x + dx * 112, y - 112, next.Layer, out _)) return false;
+                if (Corner(x + dx * 112, y, next.Layer) != Probe.Clear ||
+                    Corner(x + dx * 112, y - 112, next.Layer) != Probe.Clear) return false;
             }
-            else if (!TryPosition(x - 112, probeY, next.Layer, out _) ||
-                     !TryPosition(x + 112, probeY, next.Layer, out _)) return false;
+            else if (Corner(x - 112, probeY, next.Layer) != Probe.Clear ||
+                     Corner(x + 112, probeY, next.Layer) != Probe.Clear) return false;
             if (!TryPosition(x, y, next.Layer, out next)) return false;
         }
         return distance > 0;
@@ -295,6 +296,9 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     // along. Off the map the native tile index wraps, so no result is claimed there.
     private Probe Corner(int x, int y, int layer) =>
         x < 0 || y < 0 || x / 256 >= map.Width || y / 256 >= map.Height ? Probe.Unknown :
+        // 175EE0 checks 179D90 before terrain. Treasure rejection does not set
+        // the terrain-slide bit, including opened records still in the live grid.
+        treasureGrid?.Invoke(x / 256, y / 256) == true ? Probe.Unknown :
         TryPosition(x, y, layer, out _) ? Probe.Clear : Probe.Terrain;
 
     private bool MovingFloor(int x, int y) => x >= 0 && y >= 0 && x / 256 < map.Width &&

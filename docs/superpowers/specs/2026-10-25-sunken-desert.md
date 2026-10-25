@@ -1,0 +1,13 @@
+# Sunken Desert navigation and shifting-sand feedback
+
+The user approved repairing chest routes in manual guidance and auto-walk, correcting Run handling and preventing repetitive shifting-sand messages from drowning out guidance. Native flow, collisions, battles and player Confirm remain authoritative. Use the existing C# field capture, navigation controller, native pad boundary and Prism output. Build and deploy a local tester candidate after validation; public publication is a separate request.
+
+The new log has3,115 lines, SHA256 `bf716572ec9eeba45b5ab7f8d70618313a0ef439b18e1bc853312a16fc35855f`. Scene160/Atel0469 has four closed chests; scene161/Atel0470 has seven. Terrain is shipped map43/22. The log contains an immediate Run-toggle stop, an unavailable-floor-state stop, an arrived chest, repeated interruptions by changing floor directions and separate input suspensions followed by native battles. No compressed live route-plane snapshot was logged. Initial resource planes, logged positions and explicitly limited offline emulation supply regression fixtures; they cannot be called live gameplay proof.
+
+Select state-backed input and reachable interaction contacts. Native Run settings must remain intact: mode0/2 held Dash requests walking, and some toggle states require a manual short Dash tap/release before running is possible. Never fabricate that edge or write the toggle. Give precise instructions when the user's native configuration cannot provide Run from held input. Revalidate a floor snapshot cleared by a navigation-menu/motion reset before deciding it is unavailable.
+
+Chest arrival on moving ground must provide time to use Confirm. The selected approach is to maintain native Confirm reach during auto-walk, reusing the existing interaction-follow mechanism with a stationary-target policy, while manual guidance keeps ordinary arrival/facing instructions. A fresh target, scene/control and native interaction proof are required throughout. The player still opens the chest. Test the approach against actual moving-floor frame outcomes before finalizing this policy; record any ruling in the plan.
+
+Call the terrain shifting sand in these scenes. Keep current direction/Run information available on explicit repeat. Coalesce automatic changes and deliver them without interrupting route and interaction speech. Other conveyor and Death Peak behavior retains its existing policy.
+
+No hidden treasure contents, enemy triggers or future quest state are announced. Native encounters continue to stop navigation. No map, movement speed, player coordinate, physics, preference, battle or Confirm write is permitted. Preserve saves, settings, narration, unrelated mods and the two existing untracked paths.

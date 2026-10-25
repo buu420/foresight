@@ -29,7 +29,8 @@ public sealed class AccessibilityState
         {
             BattleAccessibilityEvent battleEvent => battleNarrator.Apply(battleEvent),
             // Explicit repeats must speak even when the destination has not changed.
-            NavigationAnnouncement navigation when !string.IsNullOrWhiteSpace(navigation.Text) => [Interrupt(navigation.Text)],
+            NavigationAnnouncement navigation when !string.IsNullOrWhiteSpace(navigation.Text) =>
+                navigation.Interrupt ? [Interrupt(navigation.Text)] : [Queue(navigation.Text)],
             MenuAccessibilityEvent menuEvent => menuNarrator.Apply(menuEvent),
             DialogueAccessibilityEvent dialogueEvent => dialogueNarrator.Apply(dialogueEvent),
             NewGameAccessibilityEvent newGameEvent => newGameNarrator.Apply(newGameEvent),

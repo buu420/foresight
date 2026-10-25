@@ -2,4 +2,7 @@ using ChronoTriggerAccessibility.Core.Events;
 
 namespace ChronoTriggerAccessibility.Core.Navigation;
 
-public sealed record NavigationAnnouncement(string Text) : AccessibilityEvent;
+public sealed record NavigationAnnouncement(string Text) : AccessibilityEvent
+{
+    public bool Interrupt { get; init; } = true;
+}

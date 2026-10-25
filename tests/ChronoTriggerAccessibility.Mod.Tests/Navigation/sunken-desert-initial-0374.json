@@ -1,0 +1,431 @@
+{
+  "evidence": "Installed initial map planes and chest/exit records; all closed, full-map viewport and no actors/encounter scripts are explicit offline assumptions.",
+  "scenes": [
+    {
+      "scene": 159,
+      "map": 112,
+      "width": 16,
+      "height": 16,
+      "shapes": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAwMCAgICAgICAipmZgICAgNjAgICAgICAgICAgICAgICAgICAgICAgICZmJiAgICAgICAgICAgICAgICAg==",
+      "flags": "AAAAAAAAAAAAAAAAAAAAAACHhwcHBwcHBwcHBwcHBQAAhIUGBgYGBgYGBgYGBgUAAAQFBAUGBgQEBwcFBQQFAAAEBQQFBgYEBAcHBQUEBQAABAUEBQUGBAQHBQUFBAUAAAQFBAcHCQkJCQYGBQQFAAAEBQQHBwsLCgoGBgUEBQAABAUEBAQICAgIBAQFBAUAAAQFBAQGBgUFBwcEBQQFAAAEBQQGBgYFBQcHBAUEBQAABAcHBwcHBwcHBwcHhIWAAAQGhoYGBgYGBAYGBoaGgEBAQIDAQERERERAQECAgIBAQEBAQEBARERAQEBAwMDAQEBAQEBAQEBAQEBAQEBAQA==",
+      "layers": "AQEBAQEBAQEBAQEBAQEBAQkBAQEBAQEBAQEBAQEBAQEBCQkBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEICEFBQQBBQUFBQUFBQUEAAABBQUFBSUlBQUFBQUFBQUBAQUFBQUFBQUFBSUlBQUFBQQ==",
+      "chests": [],
+      "exits": [
+        {
+          "id": 0,
+          "record": 259,
+          "source": [
+            0,
+            15
+          ],
+          "length": 16,
+          "vertical": false,
+          "facing": 1,
+          "destination": 497,
+          "arrival": [
+            45,
+            91
+          ]
+        },
+        {
+          "id": 1,
+          "record": 260,
+          "source": [
+            7,
+            6
+          ],
+          "length": 2,
+          "vertical": false,
+          "facing": 1,
+          "destination": 160,
+          "arrival": [
+            22,
+            8
+          ]
+        }
+      ]
+    },
+    {
+      "scene": 160,
+      "map": 43,
+      "width": 32,
+      "height": 32,
+      "shapes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAgICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEAAgAAAAACAgIAAAAAAAAAAAAAAAAAAAAAAAAAAAABAQAAAAAAAAICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAAAAAAAAAgICAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDAgICAgNmAwAAAAAAAAAAAAAAAAAAAAAAAABgYAEAZmZmAgJmZgICAAAAAAAAAAAAAAAAAAAAAAADAWBgAQICAgICAgICAgIAAAAAAAAAAAAAAAADZgJmZmYDAgIDZgJnAgICAgICAgAAAAAAAAAAAAAAAwICAgICAgMDAwMCAgICAgICAgICAAAAAAAAAAAAZ2ZmAgICAgICAgICAgICAgICAgICAgIAAAAAAAAAAABmAwICAgICAgICAgICAgICAgICAAACAAAAAAAAAAAAAGQCAgICAgICAgICAgICAgICAgIAAAAAAAAAAAAAAAAAZAACAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAAMDgICAgICAgICAgICAgICAAAAAAAAAAAAAAAAAAAAAAACAgICAgICAgICAgICAgIAAAAAAAAAAAAAAAAAAAAAAAICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAAAAgICAgICAgICAgICAgJmZgAAAAAAAAAAAAAAAAAAAAACAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAAAAAAICAgICAgICAgICAgICAgICAAAAAAAAAAAAAAAAAAJmZgICAgICAgICAgICAgICAgIAAAAAAAAAAAAAAAAAAg8CAgICAgICAgICAgICAgICAgAAAAAAAAIAAAAAAAAAAgICAgICAgICAgICAgICAgJmZgMAAAAAAgAAAAAAAAAAAAJiYmICAgICAgICAgICAgICZgAAAAACAAAAAAAAAAAAAmJiAgICAgICAggAAAICAgMCAgAAAAAAAAAAAAAAAAACAgICAAAIAgICAAAAAgICAgICAAAAAAAAAAAAAAAAAAACAgIAAAgDAgIAAAAAAgICAgIAAAAAAAAAAAAAAAAAAAwAAgAAYAAIAAAAAAACAAICAAAAAAAAAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "flags": "gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgImAgICAgICAgICAgICAgICAgICAgICAgICAgAkKCgoJCQCAgICAgICAgICAgICAgICAgICAgICAgIAJCgoKCgkJCYCAgICAgICAgICAgICAgICAgMDAwMDAwEmACAkICQkJiYCAgICAgICAgICAgIALCwsLS8vLy8tJSwsICQgJCQmAgICAgICAgICAiAiICAgLCwtLS0lISklJCQkJCQkJCYCAgICAgICAgIAKgAgJCQkJCUtISkhKSkkJCQmJgICAgICAgICAgICAgIgKCgoLCwsLCwsJCAsLCwsLC4uAgICAgICAgICAgICAgICAgIoICAsLCwkICAgLCwsLi4CAgICAgICAgICAgICAgICAgAgICwkJCQsLCAkKCgqKgICAgICAgICAgICAgICAgICACAgICQsLCwsICQoKCoqAgICAgICAgICAgICAgICAgIAICAgKCwoJCQgJCQkKioCAgICAgICAgICAgICAgICAgAgICgoKCgoJCQkJCQmIiICAgICAgICAgICAgICAgICACAgKCgoKCwkICQkJCQgIgICAgICAgICAgICAgICAgIAICAsLCwkJCQsLCwsLCwsLgICAgICAgICAgICAgIqIiwgICgoKCgsLCwsLCwsLCwuAgICAgICAgICAgICAioALCAgKCgoKCgoKCgoKCgoKCoCAgICAgICAgICAgICKiYsICAoKCgoKCgoKCgoKCgoKCoCAgICAgICAgICAgICAgAkKCgoLCwsJCQuLi4sICwoIi4CAgICAgICAgICAgICACQoKCIiAgAkLC4uLiwgLC4ALgICAgICAgICAgICAgICJCQgIgICACwuLgICAigoKCQuAgICAgICAgICAgICAgICJiAiAgICAgICAgICACICAgICAgICAgICAgICAgICAgICIiICAgICAgICAgICIgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==",
+      "layers": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAABCQAAAQEBAAABAQkAAAAAAAAAAAAAAAAAAAAAAAAAAAEJAAAJCQkJCQkJCQkAAAAAAAAAAAAAAAAAAQABAUFASUlAQUkACQkJCQkJCQAAAAAAAAAAAAAAAAAJCQkJSUlJSUlJSQkJCQkJCQkJAAAAAAAAAAAAAAEBCQkJCQlJSUlJSUlJCQkJCQkJCQAAAAAAAAAAAAAAAAkJCQkJCUlJSUlJSUkJCQkAAAAAAAAAAAAAAAAAAAkJCQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJAAAAAAAAAAAAAAAAAAAAAAABCQkJCQkJCQkJCQkJCQkAAAAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAAAAAAAAAJCQkJCQkJCQkJCQkJAAAAAAAAAAAAAAAAAAAAAAAAAAkJCQkJCQkJCQkJCQkBAQAAAAAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJAAAAAAAAAAAAAAAAAAAAAAAJCQkJCQkJCQkJCQkJCQkAAAAAAAAAAAAAAAAAAAABAQkJCQkJCQkJCQkJCQkJCQAAAAAAAAAAAAAAAAAACQAJCQkJCQkJCQkJCQkJCQkJAAAAAAAAAAAAAAAAAAAJCQkJCQkJCQkJCQkJCQkJCQkBAQAAAAAAAAAAAAAAAAAACQkJCQkJCQkJCQkJCQkJCQkJAQAAAAAAAAAAAAAAAAAJCQkJCQkJCQkJCQEACQkJCQAJAAAAAAAAAAAAAAAAAAAJCQkJAAAACQkAAAAACQkJCQkAAAAAAAAAAAAAAAAAAAkJCQkAAAAJCQAAAAAJCQkJCQAAAAAAAAAAAAAAAAAAAAEJCQAAAQkBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABCQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "chests": [
+        {
+          "index": 64,
+          "x": 5,
+          "y": 11,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 5,
+              "y": 10,
+              "flags": 8
+            },
+            {
+              "x": 6,
+              "y": 11,
+              "flags": 8
+            },
+            {
+              "x": 5,
+              "y": 12,
+              "flags": 10
+            },
+            {
+              "x": 4,
+              "y": 11,
+              "flags": 10
+            }
+          ]
+        },
+        {
+          "index": 65,
+          "x": 19,
+          "y": 8,
+          "shape": 103,
+          "adjacent": [
+            {
+              "x": 19,
+              "y": 7,
+              "flags": 10
+            },
+            {
+              "x": 20,
+              "y": 8,
+              "flags": 8
+            },
+            {
+              "x": 19,
+              "y": 9,
+              "flags": 11
+            },
+            {
+              "x": 18,
+              "y": 8,
+              "flags": 73
+            }
+          ]
+        },
+        {
+          "index": 66,
+          "x": 25,
+          "y": 24,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 25,
+              "y": 23,
+              "flags": 8
+            },
+            {
+              "x": 26,
+              "y": 24,
+              "flags": 11
+            },
+            {
+              "x": 25,
+              "y": 25,
+              "flags": 9
+            },
+            {
+              "x": 24,
+              "y": 24,
+              "flags": 11
+            }
+          ]
+        },
+        {
+          "index": 67,
+          "x": 7,
+          "y": 21,
+          "shape": 15,
+          "adjacent": [
+            {
+              "x": 7,
+              "y": 20,
+              "flags": 136
+            },
+            {
+              "x": 8,
+              "y": 21,
+              "flags": 11
+            },
+            {
+              "x": 7,
+              "y": 22,
+              "flags": 137
+            },
+            {
+              "x": 6,
+              "y": 21,
+              "flags": 138
+            }
+          ]
+        }
+      ],
+      "exits": [
+        {
+          "id": 0,
+          "record": 261,
+          "source": [
+            14,
+            6
+          ],
+          "length": 2,
+          "vertical": false,
+          "facing": 1,
+          "destination": 497,
+          "arrival": [
+            45,
+            91
+          ]
+        },
+        {
+          "id": 1,
+          "record": 262,
+          "source": [
+            15,
+            30
+          ],
+          "length": 2,
+          "vertical": false,
+          "facing": 15,
+          "destination": 161,
+          "arrival": [
+            6,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "scene": 161,
+      "map": 22,
+      "width": 32,
+      "height": 32,
+      "shapes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABYGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWZ0AgADAAAAAAAAAAMCAgMAAAAAAAAAAAAAAAAAAAAADgICC3JmAgMAAANmZgIDZmYDAAAAAAAAAAAAAAAAAAACAgIDAwICAgAAYgICAgICAgIAAAAAAAAAAAAAAAAAAAICAgMCAgJmZmZ2AgICAgICZgMAAAAAAAAAAAAAAAADAgMDZwICAgICAgICAgICAgICZgMAAAAAAAAAAAAAAGYCAgICAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAAAgICAgICAgICAgICAgICAgICAgICAAAAAAAAAAAAAAAAAgICAgICAgICAgICAgICAgICAgIAAAAAAAAAAAAAAAAADgICAgICAgICAipKBk4uAgICZmYCAgMAAAAAAAAAAAACAgICAgICAgIKFQMCAhMCAgICAgICZmYDAAAAAAAAAAICAgICAgICAhcBAAABFwICAgICAgICA2YAAAAAAAAAAgICAgICAgICEwICAhYDAgICAgICAgICAgAAAAAAAAACAgICAgICAgICAgICAgMCAgICAgICAgAAAAAAAAAAAAICAgICAgICAgICAgICAwICAgICAgIAAAAAAAAAAAAAAgIDAgICAgICZmoDA2ZnAgICAgICAgAAAAAAAAAAAABmAgICAgICAgICAgICAgICAgICAgICAAAAAAAAAAAAAAICAgICAgICAgICAgICAgICAgICAgIAAAAAAAAAAAAMAAAAAgICAgICAgICAgICAgICAgICAgAAAAAAAAAAAAAADAACAgICAgICAgICAgICAgICAgICAAAAAAAAAAAAAAAAAgICAgICAgICAAICAgICAgICAmZmAwAAAAAAAAAAAAACAgICAgICAgoAAg4CAgICAgICAwICAAAAAAAAAAAAAAIDAgICAgICAgAAAgICAgICAgICAgAAAAAAAAAAAAAAAAICAgIAAgICAAACCAwCAgICAgIAAAAAAAAAAAAAAAAAAAICAAAAAAAAAAIADAICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAICAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "flags": "gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgMDAwMCAgICAgICAgICIiIiAgICAgICAgICAgICAgICAwMDAwICAgICAgICAigqAi4uLgICAgICAgICAgICAgICAgICIgAsLi4CAiQoKCQkJCYmAgICAgICAgICAgICAgICAgIhJCAqKioqJCQgJCQkJiYCAgICAgICAgICAgICAi4uLyEkICwoJCAkLCwsLCwsLi4CAgICAgICAgICAgIAIC0tISQgKCgkICQgKCgoLCwsLgICAgICAgICAgICAgAgLS0tJCAkLCwgICwsLCwoKCgqAgICAgICAgICAgICAiIsLCwsICQgLCQkKCwkKCgoICICAgICAgICAgICAgICAgAkKCgoKCgkJiYqLiYmJCwgIgICAgICAgICAgICAgICACQsLCwsICAmJwMDAwMAJCAgKCgoKioqKgICAgICAgIAJCAkKCgoKCsrAwMCAwAkICgoKCgoKgIqAgICAgICAgEkICQsLCQsLwMDAwMCACQgKCgoKCgqKioCAgICAgICASQgJCAkJCAiIgMCAgIBLCwsLCQiAgICAgICAgICAgIBIS0lISUlISIiAgICAi0sLCwsJCYCAgICAgICAgICAgAiACQgKCQhIyMrAwMjLSwsLCwkJgICAgICAgICAgICACAkJCwgJCkpKSUhISkpKigoKCQmAgICAgICAgICAgIAKCgoKCgoICwsLCAgKCgoKCgoJCYCAgICAgICAgICAgICICAgICAkLCwsJCAkLCwsLCwkKgICAgICAgICAgICAgIAICAsLCwsLC4uLCQoKCgoKCQmAgICAgICAgICAgICAgAgICwgICwsLgIALCQkJCQgJCYuLi4CAgICAgICAgICKCwkLCAgJC4mAgAgKCQkJCAkJCwuLgICAgICAgICAgIoICgkICAkIiYCAi4uJCwsLCAgKiICAgICAgICAgICAiIAJCggICQiJgICAgIALCgmJi4qAgICAgICAgICAgICAiQsIiIgLCImAgICAgICJiYCAgICAgICAgICAgICAgICAi4uIiICAiYCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==",
+      "layers": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEFBQUEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQUFBQQEBAAAAAAABAQEAAQEAAAAAAAAAAAAAAAAAAAAAAQAAAAEBAAAAAQEBAQEBAQAAAAAAAAAAAAAAAAAAAAABAABBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAAAAAAAAAEAQUEBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAAAAAEBAUFBQQEBAQEBAQEBAQEBAQEBAAAAAAAAAAAAAAAAAQEBQUFBAQEBAQEBAQEBAQEBAQEAAAAAAAAAAAAAAAABAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAAAAAAAAQEBAQEBAQEBASEhISEhAQEBAQEAAAAAAAAAAAAAAAAAAQEBAQEBAQEhYlJSUmIBAQEBAQEBAQEAAAAAAAAAAAABAQEBAQEBAWJSUlIAUAEBAQEBAQEBAAEAAAAAAAAAAEEBAQEBAQEBUFJSUlAAAQEBAQEBAQEBAQAAAAAAAAAAQQEBAQEBAQEAAFIAAABBAQEBAQEBAQEAAAAAAAAAAABBQUFBQUFBQQAAGwAAAEEBAQEBAQAAAAAAAAAAAAAAAAEAAQEBAQFBQUhBQEFBQQEBAQEBAAAAAAAAAAAAAAABAQEBAQEBAUFBQUFBQUFBCQEBAQEAAAAAAAAAAAAAAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAAAAAAAAAAAAAAAAAQEBAQEBAQEBAQkJAQEBAQEBAQEAAAAAAAAAAAAAAAAAAAEBAQEBAQEJCQkJAQEBAQEBAQEBAAAAAAAAAAAAAAAAAQEBAQEBAQEAAAEBAQEBAQEBAAEAAAAAAAAAAAAAAAAAAQEBAQEBAAAAAAEBAQEBAQEBAQAAAAAAAAAAAAAAAAkBAQABAQEAAAAAAQEBAQEBAQEBAAAAAAAAAAAAAAABAQEBAAABAQAAAAAAAAEBAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "chests": [
+        {
+          "index": 68,
+          "x": 8,
+          "y": 8,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 8,
+              "y": 7,
+              "flags": 128
+            },
+            {
+              "x": 9,
+              "y": 8,
+              "flags": 11
+            },
+            {
+              "x": 8,
+              "y": 9,
+              "flags": 73
+            },
+            {
+              "x": 7,
+              "y": 8,
+              "flags": 136
+            }
+          ]
+        },
+        {
+          "index": 69,
+          "x": 18,
+          "y": 7,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 18,
+              "y": 6,
+              "flags": 136
+            },
+            {
+              "x": 19,
+              "y": 7,
+              "flags": 139
+            },
+            {
+              "x": 18,
+              "y": 8,
+              "flags": 9
+            },
+            {
+              "x": 17,
+              "y": 7,
+              "flags": 10
+            }
+          ]
+        },
+        {
+          "index": 70,
+          "x": 28,
+          "y": 16,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 28,
+              "y": 15,
+              "flags": 138
+            },
+            {
+              "x": 29,
+              "y": 16,
+              "flags": 138
+            },
+            {
+              "x": 28,
+              "y": 17,
+              "flags": 138
+            },
+            {
+              "x": 27,
+              "y": 16,
+              "flags": 10
+            }
+          ]
+        },
+        {
+          "index": 71,
+          "x": 26,
+          "y": 26,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 26,
+              "y": 25,
+              "flags": 139
+            },
+            {
+              "x": 27,
+              "y": 26,
+              "flags": 11
+            },
+            {
+              "x": 26,
+              "y": 27,
+              "flags": 10
+            },
+            {
+              "x": 25,
+              "y": 26,
+              "flags": 9
+            }
+          ]
+        },
+        {
+          "index": 72,
+          "x": 8,
+          "y": 27,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 8,
+              "y": 26,
+              "flags": 11
+            },
+            {
+              "x": 9,
+              "y": 27,
+              "flags": 10
+            },
+            {
+              "x": 8,
+              "y": 28,
+              "flags": 128
+            },
+            {
+              "x": 7,
+              "y": 27,
+              "flags": 138
+            }
+          ]
+        },
+        {
+          "index": 73,
+          "x": 7,
+          "y": 20,
+          "shape": 3,
+          "adjacent": [
+            {
+              "x": 7,
+              "y": 19,
+              "flags": 75
+            },
+            {
+              "x": 8,
+              "y": 20,
+              "flags": 9
+            },
+            {
+              "x": 7,
+              "y": 21,
+              "flags": 9
+            },
+            {
+              "x": 6,
+              "y": 20,
+              "flags": 8
+            }
+          ]
+        },
+        {
+          "index": 74,
+          "x": 18,
+          "y": 16,
+          "shape": 1,
+          "adjacent": [
+            {
+              "x": 18,
+              "y": 15,
+              "flags": 192
+            },
+            {
+              "x": 19,
+              "y": 16,
+              "flags": 192
+            },
+            {
+              "x": 18,
+              "y": 17,
+              "flags": 192
+            },
+            {
+              "x": 17,
+              "y": 16,
+              "flags": 192
+            }
+          ]
+        }
+      ],
+      "exits": [
+        {
+          "id": 0,
+          "record": 263,
+          "source": [
+            4,
+            4
+          ],
+          "length": 2,
+          "vertical": true,
+          "facing": 4,
+          "destination": 160,
+          "arrival": [
+            16,
+            28
+          ]
+        }
+      ]
+    }
+  ]
+}
