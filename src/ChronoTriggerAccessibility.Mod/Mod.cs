@@ -159,7 +159,8 @@ public sealed class Mod : ModBase
             text => navigationSpeech.Publish(new NavigationAnnouncement(text) { Interrupt = false }));
         var areas = new NavigationAreaAnnouncer(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
-        var navigationObservation = new WorldNavigationObserver(worldSource, areas);
+        var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
+        var navigationObservation = new WorldNavigationObserver(worldSource, areas, prompts);
         var floors = new FieldFloorFeedback(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             () => Environment.TickCount64,
@@ -186,7 +187,6 @@ public sealed class Mod : ModBase
         NavigationFrame? Field(nint engine) => navigationObservation.Field(navigationSource.Capture(engine));
         NavigationFrame? World(nint context) => navigationObservation.World(worldSource.Capture(context));
         NavigationFrame? Flight(nint context, VehicleKind kind) => navigationObservation.World(worldSource.CaptureFlight(context, kind));
-        var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
         var navigationGamepad = new NavigationGamepad();
         void ResetMotion() { footsteps.Suspend(); floors.Suspend(); }
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
@@ -254,7 +254,7 @@ public sealed class Mod : ModBase
             var accepted = navigation.OnWorldInput(context, pad);
             footsteps.OnWorldInput(context, accepted);
             var motion = worldSource.CaptureMotion(context);
-            prompts.Observe(context, worldSource.CaptureVehicles(context),
+            navigationObservation.CompleteTick(context, worldSource.CaptureVehicles(context),
                 motion is { } walking ? walking.X / 16 : -1, motion is { } y ? y.Y / 16 : -1);
         }, (context, pad) => battle.IsActive ? pad : navigation.ApplyWorldPad(context, pad), image =>
         {
@@ -265,7 +265,7 @@ public sealed class Mod : ModBase
             // Vehicle ticks fire for parked vehicles too; only the active flying
             // transport may pump navigation, and flight never reaches the footsteps.
             if (battle.IsActive || !navigation.OnVehicleInput(context, pad, kind)) return;
-            prompts.Observe(context, worldSource.CaptureVehicles(context));
+            navigationObservation.CompleteTick(context, worldSource.CaptureVehicles(context));
         }, (context, pad, kind) => battle.IsActive ? pad : navigation.ApplyVehiclePad(context, pad, kind));
         dispatcher = new NavigationDispatcher(dispatcher, navigation);
         var timeGauge = new TimeGaugeHookSet(hookFactory, memory, dispatcher);

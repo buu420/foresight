@@ -8,6 +8,22 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 
 public sealed class WorldNavigationObserverTests
 {
+    [Theory]
+    [InlineData(false, "On the Epoch. Press Confirm to board.")]
+    [InlineData(true, "Landing possible. Press Confirm to land.")]
+    public void TickPublishesTheClueAfterTheInterruptingVehiclePrompt(bool flying, string prompt)
+    {
+        var surviving = new List<string>();
+        var source = new WorldNavigationSource(new EmptyMemory(), _ => { }, surviving.Add);
+        void Interrupt(string text) { surviving.Clear(); surviving.Add(text); }
+        var observer = new WorldNavigationObserver(source, new(Interrupt, _ => { }), new(Interrupt));
+        var world = Snapshot(flying);
+        observer.World(flying ? source.BuildFlight(world, _ => "Mayor's Manor") : source.Build(world, _ => "Mayor's Manor"));
+        var vehicles = new WorldVehicleState(true, 336, 848, true, false, 0, 0, flying ? 2 : 0, 1, !flying, flying);
+        observer.CompleteTick(1, vehicles, 336, 848);
+        Assert.Equal([prompt, "Sparkles rise above Mayor's Manor."], surviving);
+    }
+
     [Fact]
     public void AreaSpeechPrecedesTheQueuedClueAndTheLatchWaitsForPublication()
     {
@@ -16,9 +32,9 @@ public sealed class WorldNavigationObserverTests
         var observer = new WorldNavigationObserver(source, new(text => { surviving.Clear(); surviving.Add(text); }, _ => { }));
         var frame = source.Build(Snapshot(), _ => "Mayor's Manor");
         Assert.Empty(spoken);
-        observer.World(frame);
+        Tick(observer, frame);
         Assert.Equal(["World map.", "Sparkles rise above Mayor's Manor."], surviving);
-        observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
+        Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
         Assert.Single(spoken);
     }
 
@@ -26,9 +42,9 @@ public sealed class WorldNavigationObserverTests
     public void ReturningFromAFieldRearmsTheSameNativeWorldOwner()
     {
         var spoken = new List<string>(); var source = Source(spoken); var observer = Observer(source);
-        var first = observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
+        var first = Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
         observer.Field(first! with { Scene = "field:50", AreaName = "Mayor's Manor" });
-        observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
+        Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
         Assert.Equal(2, spoken.Count);
     }
 
@@ -36,9 +52,9 @@ public sealed class WorldNavigationObserverTests
     public void BoardingAndLandingInTheSameWorldDoNotRepeatTheClue()
     {
         var spoken = new List<string>(); var source = Source(spoken); var observer = Observer(source);
-        observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
-        observer.World(source.BuildFlight(Snapshot(true), _ => "Mayor's Manor"));
-        observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
+        Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
+        Tick(observer, source.BuildFlight(Snapshot(true), _ => "Mayor's Manor"));
+        Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
         Assert.Single(spoken);
     }
 
@@ -49,7 +65,7 @@ public sealed class WorldNavigationObserverTests
     {
         var spoken = new List<string>(); var source = Source(spoken); var observer = Observer(source);
         var world = Snapshot(flight) with { Viewport = new(300 * 16, 800 * 16, 343 * 16, 844 * 16) };
-        var frame = observer.World(flight ? source.BuildFlight(world, _ => "Mayor's Manor") : source.Build(world, _ => "Mayor's Manor"));
+        var frame = Tick(observer, flight ? source.BuildFlight(world, _ => "Mayor's Manor") : source.Build(world, _ => "Mayor's Manor"));
         Assert.Equal(["Sparkles rise above Mayor's Manor."], spoken);
         Assert.Equal(flight ? 1 : 0, frame!.Targets.Count);
     }
@@ -59,10 +75,17 @@ public sealed class WorldNavigationObserverTests
     {
         var spoken = new List<string>(); var source = Source(spoken); var observer = Observer(source);
         source.Build(Snapshot(), _ => "Mayor's Manor");
-        observer.World(null);
+        Tick(observer, null);
         Assert.Empty(spoken);
-        observer.World(source.Build(Snapshot(), _ => "Mayor's Manor"));
+        Tick(observer, source.Build(Snapshot(), _ => "Mayor's Manor"));
         Assert.Single(spoken);
+    }
+
+    private static NavigationFrame? Tick(WorldNavigationObserver observer, NavigationFrame? frame)
+    {
+        var observed = observer.World(frame);
+        observer.CompleteTick(1, null);
+        return observed;
     }
 
     internal static WorldNavigationSnapshot Snapshot(bool flight = false) => new(new(1, 2, 3, 4, 0, 0x400, 336, 848),

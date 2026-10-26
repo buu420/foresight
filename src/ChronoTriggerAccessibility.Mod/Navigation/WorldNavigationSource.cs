@@ -35,7 +35,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         sparklesAnnounced = false;
         sparkleOwner = null; pendingSparkles = null; pendingSparkleScene = null; lastSparkleEvidence = null;
     }
-    /// <summary>Called by the observation adapter after interrupting area speech.</summary>
+    /// <summary>Called by the observation adapter after interrupting tick feedback.</summary>
     public void PublishDescriptions(NavigationFrame? frame)
     {
         var cue = pendingSparkles; var owner = pendingSparkleScene;
@@ -43,7 +43,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         if (cue is null || frame is not { CanNavigate: true } || frame.Scene != owner || describe is null) return;
         describe(cue);
         sparklesAnnounced = true;
-        diagnostic("World sparkle cue published after area speech.");
+        diagnostic("World sparkle cue published after world tick feedback.");
     }
     public FootstepFrame? CaptureMotion(nint context)
     {
