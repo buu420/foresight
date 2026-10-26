@@ -82,6 +82,25 @@ public sealed class WorldNavigationCaptureTests
     }
 
     [Fact]
+    public void OptionalLiveSparkleEvidenceTravelsWithTheRecheckedWorldSnapshot()
+    {
+        var memory = WorldSparkleCaptureTests.WithEffect(FullMemory());
+        var snapshot = WorldNavigationCapture.Capture(memory, Image, Context, out var stage);
+        Assert.NotNull(snapshot);
+        Assert.Equal("ready", stage);
+        Assert.Equal([new WorldPixelPoint(336, 848)], snapshot.PorreSparkles);
+        Assert.Equal("drawn children", snapshot.PorreSparkleStage);
+        Assert.False(snapshot.IsVisible(336 * 16, 848 * 16));
+        memory.Byte(Data + 0x11341, 0);
+        snapshot = WorldNavigationCapture.Capture(memory, Image, Context, out stage);
+        Assert.NotNull(snapshot);
+        Assert.Equal("ready", stage);
+        Assert.Empty(snapshot.PorreSparkles);
+        Assert.Equal("script guard mismatch", snapshot.PorreSparkleStage);
+        Assert.Single(snapshot.Entrances);
+    }
+
+    [Fact]
     public void CameraWrapKeepsOnlyTheVisibleCopiesOfEntrances()
     {
         var snapshot = WorldNavigationCapture.Capture(FullMemory().Word(Renderer + 0x2606C, 0), Image, Context, out _);

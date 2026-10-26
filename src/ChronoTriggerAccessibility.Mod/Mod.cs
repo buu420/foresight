@@ -155,9 +155,11 @@ public sealed class Mod : ModBase
         var navigationSpeech = dispatcher;
         nuint navigationImageBase = 0;
         var navigationText = new NavigationTextCapture(memory);
-        var worldSource = new WorldNavigationSource(memory, dispatcher.RecordDiagnostic);
+        var worldSource = new WorldNavigationSource(memory, dispatcher.RecordDiagnostic,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text) { Interrupt = false }));
         var areas = new NavigationAreaAnnouncer(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        var navigationObservation = new WorldNavigationObserver(worldSource, areas);
         var floors = new FieldFloorFeedback(
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             () => Environment.TickCount64,
@@ -181,9 +183,9 @@ public sealed class Mod : ModBase
             var name = navigationText.FieldName(navigationImageBase, scene);
             return string.IsNullOrWhiteSpace(name) || name.StartsWith('(') ? "Local area" : name;
         }, character => navigationText.CharacterName(navigationImageBase, character));
-        NavigationFrame? Field(nint engine) => areas.Observe(navigationSource.Capture(engine));
-        NavigationFrame? World(nint context) => areas.Observe(worldSource.Capture(context));
-        NavigationFrame? Flight(nint context, VehicleKind kind) => areas.Observe(worldSource.CaptureFlight(context, kind));
+        NavigationFrame? Field(nint engine) => navigationObservation.Field(navigationSource.Capture(engine));
+        NavigationFrame? World(nint context) => navigationObservation.World(worldSource.Capture(context));
+        NavigationFrame? Flight(nint context, VehicleKind kind) => navigationObservation.World(worldSource.CaptureFlight(context, kind));
         var prompts = new VehiclePromptAnnouncer(text => navigationSpeech.Publish(new NavigationAnnouncement(text)));
         var navigationGamepad = new NavigationGamepad();
         void ResetMotion() { footsteps.Suspend(); floors.Suspend(); }

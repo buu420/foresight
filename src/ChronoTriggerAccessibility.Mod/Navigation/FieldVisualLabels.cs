@@ -32,6 +32,7 @@ public static class FieldVisualLabels
             99 or 166 => "Door", 100 => "Gravestone", 101 or 157 or 161 => "Opening",
             102 or 129 or 130 or 175 or 194 => "Statue", 115 => "Barrel",
             145 or 160 or 168 or 193 => "Rock", 146 => "Sword", 169 => "Paper",
+            117 => "Round stone", 156 => "Multicolored shell",
             174 or 176 => "Device", 159 or 203 or 231 or 232 or 233 or 234 => "Balloon",
             94 or 95 or 143 => "Swirling light", 119 or 120 or 134 or 140 or 178 or 201 or 202 or 235 or 236 or 237 or 238 => "Sparkle",
             _ => "Object",

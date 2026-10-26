@@ -144,6 +144,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 continue;
             }
             var book = field.SceneIdCoherent ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
+            var questObject = field.SceneIdCoherent ? QuestObjectLabels.Actor(field.SceneId, actor) : null;
             var description = FieldVisualLabels.Describe(actor);
             // Verified switch and control slots keep their native finish and availability.
             if (field.SceneIdCoherent && OceanPalaceTargets.ObjectLabel(field.SceneId, actor) is { } oceanObject)
@@ -177,7 +178,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? characterName?.Invoke(actor.VisualIndex) : null;
             var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) : null;
             var capeEncounter = field.SceneIdCoherent ? NorthCapeTargets.EncounterLabel(field.SceneId, actor, story, characterName) : null;
-            var label = book ?? capeEncounter ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
+            var label = book ?? capeEncounter ?? questObject?.Label ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
@@ -223,7 +224,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
                     (label is not null && label != onScreenName || actor.IsActivationCandidate || scriptedAction || npcRegion is not null),
                 instruction: capeEncounter is not null ? NorthCapeTargets.EncounterInstruction :
-                    conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : null,
+                    conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : questObject?.Description,
                 guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
                 arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
@@ -334,7 +335,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
             if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
-                OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index);
+                OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
+                QuestObjectLabels.Marker(field.SceneId, actor);
             if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;

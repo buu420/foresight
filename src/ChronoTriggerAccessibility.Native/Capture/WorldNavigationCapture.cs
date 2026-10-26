@@ -25,6 +25,10 @@ public sealed record WorldNavigationSnapshot(WorldMotionSnapshot Motion, byte[] 
     /// <summary>The player task's next movement endpoint, or its idle pixel position.
     /// Available only when the live walking actor was identified at its task boundary.</summary>
     public WorldPixelPoint? WalkingEndpoint { get; init; }
+    /// <summary>Drawn children of the verified Porre sparkle script, in native world pixels.
+    /// Screen visibility is tested against this snapshot's viewport.</summary>
+    public IReadOnlyList<WorldPixelPoint> PorreSparkles { get; init; } = [];
+    public string PorreSparkleStage { get; init; } = "not sampled";
     public bool IsVisible(int fineX, int fineY)
     {
         for (var x = -1; x <= 1; x++)
@@ -117,6 +121,7 @@ public static class WorldNavigationCapture
         var gold = StoryMemoryCapture.Gold(memory, actors);
         stage = "world vehicles";
         var vehicles = VehicleNavigationCapture.State(memory, data, actors, motion.World);
+        var sparkles = WorldSparkleCapture.Capture(memory, motion, out var sparkleStage);
         var recheck = new byte[records.Length];
         if (recheckMotion() != motion ||
             !Value(memory, actors + 0x110B0, 4, out var secondProgress) || secondProgress != progress ||
@@ -132,6 +137,8 @@ public static class WorldNavigationCapture
             Story = new((int)progress, globals.TryGetValue(0x140, out var mother) && (mother & 1) != 0)
                 { Globals = globals, Extended = extended, Inventory = inventory, Party = party, Gold = gold },
             Vehicles = vehicles,
+            PorreSparkles = sparkles,
+            PorreSparkleStage = sparkleStage,
         };
     }
 

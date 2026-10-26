@@ -4,7 +4,7 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
-public sealed class WorldNavigationSource(IReadableMemory memory, Action<string> diagnostic)
+public sealed class WorldNavigationSource(IReadableMemory memory, Action<string> diagnostic, Action<string>? describe = null)
 {
     private readonly NavigationTextCapture text = new(memory);
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
@@ -15,10 +15,36 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
     private readonly VehicleFlightRegions flightRegions = new();
     private nuint imageBase;
     private string? scene, lastFailure, lastInventory, lastFlightFailure, lastFlightInventory;
+    private bool sparklesAnnounced;
+    private (uint Context, uint Data, uint Actors, uint Renderer, int World)? sparkleOwner;
+    private string? pendingSparkles, pendingSparkleScene, lastSparkleEvidence;
     public string MotionStage { get; private set; } = "not sampled";
     public string FlightStage { get; private set; } = "not sampled";
     public void BindImageBase(nuint value) => imageBase = value;
-    public void Reset() { discovered.Clear(); exitLabels.Reset(); scene = null; lastInventory = null; lastFlightInventory = null; }
+    public void Reset()
+    {
+        ResetTargets(); ObserveField();
+    }
+    private void ResetTargets()
+    {
+        discovered.Clear(); exitLabels.Reset(); scene = null; lastInventory = null; lastFlightInventory = null;
+        pendingSparkles = null; pendingSparkleScene = null;
+    }
+    public void ObserveField()
+    {
+        sparklesAnnounced = false;
+        sparkleOwner = null; pendingSparkles = null; pendingSparkleScene = null; lastSparkleEvidence = null;
+    }
+    /// <summary>Called by the observation adapter after interrupting area speech.</summary>
+    public void PublishDescriptions(NavigationFrame? frame)
+    {
+        var cue = pendingSparkles; var owner = pendingSparkleScene;
+        pendingSparkles = null; pendingSparkleScene = null;
+        if (cue is null || frame is not { CanNavigate: true } || frame.Scene != owner || describe is null) return;
+        describe(cue);
+        sparklesAnnounced = true;
+        diagnostic("World sparkle cue published after area speech.");
+    }
     public FootstepFrame? CaptureMotion(nint context)
     {
         var motion = WorldNavigationCapture.Motion(memory, imageBase, (nuint)context, out var stage);
@@ -68,7 +94,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
     public NavigationFrame Build(WorldNavigationSnapshot world, Func<int, string?> label)
     {
         var identity = $"world:{world.Motion.Context:X8}:{world.Motion.World}";
-        if (scene != identity) { Reset(); scene = identity; }
+        if (scene != identity) { ResetTargets(); scene = identity; }
         var player = new NavigationPoint(world.Motion.PixelX * 16, world.Motion.PixelY * 16, 1);
         NavigationPoint? walkingEndpoint = world.WalkingEndpoint is { } end ? new(end.X * 16, end.Y * 16, 1) : null;
         var graph = new WorldNavigationGraph(world.Map, world.Properties, walkingEndpoint, walkingEndpoint);
@@ -132,6 +158,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         }
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
+        DescribeSparkles(world, targets, destinations, label);
         exitLabels.Apply(targets);
         if (world.Motion.World == 2 && world.Story?.Global(0x7C) is { } windFlags && (windFlags & 2) != 0 &&
             targets.Any(t => destinations.TryGetValue(t.Id, out var destination) && destination == 244 &&
@@ -264,7 +291,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         if (world.Vehicle is not { } vehicle) throw new ArgumentException("A flight frame requires the vehicle motion.", nameof(world));
         var kind = vehicle.Kind;
         var identity = $"world:{world.Motion.Context:X8}:{world.Motion.World}:{(kind == VehicleKind.Epoch ? "epoch" : "dactyl")}";
-        if (scene != identity) { Reset(); scene = identity; }
+        if (scene != identity) { ResetTargets(); scene = identity; }
         var player = new NavigationPoint(vehicle.PixelX * 16, vehicle.PixelY * 16, 1);
         var walking = new WorldNavigationGraph(world.Map, world.Properties);
         var endpoint = vehicle.SegmentEnd is { } end ? new NavigationPoint(end.X * 16, end.Y * 16, 1) : player;
@@ -339,8 +366,39 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         var era = world.EraMessageIndex > 0 ? label(world.EraMessageIndex) : null;
         if (era?.All(c => char.IsWhiteSpace(c) || c == '?') == true) era = "unknown era";
         var ride = kind == VehicleKind.Epoch ? "flying the Epoch" : "riding the Dactyls";
+        DescribeSparkles(world, targets, destinations, label);
         exitLabels.Apply(targets);
         return new(identity, true, player, targets.AsReadOnly(), graph, NavigationUnits.WorldStep)
         { AreaName = string.IsNullOrWhiteSpace(era) ? $"World map, {ride}" : $"World map, {era}, {ride}" };
+    }
+
+    private void DescribeSparkles(WorldNavigationSnapshot world, List<NavigationTarget> targets,
+        IReadOnlyDictionary<string, int> destinations, Func<int, string?> label)
+    {
+        pendingSparkles = null; pendingSparkleScene = null;
+        var motion = world.Motion;
+        var owner = (motion.Context, motion.ScriptData, motion.ActorBase, motion.Renderer, motion.World);
+        if (sparkleOwner != owner) { sparklesAnnounced = false; sparkleOwner = owner; }
+        if (motion.World != 0) return;
+        var visible = world.PorreSparkles.Any(p => world.IsVisible(p.X * 16, p.Y * 16));
+        var available = world.Entrances.Any(e => e.Available && e.NameIndex == 1 && e.Destination == 50);
+        var name = available ? label(1) : null;
+        var evidence = $"{world.PorreSparkleStage}; children={world.PorreSparkles.Count != 0}; visible={visible}; " +
+            $"namedEntrance={available && !string.IsNullOrWhiteSpace(name)}; published={sparklesAnnounced}";
+        if (lastSparkleEvidence != evidence)
+        {
+            lastSparkleEvidence = evidence;
+            diagnostic($"World sparkle evidence: {evidence}; drawnCount={world.PorreSparkles.Count}.");
+        }
+        if (!visible || string.IsNullOrWhiteSpace(name)) return;
+        var manor = targets.FindIndex(t => t.Category == NavigationCategory.Exits &&
+            destinations.TryGetValue(t.Id, out var destination) && destination == 50 &&
+            t.Id.StartsWith("world-exit:1:50:", StringComparison.Ordinal));
+        var cue = $"Sparkles rise above {name.Trim().TrimEnd('.')}.";
+        // Apply after discovery caching: offscreen or ended effects must not survive
+        // in a remembered entrance. Keep its native approach points and Confirm.
+        if (manor >= 0) targets[manor] = targets[manor] with { Instruction = targets[manor].Instruction + " " + cue };
+        if (sparklesAnnounced) return;
+        pendingSparkles = cue; pendingSparkleScene = scene;
     }
 }
