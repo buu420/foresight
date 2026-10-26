@@ -37,6 +37,24 @@ internal static class BlackOmenTargets
     public static FullStoryObjective ForRoom(FullStoryObjective objective, int scene, FieldStoryState state)
     {
         if (objective.Id != "full:lavos") return objective;
+        if (scene == 99)
+        {
+            // Atel0455 and the optional elevator guide use this native stop
+            // order. The return doorway is not forward at stops01/04.
+            var flags = state.Global(0x1A7);
+            int? actor = flags is not { } stop ? null : (stop & 1) != 0 ? 3 :
+                (stop & (2 | 8)) != 0 ? 1 : (stop & 4) != 0 ? 2 : null;
+            return objective with
+            {
+                Label = "Continue through Black Omen",
+                // Empty goals deliberately suppress the generic End of Time
+                // fallback when the current native stop cannot be established.
+                Goals = actor is { } control ? [new(scene, [control], [])] : [],
+                Instruction = actor is null ? "The elevator's current stop is unavailable. Check the local controls."
+                    : actor == 1 ? "Continue through the elevator doorway."
+                    : "Use the sparkle to ride the elevator.",
+            };
+        }
         StoryGoal? goal = scene switch
         {
             97 => new(scene, [], ["script-region:0:98:7:6:8:6"]),
