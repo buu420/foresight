@@ -16,8 +16,8 @@
 - [x] Reproduce slow-work controller cancellation; add meaningful RED tests, repair shared freshness, retain real loss-of-control checks and add bounded menu-reset diagnostics.
 - [x] Verify native boarding/entrance priority and add RED tests for overlapping parked vehicles. Prefer clear foot contacts with a strict native-boundary fallback, and select legal landing sites that leave a connected entrance contact clear. Native landing restrictions and player Confirm remain authoritative.
 - [x] Add RED regressions for local vortex Story Events and both navigation modes; bind to the existing unlocked native passages with unknown state withholding routes.
-- [ ] Resolve the Opus audit and focused review. Run relevant suites, then the full solution and Release checks.
-- [ ] Version the tester build, package and verify exact x86 payload, deploy with protected-file preservation, and put the tester ZIP and focused instructions in Downloads. Record evidence and live-test limits.
+- [x] Resolve the Opus audit and focused review. Run relevant suites, then the full solution and Release checks.
+- [x] Version the tester build, package and verify exact x86 payload, deploy with protected-file preservation, and put the tester ZIP and focused instructions in Downloads. Record evidence and live-test limits.
 
 **Review focus:** Slow capture/speech versus a genuinely stale device; queued commands across scene changes; absent/unknown boarding geometry; nonaligned landing phases and disconnected terrain; vortex completion/unreadable state and entrances that lead backward.
 
@@ -26,3 +26,5 @@ No live gameplay, physical-controller, audible-speech or recipient-PC claim foll
 The Opus audit reproduced a second cause of lag: about 1,092 repeated story-state enumerations per reroute. Prepare each objective's distance map once, keep value-based invalidation between captures, and verify work by enumeration count. The native loop runs up to ten task ticks per physical poll. Add that regression alongside real poll gaps and announce unexpected menu closures, including queue overflow and manual takeover.
 
 The focused review found that 659/660 are shuffled vortex Geno Dome copies. Include them while retaining classic Geno Dome scenes248/256/268/127. Scene659 tests use an explicit synthetic live-exit override and withhold routing when it is absent. Suppress identical routed Story Events duplicates and verify the selected target ID. Native boarding extents were independently decoded from bankc2_half.bin: party8/8/8/8, Epoch and Dactyl0/0/0/8. Live captures still supply production values.
+
+Completed as local tester build0.3.78, payload commit2bf26ef53a533332e0662a436a52cd52fd5d5354. The full rerun passed4,864 tests; the exact-package x86 replay passed167 checks; deployment and independent verification passed303 checks each; all229 protected files remained unchanged. The final Opus5.5max closure found no blockers. Candidate2 supersedes candidate1. The ZIP and checklist are in Downloads; public publication and live gameplay remain pending. See artifacts/handoffs/2026-10-26-foresight-0378.md.
