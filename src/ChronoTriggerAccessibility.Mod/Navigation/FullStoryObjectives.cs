@@ -128,7 +128,7 @@ public static class FullStoryObjectives
             "The trail is on the 600 AD map a short way east of Dorino.")),
 
         Upto(0x60,
-            Sub("masa-mune", "Approach the sword and face Masa and Mune", [With(151, 11)], Flag(0xF3, 0x20)),
+            Sub("masa-mune", "Explore the inner Denadoro Mountains", [With(151, 11)], Flag(0xF3, 0x20)),
             Tail("broken-blade", "Pick up the broken sword", [With(151, 10)])),
 
         Upto(0x66, Tail("tata", "Get the badge from Tata", [With(152, 9)],
@@ -152,7 +152,7 @@ public static class FullStoryObjectives
 
         Upto(0x78, Tail("chief-hut", "Ask the chief about the missing gate key", [With(275, 6)])),
 
-        Upto(0x7B, Tail("forest-maze", "Find Kino in the Forest Maze", [With(282, 19)])),
+        Upto(0x7B, Tail("forest-maze", "Explore the Forest Maze", [With(282, 19)])),
 
         Upto(0x7C, Tail("nizbel", "Fight through the Reptite Lair", [At(289)],
             "The lair is south of the Forest Maze on the prehistoric map.")),
@@ -181,7 +181,7 @@ public static class FullStoryObjectives
             Sub("keep-entrance", "Return to the light in the keep's entrance hall", [With(166, 10)], Flag(0xA3, 0x02)),
             Sub("keep-slash-guards", "Talk to the figure in the west wing", [With(169, 9)], Flag(0xA3, 0x40)),
             Sub("keep-slash", "Face Slash in the west wing", [With(169, 11)], Flag(0xA3, 0x04)),
-            Sub("keep-flea", "Face Flea in the east wing", [With(173, 11)], Flag(0xA3, 0x08)),
+            Sub("keep-flea", "Return to the east wing", [With(173, 11)], Flag(0xA3, 0x08)),
             Sub("keep-ozzie-corridor", "Approach Ozzie in the central chamber", [With(170, 10)], Flag(0xAC, 0x02)),
             Tail("keep-ozzie", "Follow the entrance-hall warp and pursue Ozzie", [With(174, 10)],
                 "Both lieutenants must be defeated before the entrance-hall light leads farther into the keep.")),
@@ -282,9 +282,8 @@ public static class FullStoryObjectives
         Upto(0xD4, Tail("black-omen-rises", "Take the Epoch up and watch the sky", [With(477, 8)],
             "Taking off after North Cape raises the Black Omen and opens the rest of the world. Boarding and flying the Epoch is done from the world map.")),
 
-        Upto(0xD5, Tail("time-egg", "Ask Gaspar at the End of Time for the time egg",
-            [With(EndOfTime, Gaspar), At(EndOfTime)],
-            "The egg is what makes reviving Crono possible. Every remaining quest is optional from here.")),
+        Upto(0xD5, Tail("time-egg", "Speak with the old man at the End of Time",
+            [With(EndOfTime, Gaspar), At(EndOfTime)])),
 
         // Nothing after the time egg is compulsory. The gate beside the pillars is the
         // shortest honest answer; the Black Omen and the Epoch are alternatives and live

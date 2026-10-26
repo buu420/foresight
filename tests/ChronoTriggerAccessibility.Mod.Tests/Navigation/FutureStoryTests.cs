@@ -160,7 +160,7 @@ public sealed class FutureStoryTests
         Assert.Equal("Return toward the pillars of light", Goal(464, State(73), [Target("landmark:24")]).Label);
         Assert.Equal("Speak with the old man again", Goal(464, State(74), [oldMan]).Label);
         Assert.Equal("Enter the room behind the old man", Goal(464, State(75), [Target("exit:0")]).Label);
-        Assert.Equal("Speak with Spekkio", Goal(465, State(75), [Target("actor:10:5:225")]).Label);
+        Assert.Equal("Speak with the creature in the back room", Goal(465, State(75), [Target("actor:10:5:225")]).Label);
         var lesson = Goal(465, State(76), []);
         Assert.True(lesson.IsStoryNote);
         Assert.Contains("clockwise", lesson.Instruction);

@@ -15,10 +15,12 @@ public sealed class EndOfTimeTests
         // Tester log line 3632: class 6, visual E1, position (1920,2559).
         var actor = Actor(10, 1920, 2559) with { ClassTag = 6, VisualIndex = 225, LoadedFlag = 1, DrawMode = 1 };
         var frame = Build(465, [actor], State(75), OpenMap(), new(1536, 3359, 1));
-        Assert.Equal("Spekkio", Assert.Single(frame.Targets, t => t.Id == "actor:10:6:225").Label);
+        Assert.Equal("Creature", Assert.Single(frame.Targets, t => t.Id == "actor:10:6:225").Label);
         var objective = Assert.Single(frame.Targets, t => t.Id == "story:future:spekkio");
         Assert.False(objective.IsStoryNote);
         Assert.NotEmpty(objective.ApproachPoints);
+        var introduced=Build(465,[actor],State(76),OpenMap(),new(1536,3359,1));
+        Assert.Equal("Spekkio",Assert.Single(introduced.Targets,t=>t.Id=="actor:10:6:225").Label);
     }
 
     [Theory]

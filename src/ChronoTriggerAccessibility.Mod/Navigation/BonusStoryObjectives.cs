@@ -145,7 +145,7 @@ public static class BonusStoryObjectives
         V("future:alarm", "Reach the east laboratory's security chamber", Arrival(622)),
         V("future:register", "Register an administrator at the east laboratory console", Actor(622, 8)),
         V("future:release", "Release the security locks using the laboratory console", Actor(620, 8)),
-        new("bonus:eclipse:gaspar", "Ask Gaspar about the three completed Dimensional Vortices",
+        new("bonus:eclipse:gaspar", "Ask the old man about the completed Dimensional Vortices",
             [Actor(464, 28)], Category: NavigationCategory.People),
         new("bonus:eclipse:gate", "Use the End of Time Gate to reach Time's Eclipse",
             [Actor(464, 9)], "Choose Time's Eclipse.", NavigationCategory.Exits),

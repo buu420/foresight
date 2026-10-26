@@ -119,7 +119,7 @@ public static class ClassicOptionalObjectives
         Actor("geno:brain", "Enter Mother Brain's chamber", 268, 30,
             "Both dolls must be on their pedestals. The battle and Robo's rewards follow."),
 
-        Person("rainbow:toma", "Speak with Toma at the 600 AD Choras tavern", 188, 13),
+        Person("rainbow:toma", "Speak with the patron at the 600 AD Choras tavern", 188, 13),
         Actor("rainbow:tomb", "Pour Toma's drink on his tomb at West Cape in 1000 AD", 63, 8),
         Exit("rainbow:claw-entrance", "Follow Giant's Claw's entrance passage to the throne room", 195, 1),
         Exit("rainbow:claw-throne", "Continue south through Giant's Claw's throne room", 297, 0),
@@ -160,17 +160,16 @@ public static class ClassicOptionalObjectives
         Person("rainbow:forge", "Show Melchior the Sun Stone in the treasury", 440, 23,
             "Speak again after choosing the Rainbow Shell equipment to collect the combined rewards."),
 
-        Actor("ozzie:flea", "Defeat Flea in Ozzie's Fort", 183, 9),
-        Actor("ozzie:slash", "Defeat Slash in Ozzie's Fort", 184, 9),
-        Actor("ozzie:guillotine", "Pass the guillotine trap in Ozzie's Fort", 179, 0,
-            "Approach the northeastern passage. Do not stand beneath the blade for the chest."),
-        Actor("ozzie:three", "Face Ozzie, Flea and Slash together", 180, 8),
-        Actor("ozzie:switch", "Face Ozzie and strike the switch behind him", 181, 8,
-            "The battle drops the party into the previous room; return to Ozzie's room afterward."),
-        Actor("ozzie:return", "Return to Ozzie's room after the floor drops", 181, 8),
+        // The native flags select a route, not permission to disclose the next
+        // encounter, its solution or its outcome before the player sees it.
+        Actor("ozzie:flea", "Continue through Ozzie's Fort", 183, 9),
+        Actor("ozzie:slash", "Continue through Ozzie's Fort", 184, 9),
+        Actor("ozzie:guillotine", "Continue through Ozzie's Fort", 179, 0),
+        Actor("ozzie:three", "Continue through Ozzie's Fort", 180, 8),
+        Actor("ozzie:switch", "Continue through Ozzie's Fort", 181, 8),
+        Actor("ozzie:return", "Continue through Ozzie's Fort", 181, 8),
 
-        Person("revival:egg", "Ask Gaspar for the means to bring Crono back", EndOfTime, 28,
-            "Speak to him again after he calls the party back."),
+        Person("revival:egg", "Speak with the old man at the End of Time", EndOfTime, 28),
         Person("revival:doll-game", "Get Crono's doppelganger from Norstein Bekkler", 434, 11,
             "Play the imitation game at the fair. A won or purchased doll is sent to Crono's room; it still has to be collected."),
         Person("revival:mother", "Speak to Crono's mother upstairs at his house", 2, 8),

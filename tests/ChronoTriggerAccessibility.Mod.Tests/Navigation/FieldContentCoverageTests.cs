@@ -88,11 +88,16 @@ public sealed class FieldContentCoverageTests
         var missing = new List<string>();
         foreach (var row in Content.Actors)
         {
+            // Atel0474 actor1 is an unmarked false-wall discovery, not visible
+            // scenery. Its covered loot is tested after the native reveal below.
+            if(row.Scene==179&&row.Actor==1)continue;
             var actor = Snapshot(new(row.Actor, row.Class, row.Visual, row.X, row.Y));
             var offered = false;
             foreach (var state in States(row.Scene, actor))
             {
-                var frame = Build(row.Scene, [actor], state, Open(row.X, row.Y));
+                var visibleState=row.Scene==179&&row.Actor==13
+                    ?state with{Locals=new Dictionary<int,int>(state.Locals){[11]=1}}:state;
+                var frame = Build(row.Scene, [actor], visibleState, Open(row.X, row.Y));
                 // A battle the encounter layer offers under Enemies is offered too.
                 if (frame.Targets.Any(t => t.Id == Id(actor, row.Scene) || t.Id == $"actor-encounter:{actor.Index}")) { offered = true; break; }
             }
@@ -322,8 +327,19 @@ public sealed class FieldContentCoverageTests
                 Assert.Equal((r.X * 256 + 128, r.Y * 256 + 128), (treasure.FineX, treasure.FineY));
                 Assert.Equal((r.Shape & 1) != 0 && r.Tile is 0xFE or 0xEE or 0xE0 or 0xF0, treasure.IsChest);
             }
-            var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, map,
-                new(0, 0, scene.Width * 256, scene.Height * 256), found, new FieldStoryState(10, false));
+            var visibleMap=map;
+            var visibleState=new FieldStoryState(10,false);
+            if(scene.Scene==179)
+            {
+                // The native opening copies bit1 clear at these three cells;
+                // preserve the raw-reader assertions above, then test revealed loot.
+                var revealed=(byte[])shapes.Clone();
+                foreach(var r in inside.Where(r=>r.Index is >=85 and <=87))revealed[r.Y*scene.Width+r.X]&=0xFD;
+                visibleMap=map with{CollisionShapes=revealed};
+                visibleState=visibleState with{Locals=new Dictionary<int,int>{{11,1}}};
+            }
+            var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, visibleMap,
+                new(0, 0, scene.Width * 256, scene.Height * 256), found, visibleState);
             foreach (var treasure in found)
                 Assert.Contains(frame.Targets, t => t.Id == $"chest:{treasure.Index}" &&
                     t.Label == (treasure.IsChest ? "Treasure chest" : "Item pickup"));

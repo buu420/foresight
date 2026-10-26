@@ -97,7 +97,7 @@ public static class FutureAreaLabels
     public static string PillarLabel(GameNavigationCatalog.Region region) => $"Pillar of light {region.Actor - 14}";
 
     public static string PillarInstruction(FieldStoryState state) => state.Point < 77
-        ? "Complete the old man's introduction and Spekkio's lesson to use the pillars."
+        ? "Complete the old man's introduction and the lesson in the back room to use the pillars."
         : "Stand in the light and press Confirm to read its destination.";
 
     public static string? ExitLabel(int scene, int exit) => (scene, exit) switch

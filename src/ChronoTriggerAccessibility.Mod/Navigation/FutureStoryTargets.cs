@@ -228,7 +228,7 @@ public static class FutureStoryTargets
                 Exit("spekkio-room", "Enter the room behind the old man", 0);
                 break;
             case 465 when p < 76:
-                Bind("spekkio", "Speak with Spekkio", SpekkioBindings());
+                Bind("spekkio", "Speak with the creature in the back room", SpekkioBindings());
                 break;
             case 465 when p == 76:
                 MagicLesson();

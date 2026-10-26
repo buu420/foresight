@@ -109,6 +109,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             if (field.SceneIdCoherent && ZealFieldLabels.IsBookEffect(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && (OzzieFortScenery.IsBladePart(field.SceneId,actor) ||
+                OzzieFortScenery.ConcealedActor(field.SceneId,actor,map,story))) continue;
             if (field.SceneIdCoherent && (OceanPalaceTargets.ConcealedSprite(field.SceneId, actor) ||
                 OceanPalaceTargets.ParkedCast(field.SceneId, actor, story))) continue;
             if (field.SceneIdCoherent && KeepFieldTargets.IsRegionLightSprite(field.SceneId, actor)) continue;
@@ -178,14 +180,18 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? characterName?.Invoke(actor.VisualIndex) : null;
             var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) : null;
             var capeEncounter = field.SceneIdCoherent ? NorthCapeTargets.EncounterLabel(field.SceneId, actor, story, characterName) : null;
-            var label = book ?? capeEncounter ?? questObject?.Label ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
+            var recurring = field.SceneIdCoherent ? RecurringNpcLabels.Resolve(field.SceneId, actor, story) : default;
+            var familiarName = recurring.Handled ? recurring.Name :
                 field.SceneIdCoherent ? OpeningStoryTargets.ActorLabel(field.SceneId, actor) ??
                 StoryCharacterLabels.ActorLabel(field.SceneId, actor, story) ??
                 FutureAreaLabels.ActorLabel(field.SceneId, actor, story) ?? OptionalGuideTargets.ActorLabel(field.SceneId, actor) ??
-                ZealFieldLabels.Actor(field.SceneId, actor) ?? nu ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null);
+                ZealFieldLabels.Actor(field.SceneId, actor) ?? nu ?? (IsCathedralOrgan(actor) ? "Organ" : null) : null;
+            var label = book ?? capeEncounter ?? questObject?.Label ?? (!string.IsNullOrWhiteSpace(currentName) ? currentName :
+                familiarName);
             if (field.SceneIdCoherent && DeathPeakTargets.IsDrawnDoll(field.SceneId, actor)) label = "Doll";
             // These names identify a character the player can see; alone they are not a destination.
-            var onScreenName = field.SceneIdCoherent ? StoryCharacterLabels.OnScreenName(field.SceneId, actor, story) : null;
+            var onScreenName = recurring.Handled ? recurring.Name :
+                field.SceneIdCoherent ? StoryCharacterLabels.OnScreenName(field.SceneId, actor, story) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
                 actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
             var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
@@ -221,7 +227,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 description.Label, description.Category, position, approaches, inView,
                 storyOnly: encounterOnly,
                 storyCandidate: !conveyorRobot,
-                guideAvailable: !conveyorRobot && guideActive && (!lairHole || actor.ScriptCallsEnabled) &&
+                guideAvailable: !conveyorRobot && guideActive && (!recurring.Handled || recurring.Name is null || seen) &&
+                    (!lairHole || actor.ScriptCallsEnabled) &&
                     (label is not null && label != onScreenName || actor.IsActivationCandidate || scriptedAction || npcRegion is not null),
                 instruction: capeEncounter is not null ? NorthCapeTargets.EncounterInstruction :
                     conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : questObject?.Description,
@@ -245,8 +252,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 if (same) standInsOf.Add((id, standIn.ClassTag == 7 ? $"landmark:{standIn.Index}"
                     : $"actor:{standIn.Index}:{standIn.ClassTag}:{standIn.VisualIndex}"));
         }
+        if(OzzieFortScenery.VisibleBlade(field,viewport) is{} blade)
+            targets.Add(new("scenery:fort-blade","Hanging blade",NavigationCategory.Objects,
+                Position(blade.FineX,blade.FineY),[],true,true)
+            {
+                Instruction="A metal blade hangs on a chain above a chest.",
+                GuidanceRestriction="This is visible scenery with no interaction.",
+            });
         foreach (var chest in treasures)
         {
+            if(field.SceneIdCoherent&&OzzieFortScenery.ConcealedTreasure(field.SceneId,chest,map,story))continue;
             var sandChest = field.SceneIdCoherent && chest.IsChest && SunkenDesertNavigation.ChestRoom(field.SceneId);
             var position = Position(chest.FineX, chest.FineY);
             // Approach(position) is the centre of each neighbouring tile, and the one-eighth-tile
@@ -312,6 +327,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
             if (KeepFieldTargets.ConcealedActor(field.SceneId, actor.Index)) continue;
+            if (OzzieFortScenery.ConcealedMarker(field.SceneId,actor)) continue;
             if (BlackbirdDuctTargets.ConcealedLandmark(field.SceneId, actor.Index, map)) continue;
             // Actor36's native A4 branch has an operand the older catalog missed.
             // Its boarding choice is described only by the verified dock provider.
@@ -735,8 +751,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
             {
-                AreaName = field.SceneId is 337 or 464 ? GameNavigationCatalog.AreaName(field.SceneId)
-                    : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId),
+                AreaName = CharacterRoomLabels.AreaName(field.SceneId) ?? OzzieFortLabels.AreaName(field.SceneId) ??
+                    (field.SceneId is 337 or 464 ? GameNavigationCatalog.AreaName(field.SceneId)
+                    : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId)),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
                 MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height

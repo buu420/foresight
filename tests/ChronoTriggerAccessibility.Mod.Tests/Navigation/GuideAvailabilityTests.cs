@@ -94,7 +94,7 @@ public sealed class GuideAvailabilityTests
         var frame = source.Build(Field(5, merchant), Map(), new(0, 0, 256, 256), [pickup], new(3, false));
         var person = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.People);
         var item = Assert.Single(frame.Targets, t => t.Category == NavigationCategory.Objects);
-        Assert.Equal("Melchior the swordsmith", person.Label);
+        Assert.Equal("Shopkeeper", person.Label);
         Assert.Equal("Item pickup", item.Label);
         Assert.All(new[] { person, item }, t => { Assert.True(t.GuideAvailable); Assert.False(t.Discovered); });
         var controller = new NavigationController();
