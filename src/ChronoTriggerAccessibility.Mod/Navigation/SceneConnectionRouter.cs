@@ -116,9 +116,15 @@ public sealed class SceneConnectionRouter
     /// time gate, or vehicle cinematic. Antiquity's surface/sky Land Bridges are
     /// allowed because they do not change era. Used to associate destinations with eras.</summary>
     public int? DistanceWithinFields(int scene, FieldStoryState state, params int[] goals)
+        => DistancesWithinFields(state, goals).TryGetValue(scene, out var value) ? value : null;
+
+    /// <summary>Prepare one captured state and goal set, then query any number
+    /// of entrance scenes without rebuilding the full state key for each one.
+    /// A later call still fingerprints the supplied values, including reused dictionaries.</summary>
+    public IReadOnlyDictionary<int, int> DistancesWithinFields(FieldStoryState state, params int[] goals)
     {
         Update(state);
-        return Distances(goals, true).TryGetValue(scene, out var value) ? value : null;
+        return Distances(goals, true);
     }
 
     private void Update(FieldStoryState state)

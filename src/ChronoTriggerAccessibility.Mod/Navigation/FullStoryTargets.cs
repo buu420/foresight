@@ -70,6 +70,12 @@ public sealed class FullStoryTargets
                 instruction = $"Next passage: {next}." + (instruction is null ? "" : " " + instruction);
             var bound = StoryTarget.BindAny(objective.Id, objective.Label, candidates,
                 candidates.Select(t => t.Id).ToArray(), player, instruction);
+            // The primary row already carries this vortex route. Keep distinct
+            // local People/Objects/Exits entries, but not an identical second
+            // Story Events passage after routing the optional copy.
+            if (routed && chapter.Id.StartsWith("bonus:vortex:", StringComparison.Ordinal) &&
+                result.Any(t => t.Id == "story:full:lavos" && t.Label == bound.Label &&
+                    t.ApproachPoints.SequenceEqual(bound.ApproachPoints))) continue;
             // A passage toward an NPC or object is a story direction, not that
             // entity's presence in the current room or on the world map.
             result.Add(bound with { Category = routed ? NavigationCategory.StoryEvents : objective.Category });

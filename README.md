@@ -6,7 +6,7 @@ Story and optional-destination data span the game, but this is **not a completed
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.78 corrects a controller timeout during slow navigation work, keeps entrance approaches clear of a parked vehicle's boarding area, and makes Story Events follow the local Dimensional Vortex objective. Manual guidance and auto-walk use the same native targets. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.78.md).
+Version 0.3.78 speeds up world navigation, corrects a controller timeout during slow work, announces unexpected menu closures, keeps landing and entrance approaches clear of parked vehicles, and makes Story Events follow the local Dimensional Vortex objective. Manual guidance and auto-walk use the same native targets. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.78.md).
 
 At North Cape, the encounter's sparkling light is listed as **Magus encounter**, using his current name if renamed. In Bekkler's copy game, each demonstrated pose gives a short cue such as **Y. Laugh.** Button letters follow the game's current configuration. Repeat the action with the normal game controls after its signal; the game keeps its original timing. The native instructions, result and prize dialogue remain readable.
 

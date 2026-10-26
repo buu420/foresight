@@ -308,8 +308,8 @@ public static class FullStoryObjectives
     {
         // Inside a vortex, the primary Story Events row follows that local
         // sequence. The generic final-battle route otherwise leads back outside.
-        //655 is its volcano side room;659/660 are unrelated Geno Dome rooms.
-        if (scene is >= 595 and <= 650 or 655 or >= 661 and <= 666)
+        //655 is its volcano side room;659/660 are shuffled Geno Dome copies.
+        if (scene is >= 595 and <= 650 or 655 or >= 659 and <= 666)
         {
             var local = BonusStoryObjectives.Build(scene, state)
                 .FirstOrDefault(o => o.Id.StartsWith("bonus:vortex:", StringComparison.Ordinal));

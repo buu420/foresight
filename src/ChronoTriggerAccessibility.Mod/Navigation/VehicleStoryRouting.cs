@@ -14,10 +14,11 @@ public sealed class VehicleStoryRouting
     public const string EpochId = "vehicle:epoch", DactylId = "vehicle:dactyl";
     public const string EpochLabel = "Epoch", DactylLabel = "Dactyls";
     private readonly Func<int, FieldStoryState, int[], int?> distance;
+    private readonly SceneConnectionRouter? router;
 
     public VehicleStoryRouting()
     {
-        var router = new SceneConnectionRouter();
+        router = new SceneConnectionRouter();
         distance = (scene, state, goals) => router.DistanceWithinFields(scene, state, goals);
     }
 
@@ -74,11 +75,14 @@ public sealed class VehicleStoryRouting
         // the destination is the useful choice for an available time machine.
         var direct = goals.Where(g => g != FullStoryObjectives.EndOfTime).ToArray();
         if (direct.Length != 0) goals = direct;
+        var prepared = router?.DistancesWithinFields(story, goals);
+        int? Distance(int scene) => prepared is null ? distance(scene, story, goals) :
+            prepared.TryGetValue(scene, out var value) ? value : null;
         var flyer = nearest.FirstOrDefault(v => v.Id == DactylId || v.Id == EpochId && epochWings);
         // Only a currently enabled entrance counts as a local destination. Bounded
         // field look-ahead may not leave that entrance through a Gate and re-enter
         // a different era or a different landmass.
-        if (flyer is not null && worldDestinations.Values.Distinct().Any(dest => distance(dest, story, goals) is not null))
+        if (flyer is not null && worldDestinations.Values.Distinct().Any(dest => Distance(dest) is not null))
         {
             return BindVehicle(flyer, $"The way there is not on this landmass. Board the {flyer.Label} and fly.");
         }
@@ -92,7 +96,7 @@ public sealed class VehicleStoryRouting
         var eras = GameNavigationCatalog.Worlds.Where(e => GameNavigationCatalog.IsFieldScene(e.Destination) &&
                 e.WorldId is >= 0 and <= 6 && EraMessageIndex(e.WorldId) != EraMessageIndex(world) &&
                 (e.WorldId is not (4 or 5 or 6) || (story.Point <= 203 ? e.WorldId != 6 : e.WorldId == 6)))
-            .Select(e => (World: e.WorldId, Distance: distance(e.Destination, story, goals)))
+            .Select(e => (World: e.WorldId, Distance: Distance(e.Destination)))
             .Where(e => e.Distance is not null).OrderBy(e => e.Distance).ThenBy(e => e.World).ToArray();
         if (eras.Length == 0) return null;
         var closest = eras.Where(e => e.Distance == eras[0].Distance).Select(e => e.World).ToArray();

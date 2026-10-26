@@ -346,7 +346,7 @@ public static class BonusStoryObjectives
             var mask = scene == 595 ? 4 : scene == 661 ? 2 : 1;
             if ((clears & mask) == 0) AddV(scene == 595 ? "present:enter" : scene == 661 ? "future:enter" : "antiquity:enter");
         }
-        else if (scene is >= 625 and <= 644 or >= 596 and <= 600) AddV("shifting-path");
+        else if (scene is >= 625 and <= 644 or >= 596 and <= 600 or 659 or 660) AddV("shifting-path");
         else if (scene is 601 or 663 or 664)
             AddV(scene == 601 ? "present:cave" : scene == 663 ? "future:cave" : "antiquity:cave");
         else if (scene == 645 && (clears & 1) == 0) AddV("antiquity:shade");

@@ -8,6 +8,61 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class ControllerNavigationRuntimeTests
 {
     [Theory]
+    [InlineData("disconnect")]
+    [InlineData("gap")]
+    [InlineData("scene")]
+    [InlineData("focus")]
+    [InlineData("native action")]
+    public void AnImplicitMenuCloseIsAnnouncedBeforeOrdinaryGameControlResumes(string cause)
+    {
+        var h = new Harness(NavigationMode.World);
+        h.Press(NavigationPadButtons.RightStick);
+        h.Speech.Clear();
+        switch (cause)
+        {
+            case "disconnect": h.Runtime.FilterController(0, 0, true, false); break;
+            case "gap": h.Now += 251; h.Tick(); break;
+            case "scene": h.Scene = "next world"; h.Tick(); break;
+            case "focus": h.Foreground = false; h.Tick(); break;
+            default: Assert.Equal(0x80u, h.Tick(0x80)); break;
+        }
+        Assert.False(h.Pad.IsOpen);
+        Assert.Contains(h.Speech, s => s.Contains("Navigation menu closed"));
+        Assert.Contains(h.Diagnostics, s => s.Contains("Navigation menu reset"));
+    }
+
+    [Fact]
+    public void AnOverflowedControllerQueueReportsItsCloseAndDiscardsEarlierWalkRequests()
+    {
+        var h = new Harness(NavigationMode.World);
+        h.Speech.Clear();
+        for (var i = 0; i < 33; i++)
+        {
+            h.Filter(0);
+            h.Filter(NavigationPadButtons.RightStick);
+        }
+        Assert.Equal(0u, h.Tick());
+        Assert.False(h.Pad.IsOpen);
+        Assert.Contains(h.Speech, s => s.Contains("Navigation menu closed") && s.Contains("too many"));
+        Assert.Contains(h.Diagnostics, s => s.Contains("queue overflow"));
+        h.Release();
+        Assert.Equal(0u, h.Tick());
+    }
+
+    [Fact]
+    public void TenNativeStepsBetweenPollsDoNotDiscardTheNextCategoryOrEpochWalk()
+    {
+        var h = new Harness(NavigationMode.World);
+        h.Press(NavigationPadButtons.RightStick);
+        h.CaptureCost = 30;
+        for (var i = 0; i < 10; i++) h.Tick();
+        Assert.True(h.Pad.IsOpen);
+        h.Press(NavigationPadButtons.RightShoulder);
+        Assert.Contains("Exits.", h.Speech.Last());
+        Assert.Equal(0x100u, h.Press(NavigationPadButtons.West));
+    }
+
+    [Theory]
     [InlineData(NavigationMode.Field, false)]
     [InlineData(NavigationMode.World, false)]
     [InlineData(NavigationMode.Epoch, false)]
@@ -244,6 +299,7 @@ public sealed class ControllerNavigationRuntimeTests
     {
         public readonly NavigationGamepad Pad = new();
         public readonly List<string> Speech = [];
+        public readonly List<string> Diagnostics = [];
         public readonly HashSet<int> Keys = [];
         public readonly FieldNavigationRuntime Runtime;
         public bool Foreground = true, Available = true;
@@ -273,7 +329,7 @@ public sealed class ControllerNavigationRuntimeTests
                      new("stairs", "Stairs", NavigationCategory.Exits, p, [p], true, false)], new Line());
             }
             Runtime = new(_ => Frame(), new(Keys.Contains, () => Foreground), () => Foreground,
-                () => Now, text => { Speech.Add(text); Now += SpeechCost; }, _ => { }, worldCapture: _ => Frame(),
+                () => Now, text => { Speech.Add(text); Now += SpeechCost; }, Diagnostics.Add, worldCapture: _ => Frame(),
                 vehicleCapture: (_, _) => Frame(), vehicleActive: (_, _) => true, gamepad: Pad);
             Runtime.Enable(); Tick(); Release();
         }

@@ -98,7 +98,8 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         var player = new NavigationPoint(world.Motion.PixelX * 16, world.Motion.PixelY * 16, 1);
         NavigationPoint? walkingEndpoint = world.WalkingEndpoint is { } end ? new(end.X * 16, end.Y * 16, 1) : null;
         var graph = new WorldNavigationGraph(world.Map, world.Properties, walkingEndpoint, walkingEndpoint);
-        if (world.StoryPoint is not null || world.Vehicles is not null) regions.Update(world.Map, world.Properties, graph);
+        var hasRegions = world.StoryPoint is not null || world.Vehicles is not null;
+        if (hasRegions) regions.Update(world.Map, world.Properties, graph);
         var targets = new List<NavigationTarget>();
         var storyCandidates = new List<NavigationTarget>();
         var active = new HashSet<string>(StringComparer.Ordinal);
@@ -113,9 +114,16 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             var visible = group.Any(e => world.IsVisible((e.TileX * 16 + 8) * 16, e.TileY * 16 * 16));
             discovered.TryGetValue(key, out var known);
             var nativePoints = group.SelectMany(e => e.ContactPoints).Select(p => new NavigationPoint(p.X * 16, p.Y * 16, 1))
-                .Select(graph.ContactPoint).Where(graph.CanStand).Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).Take(64).ToArray();
-            var points = nativePoints.Where(p => WorldVehicleApproaches.ClearForEntrance(p, world.Vehicles)).ToArray();
-            var vehicleBlocks = nativePoints.Length != 0 && points.Length == 0;
+                .Select(graph.ContactPoint).Where(graph.CanStand).Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).ToArray();
+            var connected = hasRegions ? nativePoints.Where(p => regions.Connected(player, p)).ToArray() : [];
+            var localPoints = connected.Length == 0 ? nativePoints : connected;
+            var clear = localPoints.Where(p => WorldVehicleApproaches.ClearForEntrance(p, world.Vehicles, 0)).ToArray();
+            var preferred = clear.Where(p => WorldVehicleApproaches.ClearForEntrance(p, world.Vehicles)).ToArray();
+            // Prefer arrival clearance, but keep a strict native boundary when
+            // that is the only available row. The native segment finishes before
+            // an entrance can consume Confirm.
+            var points = (preferred.Length == 0 ? clear : preferred).Take(64).ToArray();
+            var vehicleBlocks = localPoints.Length != 0 && clear.Length == 0;
             var restriction = vehicleBlocks
                 ? "A parked vehicle overlaps this entrance. Reposition it, then approach on foot." : null;
             var name = label(group.Key.NameIndex);
@@ -144,6 +152,11 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             if (!visible)
             {
                 if (known is null) continue;
+                if (vehicleBlocks)
+                {
+                    targets.Add(target with { Visible = false, Discovered = true });
+                    continue;
+                }
                 var retained = known!.ApproachPoints.Where(points.Contains).ToArray();
                 if (retained.Length == 0) { discovered.Remove(key); continue; }
                 targets.Add(known with { Visible = false, Discovered = true, ApproachPoints = retained });
@@ -157,7 +170,10 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         AddStory();
         var inventory = $"world={world.Motion.World}; exits={targets.Count(t => t.Category == NavigationCategory.Exits)}; " +
             $"storyEvents={targets.Count(t => t.Category == NavigationCategory.StoryEvents)}; vehicles={vehicles.Count}; " +
-            $"nativeExits={world.Entrances.Count}; story={world.StoryPoint}";
+            $"nativeExits={world.Entrances.Count}; story={world.StoryPoint}; " +
+            $"boardingParty={world.Vehicles?.PartyBoardingShape?.ToString() ?? "unknown"}; " +
+            $"boardingEpoch={world.Vehicles?.EpochBoardingShape?.ToString() ?? "unknown"}; " +
+            $"boardingDactyl={world.Vehicles?.DactylBoardingShape?.ToString() ?? "unknown"}";
         if (inventory != lastInventory)
         {
             lastInventory = inventory;
@@ -301,6 +317,7 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
         if (scene != identity) { ResetTargets(); scene = identity; }
         var player = new NavigationPoint(vehicle.PixelX * 16, vehicle.PixelY * 16, 1);
         var walking = new WorldNavigationGraph(world.Map, world.Properties);
+        regions.Update(world.Map, world.Properties, walking);
         var endpoint = vehicle.SegmentEnd is { } end ? new NavigationPoint(end.X * 16, end.Y * 16, 1) : player;
         VehicleFlightGraph graph = kind == VehicleKind.Epoch ? new EpochFlightGraph(endpoint, endpoint) :
             new DactylFlightGraph(world.Map, world.Properties, endpoint, endpoint);
@@ -325,7 +342,11 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             var name = label(group.Key.NameIndex);
             if (string.IsNullOrWhiteSpace(name)) continue;
             var contacts = group.SelectMany(e => e.ContactPoints).Select(p => new NavigationPoint(p.X * 16, p.Y * 16, 1)).Distinct().ToArray();
-            var sites = VehicleLandingSites.Near(contacts, walking, CanLand, endpoint)
+            var sites = VehicleLandingSites.Near(contacts, walking, CanLand, endpoint, (site, approaches) =>
+            {
+                var parked = WorldVehicleApproaches.AtLanding(site, kind, world.Vehicles);
+                return approaches.Any(p => regions.Connected(site, p) && WorldVehicleApproaches.ClearForEntrance(p, parked, 0));
+            })
                 .Where(graph.CanFly).Distinct().Take(64).ToArray();
             if (sites.Length == 0) { unreachable++; continue; }
             var key = $"world-exit:{group.Key.NameIndex}:{group.Key.Destination}:{group.Key.Facing}:{group.Key.DestinationX}:{group.Key.DestinationY}";

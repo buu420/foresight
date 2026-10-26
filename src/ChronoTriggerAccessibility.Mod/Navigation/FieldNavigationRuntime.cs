@@ -199,8 +199,10 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 var now = clock();
                 diagnostic($"Navigation menu reset: {reason}; mode={mode}; " +
                     $"tickAge={now - lastCall}; controllerPollAge={now - lastControllerPoll}.");
+                speak($"Navigation menu closed: {reason}." + (cancellation.Speech.Count == 0 ? "" :
+                    " " + string.Join(" ", cancellation.Speech)));
             }
-            Emit(cancellation);
+            else Emit(cancellation);
         }
     }
 
@@ -267,9 +269,16 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 var padActions = gamepad?.Poll() ?? [];
                 if (commands.Count != 0 || ManualWalkingInput(originalPad, current) != 0 && gamepad?.IsOpen == true)
                 {
+                    var menuWasOpen = gamepad?.IsOpen == true;
                     gamepad?.Suspend();
                     controllerMenuScene = null;
                     padActions = [];
+                    if (menuWasOpen)
+                    {
+                        var reason = commands.Count == 0 ? "manual control" : "keyboard navigation";
+                        diagnostic($"Navigation menu reset: {reason}; mode={current}; nativePad=0x{originalPad:X}.");
+                        speak($"Navigation menu closed: {reason}.");
+                    }
                 }
                 if (!controller.IsActive && commands.Count == 0 && padActions.Count == 0 && gamepad?.IsOpen != true &&
                     !(climbArmed && current == NavigationMode.Field) && climbArmCancellation is null)
@@ -429,6 +438,13 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                             break;
                         case NavigationPadAction.Close:
                             speech.Add("Navigation menu closed.");
+                            break;
+                        case NavigationPadAction.QueueOverflow:
+                            result = controller.Cancel("controller command queue overflow");
+                            resetMotion?.Invoke();
+                            speech.AddRange(result.Speech);
+                            speech.Add("Navigation menu closed: too many controller commands arrived before the game could process them.");
+                            diagnostic("Navigation menu reset: controller command queue overflow.");
                             break;
                         default:
                             Handle(action switch

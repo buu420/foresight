@@ -11,7 +11,8 @@ public static class VehicleLandingSites
     public const int MaximumSites = 16;
 
     public static IReadOnlyList<NavigationPoint> Near(IReadOnlyList<NavigationPoint> entranceContacts,
-        WorldNavigationGraph walking, Func<NavigationPoint, bool> canLand, NavigationPoint? latticeOrigin = null)
+        WorldNavigationGraph walking, Func<NavigationPoint, bool> canLand, NavigationPoint? latticeOrigin = null,
+        Func<NavigationPoint, IReadOnlyList<NavigationPoint>, bool>? keepsEntranceClear = null)
     {
         var phaseX = (latticeOrigin?.X ?? 0) % WorldNavigationGraph.Step;
         var phaseY = (latticeOrigin?.Y ?? 0) % WorldNavigationGraph.Step;
@@ -28,7 +29,8 @@ public static class VehicleLandingSites
         foreach (var point in start) { visited.Add(point); queue.Enqueue(point); }
         while (queue.TryDequeue(out var current))
         {
-            if (canLand(current)) { found.Add(current); if (found.Count >= MaximumSites) break; }
+            if (canLand(current) && keepsEntranceClear?.Invoke(current, start) != false)
+            { found.Add(current); if (found.Count >= MaximumSites) break; }
             foreach (var (dx, dy) in new[] { (0, -WorldNavigationGraph.Step), (0, WorldNavigationGraph.Step),
                 (-WorldNavigationGraph.Step, 0), (WorldNavigationGraph.Step, 0) })
             {

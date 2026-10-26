@@ -11,7 +11,7 @@ public enum NavigationPadButtons : ushort
 
 public enum NavigationPadAction
 {
-    Open, Close, PreviousCategory, NextCategory, PreviousTarget, NextTarget, Guide, Walk,
+    Open, Close, PreviousCategory, NextCategory, PreviousTarget, NextTarget, Guide, Walk, QueueOverflow,
 }
 
 /// <summary>Owns the spoken navigation menu and the physical presses it consumes.</summary>
@@ -120,7 +120,11 @@ public sealed class NavigationGamepad
     private void Queue(NavigationPadAction action)
     {
         // A stalled consumer cannot accumulate an unbounded sequence of routes.
-        if (pending.Count >= 32) Suspend();
+        if (pending.Count >= 32)
+        {
+            Suspend();
+            pending.Add(NavigationPadAction.QueueOverflow);
+        }
         else pending.Add(action);
     }
 
