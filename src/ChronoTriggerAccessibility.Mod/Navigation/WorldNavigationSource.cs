@@ -112,15 +112,22 @@ public sealed class WorldNavigationSource(IReadableMemory memory, Action<string>
             active.Add(key); destinations[key] = group.Key.Destination;
             var visible = group.Any(e => world.IsVisible((e.TileX * 16 + 8) * 16, e.TileY * 16 * 16));
             discovered.TryGetValue(key, out var known);
-            var points = group.SelectMany(e => e.ContactPoints).Select(p => new NavigationPoint(p.X * 16, p.Y * 16, 1))
+            var nativePoints = group.SelectMany(e => e.ContactPoints).Select(p => new NavigationPoint(p.X * 16, p.Y * 16, 1))
                 .Select(graph.ContactPoint).Where(graph.CanStand).Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).Take(64).ToArray();
+            var points = nativePoints.Where(p => WorldVehicleApproaches.ClearForEntrance(p, world.Vehicles)).ToArray();
+            var vehicleBlocks = nativePoints.Length != 0 && points.Length == 0;
+            var restriction = vehicleBlocks
+                ? "A parked vehicle overlaps this entrance. Reposition it, then approach on foot." : null;
             var name = label(group.Key.NameIndex);
             if (string.IsNullOrWhiteSpace(name)) continue;
             var first = group.First();
             var position = points.Length == 0 ? new NavigationPoint((first.TileX * 16 + 8) * 16, first.TileY * 256, 1) :
                 points.MinBy(p => Math.Abs((long)p.X - player.X) + Math.Abs((long)p.Y - player.Y));
             var target = new NavigationTarget(key, name, NavigationCategory.Exits, position, points, visible, visible || known is not null)
-            { Instruction = "Press Confirm to enter.", ArrivalInstruction = "Press Confirm to enter." };
+            {
+                Instruction = restriction ?? "Press Confirm to enter.", ArrivalInstruction = "Press Confirm to enter.",
+                GuidanceRestriction = restriction,
+            };
             storyCandidates.Add(target);
             if (OptionalGuideAreas.WorldDestination(world.Motion.World, group.Key.Destination, world.StoryPoint))
             {

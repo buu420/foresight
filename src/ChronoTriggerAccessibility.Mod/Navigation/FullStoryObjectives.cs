@@ -306,6 +306,18 @@ public static class FullStoryObjectives
 
     private static FullStoryObjective? ContextObjective(int scene, FieldStoryState state)
     {
+        // Inside a vortex, the primary Story Events row follows that local
+        // sequence. The generic final-battle route otherwise leads back outside.
+        //655 is its volcano side room;659/660 are unrelated Geno Dome rooms.
+        if (scene is >= 595 and <= 650 or 655 or >= 661 and <= 666)
+        {
+            var local = BonusStoryObjectives.Build(scene, state)
+                .FirstOrDefault(o => o.Id.StartsWith("bonus:vortex:", StringComparison.Ordinal));
+            return local is not null
+                ? local with { Id = "full:lavos", Category = NavigationCategory.StoryEvents }
+                : new("full:lavos", "Continue through the Dimensional Vortex", [],
+                    "No local vortex objective is currently available. Browse Exits and Interactable Objects for the available passages and controls.");
+        }
         // The cell's ceiling cannot be reached before the party notices the
         // air duct. Returning from the right deck sets AF20; touching actor10
         // writes B340 and enables actor11's climb into the ventilation shaft.

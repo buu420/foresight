@@ -184,6 +184,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             controllerInputAllowed = false;
             controllerMenuScene = null;
             var wasActive = controller.IsActive;
+            var menuWasOpen = gamepad?.IsOpen == true;
             var cancellation = controller.Cancel(reason);
             climb.Reset();
             if (!preserveClimbArm) CancelClimbArm(reason);
@@ -193,6 +194,12 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             // Their failure must not leave a route or a held command active.
             resetMotion?.Invoke();
             if (wasActive) diagnostic($"Navigation stopped: {reason}; last route: {lastRouteState}.");
+            if (menuWasOpen)
+            {
+                var now = clock();
+                diagnostic($"Navigation menu reset: {reason}; mode={mode}; " +
+                    $"tickAge={now - lastCall}; controllerPollAge={now - lastControllerPoll}.");
+            }
             Emit(cancellation);
         }
     }
@@ -216,12 +223,14 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
         lock (gate)
         {
             if (!enabled) return originalPad;
+            var workStarted = clock();
+            var pollBeforeWork = lastControllerPoll;
             worldDirection = 0;
             var flight = current is NavigationMode.Epoch or NavigationMode.Dactyl;
             var kind = current == NavigationMode.Dactyl ? VehicleKind.Dactyl : VehicleKind.Epoch;
             try
             {
-                var now = clock();
+                var now = workStarted;
                 if (!isForeground())
                 {
                     Suspend("game is not in the foreground");
@@ -525,7 +534,16 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             {
                 // Native input pauses begin after our work finishes. Asset/camera
                 // observation can take longer on area entry or a network install.
-                lastCall = clock();
+                var finished = clock();
+                // A native task can tick again before the next physical poll.
+                // Time spent in our synchronous capture/speech is not a device
+                // disconnect. Exclude only this work, only for an owner whose
+                // successful poll was fresh on entry and is still retained.
+                if (gamepad?.HasOwner == true && lastControllerPoll == pollBeforeWork &&
+                    pollBeforeWork >= 0 && workStarted >= pollBeforeWork &&
+                    workStarted - pollBeforeWork <= 250 && finished >= workStarted)
+                    lastControllerPoll += finished - workStarted;
+                lastCall = finished;
             }
         }
     }

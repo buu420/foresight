@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.77 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.78 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.77 corrects the Black Omen elevator's general Story Events route. It follows the native forward control for the current stop instead of returning to earlier rooms. Existing NPC names, spoiler fixes, shell/stone and Porre descriptions, Desert routes, minigame cues, Death Peak assist and Black Omen pad/door fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.77.md).
+Version 0.3.78 corrects a controller timeout during slow navigation work, keeps entrance approaches clear of a parked vehicle's boarding area, and makes Story Events follow the local Dimensional Vortex objective. Manual guidance and auto-walk use the same native targets. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.78.md).
 
 At North Cape, the encounter's sparkling light is listed as **Magus encounter**, using his current name if renamed. In Bekkler's copy game, each demonstrated pose gives a short cue such as **Y. Laugh.** Button letters follow the game's current configuration. Repeat the action with the normal game controls after its signal; the game keeps its original timing. The native instructions, result and prize dialogue remain readable.
 

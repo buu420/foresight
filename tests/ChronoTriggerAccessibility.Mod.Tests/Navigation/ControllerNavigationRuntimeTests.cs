@@ -8,6 +8,52 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 public sealed class ControllerNavigationRuntimeTests
 {
     [Theory]
+    [InlineData(NavigationMode.Field, false)]
+    [InlineData(NavigationMode.World, false)]
+    [InlineData(NavigationMode.Epoch, false)]
+    [InlineData(NavigationMode.Dactyl, false)]
+    [InlineData(NavigationMode.World, true)]
+    public void SlowNavigationWorkKeepsTheConnectedOwnersMenuUsable(NavigationMode mode, bool speech)
+    {
+        var h = new Harness(mode);
+        if (speech) h.SpeechCost = 300;
+        else h.CaptureCost = 300;
+        h.Press(NavigationPadButtons.RightStick);
+        Assert.True(h.Pad.IsOpen);
+        // Native tasks can tick again before the next physical poll. The mod's
+        // synchronous capture/speech time is not evidence of a missing device.
+        h.Tick();
+        Assert.True(h.Pad.IsOpen);
+        h.Press(NavigationPadButtons.RightShoulder);
+        Assert.Contains("Exits.", h.Speech.Last());
+        h.Tick();
+        Assert.True(h.Pad.IsOpen);
+        h.Press(NavigationPadButtons.Down);
+        Assert.Contains("Stairs", h.Speech.Last());
+        h.CaptureCost = h.SpeechCost = 0;
+        h.Now += 251;
+        h.Tick();
+        Assert.False(h.Pad.IsOpen);
+    }
+
+    [Theory]
+    [InlineData(NavigationMode.Field)]
+    [InlineData(NavigationMode.World)]
+    [InlineData(NavigationMode.Epoch)]
+    [InlineData(NavigationMode.Dactyl)]
+    public void SlowCaptureDoesNotCancelAJustAcceptedWalkButARealPollGapDoes(NavigationMode mode)
+    {
+        var h = new Harness(mode);
+        h.Press(NavigationPadButtons.RightStick);
+        h.CaptureCost = 300;
+        Assert.Equal(0x100u, h.Press(NavigationPadButtons.West));
+        Assert.Equal(0x100u, h.Tick());
+        h.CaptureCost = 0;
+        h.Now += 251;
+        Assert.Equal(0u, h.Tick());
+    }
+
+    [Theory]
     [InlineData(NavigationMode.Field, 0x108u)]
     [InlineData(NavigationMode.World, 0x108u)]
     [InlineData(NavigationMode.Epoch, 8u)]
@@ -206,6 +252,7 @@ public sealed class ControllerNavigationRuntimeTests
         public long Now;
         public bool CaptureOnlyAtTick;
         public int OutOfBoundaryCaptures;
+        public int CaptureCost, SpeechCost;
         private bool inTick;
         private readonly NavigationMode mode;
         public Harness(NavigationMode mode = NavigationMode.Field)
@@ -213,6 +260,7 @@ public sealed class ControllerNavigationRuntimeTests
             this.mode = mode;
             NavigationFrame Frame()
             {
+                Now += CaptureCost;
                 if (CaptureOnlyAtTick && !inTick)
                 {
                     OutOfBoundaryCaptures++;
@@ -225,7 +273,7 @@ public sealed class ControllerNavigationRuntimeTests
                      new("stairs", "Stairs", NavigationCategory.Exits, p, [p], true, false)], new Line());
             }
             Runtime = new(_ => Frame(), new(Keys.Contains, () => Foreground), () => Foreground,
-                () => Now, Speech.Add, _ => { }, worldCapture: _ => Frame(),
+                () => Now, text => { Speech.Add(text); Now += SpeechCost; }, _ => { }, worldCapture: _ => Frame(),
                 vehicleCapture: (_, _) => Frame(), vehicleActive: (_, _) => true, gamepad: Pad);
             Runtime.Enable(); Tick(); Release();
         }
