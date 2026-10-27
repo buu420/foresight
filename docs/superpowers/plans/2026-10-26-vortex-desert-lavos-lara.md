@@ -47,9 +47,11 @@ Files/interfaces to be fixed by the native UI audit before implementation: a rea
 
 ## Task4: Review, validation and local tester delivery
 
-- [ ] Obtain one fresh Opus5.5max whole-change review; resolve material findings with failing regressions and record coverage limits.
-- [ ] Run the appropriate focused suites and complete solution; build Release with zero warnings/errors.
-- [ ] Version the tester build, update pinned manifests, package the exact payload and replay its x86 assemblies with no source fallback.
-- [ ] Verify archive/installation, deploy with backup and preserved files, copy ZIP/checklist to Downloads and record a handoff. Keep publication separate until requested.
+- [x] Obtain one fresh Opus5.5max whole-change review; resolve material findings with failing regressions and record coverage limits.
+- [x] Run the appropriate focused suites and complete solution; build Release with zero warnings/errors.
+- [x] Version the tester build, update pinned manifests, package the exact payload and replay its x86 assemblies with no source fallback.
+- [x] Verify archive/installation, deploy with backup and preserved files, copy ZIP/checklist to Downloads and record a handoff. Keep publication separate until requested.
 
 Execution notes: UI delivery was implemented in an isolated binary-reference overlay by Opus5.5/max, then copied and verified in the canonical assemblies by root. The fresh whole-change reviewer is a separate Opus session. Original-instruction vortex-motion replay adds8/8 coordinate-region entries on captured/derived/native planes, in addition to the Desert8/8 exits and11 chest cases. Full suite5,036 passes with xUnit.MaxParallelThreads=4; first unrestricted failures and the35-case follow-up remain retained. Source commits for tasks2/3 are grouped with the payload after review so all production assembly revisions identify the reviewed implementation.
+
+Final delivery: payload4e735d29801cbce463535c16ad2171a4f00bea4f, candidate2; full5,052 pass, exact-package x86357 pass, Release0 warnings/errors, archive275 files and complete hash/tamper/runtime verification, independent installed303/303. Protected229 files unchanged. ZIP4a441ec7ed81bb9a1d2b0f38d265f07953eb0735d18d606ec168d615376043bd and testing notes copied to Downloads. Fresh Opus5.5max review and bounded follow-up accepted after M1 polling fix; remaining low items disposition documented. Native map-texture crash, live gameplay/controller/audible speech and recipient-PC install remain outside the verified result. No public publication. See local delivery-receipt.json and handoff2026-10-26-foresight-four-reports-0379.md.
