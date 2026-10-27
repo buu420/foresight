@@ -28,6 +28,17 @@ public sealed class GenoDomeVisualStateTests
         Assert.DoesNotContain("lamp",target.Instruction??"",StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(0,0,32,32)]
+    [InlineData(2816,1280,3072,1536)] // control visible, lamp above the viewport
+    public void OffscreenLampIsNotReadFromASelectedGuideTarget(int left,int top,int right,int bottom)
+    {
+        var frame=new FieldNavigationSource(new Empty(),_=>{}).Build(
+            Field(),Map(101),new(left,top,right,bottom),[],GenoDomeFeedbackTests.Story());
+        var target=Assert.Single(frame.Targets,t=>t.Id=="landmark:14");
+        Assert.DoesNotContain("lamp",target.Instruction??"",StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void VisibleLampChangesSpeakOnceWithoutListingEverySwitchOnEntry()
     {

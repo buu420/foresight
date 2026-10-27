@@ -419,7 +419,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 TileVisible(actor.TileX, actor.TileY), storyOnly: !omenDoor && genoMarker is null && (knownTouch || touch && scripted.Length == 0),
                 guideAvailable: guideActive && (omenDoor || genoMarker is not null || !touch || scripted.Length != 0),
                 instruction: restriction ?? GenoDomeTargets.PodInstruction(actor.Index, genoPodOpen) ??
-                    GenoDomeTargets.SwitchLamp(field.SceneId, actor, map) ??
+                    (TileVisible(actor.TileX, actor.TileY - 1) ? GenoDomeTargets.SwitchLamp(field.SceneId, actor, map) : null) ??
                     (genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." : null) ??
                     (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
                     omenDoor || keepDoor ? "Walk up to the door to open it." :
