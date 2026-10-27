@@ -524,11 +524,13 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 synchronizeFootsteps?.Invoke(flight ? null : result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
                 if (current != NavigationMode.Field) worldDirection = movementPad;
-                // The explicitly selected assist owns Run. In modes0/2 a held
-                // physical Dash requests walking, which defeats an uphill leg.
+                // These automatic routes choose a selectable native gait. A
+                // physical Dash must not turn a short corner step into running,
+                // or turn an uphill running step into walking.
                 // All other manual actions already cancelled above; preserve them.
                 var delivered = current == NavigationMode.Field && result.AutoWalking &&
-                    controller.TargetId == DeathPeakClimbAssist.TargetId ? originalPad & ~8u : originalPad;
+                    (controller.TargetId == DeathPeakClimbAssist.TargetId || frame.CompensateMovingFloor && GenoDomeMovement.IsScene(frame.Scene))
+                    ? originalPad & ~8u : originalPad;
                 return delivered | movementPad;
             }
             catch (Exception exception)

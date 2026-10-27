@@ -54,6 +54,25 @@ public sealed class FieldFloorCaptureTests
     }
 
     [Theory]
+    [InlineData(0,0)] [InlineData(0,-16)] [InlineData(32,0)]
+    public void RejectedGenoConveyorProbeRetainsItsBoundedCommittedForce(int x,int y)
+    {
+        var memory=new FloorMemory(0x8B,x,y);
+        memory.Write(0x12010,256);memory.Write(0x132A0,256);
+        var floor=Assert.IsType<FieldFloorSnapshot>(FieldFloorCapture.Capture(memory,0x1000));
+        Assert.Equal(x,floor.ForceX);Assert.Equal(y,floor.ForceY);Assert.True(floor.TerrainSampleRejected);
+    }
+
+    [Theory]
+    [InlineData(33,0)] [InlineData(16,16)]
+    public void GenoDoesNotAcceptImpossibleCommittedForces(int x,int y)
+    {
+        var memory=new FloorMemory(0x8B,x,y);
+        memory.Write(0x12010,256);memory.Write(0x132A0,256);
+        Assert.Null(FieldFloorCapture.Capture(memory,0x1000));
+    }
+
+    [Theory]
     [InlineData(33,0)] [InlineData(16,16)]
     public void ARejectedDesertSampleStillRejectsImpossibleCommittedForces(int x,int y)
     {

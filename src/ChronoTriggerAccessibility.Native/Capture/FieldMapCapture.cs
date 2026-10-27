@@ -3,11 +3,15 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
+public sealed record FieldTileLayer(int Width,int Height,byte[] Tiles);
+
 public sealed record FieldMapSnapshot(int Width, int Height, byte[] CollisionShapes,
     byte[] TerrainFlags, byte[] CollisionLayers, int PlayerLayer, bool TransitionPending,
     int ExitWidth, int ExitHeight, byte[] ExitCells)
 {
     public IReadOnlyDictionary<int, int>? ExitDestinations { get; init; }
+    public FieldTileLayer? TileLayer1 { get; init; }
+    public FieldTileLayer? TileLayer2 { get; init; }
 }
 
 /// <summary>Reads MapTable's three live byte planes (DB1F0), the active exit grid
@@ -40,9 +44,15 @@ public static class FieldMapCapture
             if (endExit < firstExit || endExit > recordCount || endExit - firstExit > 128) return false;
             if (exits.Any(value => value < 128 && value >= endExit - firstExit)) return false;
             var destinations = Destinations(memory, records + (uint)firstExit * 28, endExit - firstExit);
+            // DB1F0 binds the visible byte-plane descriptors at A+10FD0
+            // and A+10FE4, immediately before the three property grids.
+            // Optional, stable and scene-scoped: colour-read failure must not
+            // remove otherwise valid navigation/collision information.
+            var tile1 = field.SceneId == 256 ? Tiles(memory, (nuint)field.ActorBase + 0x10FD0u, width, height) : null;
+            var tile2 = field.SceneId == 256 ? Tiles(memory, (nuint)field.ActorBase + 0x10FE4u, width, height) : null;
             if (!Word(memory, field.FieldState + 0x1010u, out scene) || scene != field.SceneId) return false;
             snapshot = new(width, height, shapes, flags, layers, playerLayer[0], (transition & 0x90) != 0,
-                exitWidth, exitHeight, exits) { ExitDestinations = destinations };
+                exitWidth, exitHeight, exits) { ExitDestinations = destinations, TileLayer1 = tile1, TileLayer2 = tile2 };
             error = string.Empty;
             return true;
         }
@@ -51,6 +61,19 @@ public static class FieldMapCapture
             error = $"Field map capture failed safely: {exception.GetType().Name}.";
             return false;
         }
+    }
+
+    private static FieldTileLayer? Tiles(IReadableMemory memory,nuint descriptor,int expectedWidth,int expectedHeight)
+    {
+        try
+        {
+            if(!Grid(memory,descriptor,out var first,out var width,out var height) ||
+                width!=expectedWidth || height!=expectedHeight ||
+                !Grid(memory,descriptor,out var second,out var w2,out var h2) || w2!=width || h2!=height ||
+                !first.AsSpan().SequenceEqual(second))return null;
+            return new(width,height,first);
+        }
+        catch { return null; }
     }
 
     private static IReadOnlyDictionary<int, int>? Destinations(IReadableMemory memory, nuint first, int count)

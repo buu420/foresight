@@ -86,14 +86,11 @@ public static class ClassicOptionalObjectives
             "Lucca must be in the active party. Her workshop scene and rewards follow automatically."),
 
         Actor("geno:console", "Use Geno Dome's entrance console", 248, 8),
-        Actor("geno:switch-left", "Set the left switch in Geno Dome's three-switch room", 256, 14),
-        Actor("geno:switch-right", "Set the right switch in Geno Dome's three-switch room", 256, 16),
-        Actor("geno:switch-middle", "Restore the middle switch to green", 256, 15,
-            "The two outside switches must be on and the middle switch off."),
+        new("full:quest:geno:switches", "Examine the three wall switches", [new(256,[14,15,16],[])], null, NavigationCategory.Objects),
         Actor("geno:charger-open", "Open the charging pod beside Geno Dome's computer", 256, 17),
         Actor("geno:charge-first", "Charge Robo in the pod beside the computer", 256, 25,
             "Then hurry to the pod below the three switches before the charge expires."),
-        Actor("geno:pod-first", "Discharge Robo into the pod below the three switches", 256, 27),
+        Actor("geno:pod-first", "Enter the pod below the three switches while electrically charged", 256, 27),
         Actor("geno:doll-first", "Collect the doll beyond the three-switch door", 256, 23),
         Exit("geno:circuit-start", "Take the southeastern elevator to reach the far side of Geno Dome", 256, 3,
             "The conveyor-control switch is reached through the upper floor and its long passage."),
@@ -106,7 +103,7 @@ public static class ClassicOptionalObjectives
         Actor("geno:escort-pod-open", "Open the charging receiver for the guardian robot's room", 256, 11),
         Actor("geno:charge-second", "Charge Robo again for the guardian robot's door", 256, 25,
             "Use the reversed conveyor to reach the northern receiver before the charge expires."),
-        Actor("geno:pod-second", "Discharge Robo into the northern receiver", 256, 28),
+        Actor("geno:pod-second", "Enter the northern receiver while electrically charged", 256, 28),
         Actor("geno:escort", "Lead the friendly robot to the robot guarding the second doll", 256, 8,
             "Touch the friendly robot to make it follow. Move slowly around corners toward the southwestern guardian."),
         Actor("geno:escort-guard", "Bring the following robot beside the southwestern guardian", 256, 29,
@@ -317,9 +314,7 @@ public static class ClassicOptionalObjectives
         if (!first)
         {
             if (Bit(s, 0x13E, 4)) return "geno:doll-first";
-            if (!Bit(s, 0x13D, 0x10)) return "geno:switch-left";
-            if (!Bit(s, 0x13D, 0x40)) return "geno:switch-right";
-            if (Bit(s, 0x13D, 0x20)) return "geno:switch-middle";
+            if (!Bit(s, 0x13D, 0x10) || !Bit(s, 0x13D, 0x40) || Bit(s, 0x13D, 0x20)) return "geno:switches";
             if (!Bit(s, 0x13D, 0x80)) return "geno:charger-open";
             return Bit(s, 0x13C, 0x40) ? "geno:pod-first" : "geno:charge-first";
         }

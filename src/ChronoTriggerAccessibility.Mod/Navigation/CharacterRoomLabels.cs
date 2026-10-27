@@ -11,6 +11,8 @@ public static class CharacterRoomLabels
         169=>"Magus's Keep, Chamber A",
         173=>"Magus's Keep, Chamber B",
         174=>"Magus's Keep, Chamber C",
+        268=>"Geno Dome, Upper Floor",
+        269=>"Geno Dome, Side Rooms",
         470=>"Magus's Keep, Passage C",
         300=>"Tyranno Lair, Chamber",
         328=>"Zeal Palace, Side Chamber A",

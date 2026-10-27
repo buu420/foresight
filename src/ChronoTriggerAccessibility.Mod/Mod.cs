@@ -179,23 +179,31 @@ public sealed class Mod : ModBase
             footstepSound.Play, footstepSound.Stop,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             () => $"field={motionCaptureStage}; world={worldSource.MotionStage}", worldSource.CaptureMotion);
+        var genoFeedback = new GenoDomeFeedback(
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
+            character => navigationText.CharacterName(navigationImageBase, character));
         var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic, scene =>
         {
             var name = navigationText.FieldName(navigationImageBase, scene);
             return string.IsNullOrWhiteSpace(name) || name.StartsWith('(') ? "Local area" : name;
-        }, character => navigationText.CharacterName(navigationImageBase, character));
+        }, character => navigationText.CharacterName(navigationImageBase, character), genoFeedback.Observe);
         NavigationFrame? Field(nint engine) => navigationObservation.Field(navigationSource.Capture(engine));
-        NavigationFrame? World(nint context) => navigationObservation.World(worldSource.Capture(context));
-        NavigationFrame? Flight(nint context, VehicleKind kind) => navigationObservation.World(worldSource.CaptureFlight(context, kind));
+        NavigationFrame? World(nint context) { genoFeedback.Reset();return navigationObservation.World(worldSource.Capture(context)); }
+        NavigationFrame? Flight(nint context, VehicleKind kind) { genoFeedback.Reset();return navigationObservation.World(worldSource.CaptureFlight(context, kind)); }
         var navigationGamepad = new NavigationGamepad();
-        void ResetMotion() { footsteps.Suspend(); floors.Suspend(); }
+        void ResetMotion() { footsteps.Suspend(); floors.Suspend(); genoFeedback.Suspend(); }
+        string? FieldStatus()
+        {
+            var value=string.Join(" ",new[]{floors.Status,genoFeedback.Status}.Where(s=>!string.IsNullOrEmpty(s)));
+            return value.Length==0?null:value;
+        }
         var navigation = new FieldNavigationRuntime(Field, new NavigationKeyboard(),
             NavigationKeyboard.IsGameForeground, () => Environment.TickCount64,
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
-            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); floors.Reset(); },
+            engine => Field(engine), () => { navigationSource.Reset(); worldSource.Reset(); areas.Reset(); prompts.Reset(); floors.Reset(); genoFeedback.Reset(); },
             ResetMotion, World, context => World(context), footsteps.SetGuidance,
             Flight, worldSource.IsVehicleActive, navigationGamepad,
-            context => floors.Observe(FieldFloorCapture.Capture(memory, (nuint)context)), () => floors.Status,
+            context => floors.Observe(FieldFloorCapture.Capture(memory, (nuint)context)), FieldStatus,
             (frame, result) => FieldFloorMovement.Adjust(frame, result, floors.Current), () => floors.Current);
         nuint raceImage = 0;
         var raceToneFailure = 0;
@@ -246,8 +254,8 @@ public sealed class Mod : ModBase
             var accepted = navigation.OnInput(engine, pad);
             footsteps.OnInput(engine, accepted);
             return accepted;
-        }, () => { footstepSound.WarmUp(); navigation.Enable(); footsteps.Enable(); },
-            () => { navigation.Disable(); footsteps.Disable(); });
+        }, () => { footstepSound.WarmUp(); genoFeedback.Enable(); navigation.Enable(); footsteps.Enable(); },
+            () => { genoFeedback.Disable(); navigation.Disable(); footsteps.Disable(); });
         var worldHooks = new WorldNavigationHookSet(asmHookFactory, (context, pad) =>
         {
             if (battle.IsActive) return;

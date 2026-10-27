@@ -103,7 +103,7 @@ public sealed class ClassicOptionalObjectivesTests
     [Theory]
     [InlineData("cyrus", 0x19E, 0x10, "descendant")]
     [InlineData("sun", 0x13A, 1, "moon-stone")]
-    [InlineData("geno", 0x13C, 1, "switch-left")]
+    [InlineData("geno", 0x13C, 1, "switches")]
     [InlineData("rainbow", 0x1A0, 2, "tomb")]
     [InlineData("ozzie", 0x1A1, 1, "flea")]
     public void NativeIntroductionsKeepAcceptedOptionalQuestsAvailable(string family, int index, int flag, string suffix) =>
@@ -191,11 +191,22 @@ public sealed class ClassicOptionalObjectivesTests
     }
 
     [Fact]
-    public void GenoChargingExpiresAndMiddleSwitchMustRemainOff()
+    public void GenoChargeTargetsFollowTheNativePodOpeningAndChargeLifetime()
     {
-        Assert.Equal("full:quest:geno:switch-middle", Quest("geno", State(0xD4, (0x13C, 1), (0x13D, 0x70)), 256)!.Id);
+        Assert.Equal("full:quest:geno:switches", Quest("geno", State(0xD4, (0x13C, 1), (0x13D, 0x70)), 256)!.Id);
         Assert.Equal("full:quest:geno:charge-first", Quest("geno", State(0xD4, (0x13C, 1), (0x13D, 0xD0)), 256)!.Id);
         Assert.Equal("full:quest:geno:pod-first", Quest("geno", State(0xD4, (0x13C, 0x41), (0x13D, 0xD0)), 256)!.Id);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(0x10)] [InlineData(0x20)] [InlineData(0x30)]
+    [InlineData(0x40)] [InlineData(0x60)] [InlineData(0x70)]
+    public void GenoSwitchSelectionsIdentifyTheControlsWithoutChoosingTheAnswer(int switches)
+    {
+        var objective=Quest("geno",State(0xD4,(0x13C,1),(0x13D,switches)),256)!;
+        Assert.Equal("Examine the three wall switches",objective.Label);
+        Assert.Null(objective.Instruction);
+        Assert.Equal(new[]{14,15,16},Assert.Single(objective.Goals).Actors);
     }
 
     [Fact]

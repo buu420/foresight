@@ -5,7 +5,8 @@ using ChronoTriggerAccessibility.Native.Memory;
 namespace ChronoTriggerAccessibility.Mod.Navigation;
 
 public sealed class FieldNavigationSource(IReadableMemory memory, Action<string> diagnostic,
-    Func<int, string?>? areaName = null, Func<int, string?>? characterName = null)
+    Func<int, string?>? areaName = null, Func<int, string?>? characterName = null,
+    Action<FieldNavigationSnapshot, FieldMapSnapshot, FieldStoryState?, FieldViewport>? fieldObserver = null)
 {
     private readonly Dictionary<string, NavigationTarget> discovered = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NavigationTarget> guideGeometry = new(StringComparer.Ordinal);
@@ -65,6 +66,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Reset(); scene = identity;
             diagnostic($"Navigation field: scene={field.SceneId}; engine=0x{field.Engine:X}; map={map.Width}x{map.Height}; layer={map.PlayerLayer}; actors={field.ActorCount}; viewport={viewport}.");
         }
+        fieldObserver?.Invoke(field, map, map.TransitionPending ? null : story, viewport);
         var collisions = new FieldActorCollisionRules(field);
         var touchGoals = new List<(int Actor, IReadOnlyList<NavigationPoint> Goals)>();
         var graph = new FieldNavigationGraph(map, collisions, touchGoals, treasureGrid:
@@ -109,6 +111,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 actor.IsPartyMember && !PartyTalk(actor) || actor.Index == field.LeadPlayer?.Index || actor.Index == 0 ||
                 (actor.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) != 0 || savePointActors.Contains(actor.Index)) continue;
             if (field.SceneIdCoherent && ZealFieldLabels.IsBookEffect(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && GenoDomeTargets.IsElectricalEffect(field.SceneId, actor)) continue;
+            if (field.SceneIdCoherent && GenoDomeTargets.IsTerminalDisplay(field.SceneId, actor)) continue;
             if (field.SceneIdCoherent && (OzzieFortScenery.IsBladePart(field.SceneId,actor) ||
                 OzzieFortScenery.ConcealedActor(field.SceneId,actor,map,story))) continue;
             if (field.SceneIdCoherent && (OceanPalaceTargets.ConcealedSprite(field.SceneId, actor) ||
@@ -148,6 +152,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var book = field.SceneIdCoherent ? ZealFieldLabels.Book(field.SceneId, actor, story) : null;
             var questObject = field.SceneIdCoherent ? QuestObjectLabels.Actor(field.SceneId, actor) : null;
             var description = FieldVisualLabels.Describe(actor);
+            if (field.SceneIdCoherent && GenoDomeTargets.Actor(field.SceneId, actor) is { } genoActor)
+                description = genoActor;
             // Verified switch and control slots keep their native finish and availability.
             if (field.SceneIdCoherent && OceanPalaceTargets.ObjectLabel(field.SceneId, actor) is { } oceanObject)
                 description = (oceanObject, NavigationCategory.Objects);
@@ -161,9 +167,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);
             var entranceTerminal = field.SceneIdCoherent && FutureAreaLabels.IsEntranceSecurityTerminal(field.SceneId, actor);
             var touchFigure = field.SceneIdCoherent && KeepFieldTargets.IsTouchFigure(field.SceneId, actor, story);
-            var scriptedAction = forestGate || entranceTerminal || book is not null || story is not null && actor.ScriptCallsEnabled &&
+            var genoMobile = field.SceneIdCoherent && GenoDomeTargets.MobileDroid(field.SceneId, actor, story);
+            var genoMeeting = field.SceneIdCoherent ? GenoDomeTargets.DroidMeeting(field.SceneId, actor, story) : null;
+            var scriptedAction = genoMobile || forestGate || entranceTerminal || book is not null || story is not null && actor.ScriptCallsEnabled &&
                 scriptInfo?.Actions.Any(a => a.Available(story)) == true;
-            var scriptedContact = touchFigure || scriptedAction &&
+            var scriptedContact = genoMobile || touchFigure || scriptedAction &&
                 scriptInfo?.Actions.Any(a => a.Touch && a.Available(story) && a.Kind is "Item" or "Warp" or "Progress" or "Switch" or "Terrain") == true;
             // These pickups have an initialization-time gate in addition to the
             // contact handler. Preserve the audited gate when the sprite lingers.
@@ -194,17 +202,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 field.SceneIdCoherent ? StoryCharacterLabels.OnScreenName(field.SceneId, actor, story) : null;
             var conveyorRobot = field.SceneIdCoherent && field.SceneId == 231 &&
                 actor.Index is >= 12 and <= 15 && actor.ClassTag == 4 && actor.VisualIndex == 170;
-            var touchOnly = scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
+            var touchOnly = genoMobile || scriptedContact && scriptInfo?.Actions.Any(a => !a.Touch && a.Available(story)) != true &&
                 (field.SceneId, actor.Index) is not ((8, 11) or (439, 15));
             if (scriptedContact && scriptInfo?.Actions.Any(a => a.Touch && a.Kind == "Warp" && a.Available(story)) == true)
                 ProtectContactPassage(id, actor);
             var approaches = touchOnly ? TouchApproach(actor) : ActorApproach(actor, position);
-            approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
+            if (!genoMobile) approaches = InteractionPositions(approaches, scriptInfo?.Actions ?? [], touchOnly);
             // A sprite rises from its feet: Mune's and Masa's heads show before their feet enter the window.
             var inView = viewport.Contains(position.X, position.Y) ||
                 field.SceneIdCoherent && OceanPalaceSight.TwinHeadShown(field.SceneId, actor, viewport);
             var seen = inView || discovered.ContainsKey(id);
-            var npcRegion = guideActive ? OceanPalaceTargets.NpcRegion(field, actor, story, seen) ??
+            var npcRegion = guideActive ? genoMeeting ?? OceanPalaceTargets.NpcRegion(field, actor, story, seen) ??
                 OceanPalaceStoryTargets.NpcRegion(field, actor, story) : null;
             if (npcRegion is not null) approaches = RegionPoints(npcRegion);
             var battles = FieldEncounters.Available(field, actor, story, scriptInfo);
@@ -232,13 +240,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     (label is not null && label != onScreenName || actor.IsActivationCandidate || scriptedAction || npcRegion is not null),
                 instruction: capeEncounter is not null ? NorthCapeTargets.EncounterInstruction :
                     conveyorRobot ? "Moving hazard on the conveyor. Getting caught can start the robot inspection ride." : questObject?.Description,
-                guidanceRestriction: conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
+                guidanceRestriction: genoMobile && story?.Local(12) == 1
+                    ? "The mobile Sentinel is following you. Choose another destination to lead it there." :
+                    conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
-                arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                arrivalInstruction: genoMeeting is not null ? "Wait here for the following droid." :
+                    book is not null ? "Press Confirm to open or close the book." :
                     entranceTerminal ? "Press Confirm to use the entrance security terminal." :
                     forestGate ? "Press Confirm to enter the Time Gate." :
                     lairHole || appearanceBattle && !battleTouch ? "Press Confirm to interact." : null,
-                contactPosition: battleTouch || touchFigure ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
+                contactPosition: battleTouch || touchFigure || genoMobile ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1,
                     actor.FineY - (field.LastPartySlotRaw > actor.Index * 2 ? 1 : 0)) : null,
                 // Confirm reaches the actor or any stand-in that runs its script (the same
                 // set ActorApproach routes to); touch pickups finish by contact instead.
@@ -342,7 +353,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
             var omenDoor = field.SceneIdCoherent && BlackOmenTargets.IsFinalDoor(field.SceneId, actor);
             var keepDoor = keepEntranceCopy is not null && actor.Index == 14;
-            var label = book ?? teleportPad ?? (omenDoor ? "Northern door" : null) ?? (keepDoor ? KeepFieldTargets.EntranceDoorLabel : null) ??
+            var genoMarker = GenoDomeTargets.Marker(field.SceneId, actor);
+            var genoPodOpen = GenoDomeTargets.PodOpen(field.SceneId, actor, map, story);
+            var genoDoorOpen = GenoDomeTargets.ConveyorDoorOpen(field.SceneId, actor, map, story);
+            var label = book ?? teleportPad ?? genoMarker ??
+                (omenDoor ? "Northern door" : null) ?? (keepDoor ? KeepFieldTargets.EntranceDoorLabel : null) ??
                 EarlyStoryTargets.Landmark(field.SceneId, story, actor, field.Actors) ??
                 FutureAreaLabels.Landmark(field.SceneId, story, actor);
             var knownTouch = EarlyStoryTargets.IsTouchLandmark(field.SceneId, actor.Index) ||
@@ -366,7 +381,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (label is null) continue;
             if (generic) genericIds.Add(landmarkId);
             var position = Position(actor.FineX, actor.FineY);
-            var touch = knownTouch || metadata is { Touch: true };
+            var touch = knownTouch || genoDoorOpen || metadata is { Touch: true };
             var approaches = touch
                 ? TouchApproach(actor)
                 : ActorApproach(actor, position);
@@ -397,24 +412,32 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ProtectContactPassage(landmarkId, actor);
             var restriction = FutureAreaLabels.FactoryLiftRestriction(field.SceneId, actor.Index, story) ??
                 OceanPalaceTargets.WallSwitchBlocked(field, actor) ??
+                (GenoDomeTargets.ChargingContactAccepted(field, actor, story) ? "At the charging pod. Step away before entering it again." : null) ??
+                (genoPodOpen == false ? "The pod is closed." : null) ??
                 (omenDoor ? BlackOmenTargets.DoorRestriction(actor, story) : null);
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
-                TileVisible(actor.TileX, actor.TileY), storyOnly: !omenDoor && (knownTouch || touch && scripted.Length == 0),
-                guideAvailable: guideActive && (omenDoor || !touch || scripted.Length != 0),
-                instruction: restriction ?? (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
+                TileVisible(actor.TileX, actor.TileY), storyOnly: !omenDoor && genoMarker is null && (knownTouch || touch && scripted.Length == 0),
+                guideAvailable: guideActive && (omenDoor || genoMarker is not null || !touch || scripted.Length != 0),
+                instruction: restriction ?? GenoDomeTargets.PodInstruction(actor.Index, genoPodOpen) ??
+                    GenoDomeTargets.SwitchLamp(field.SceneId, actor, map) ??
+                    (genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." : null) ??
+                    (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
                     omenDoor || keepDoor ? "Walk up to the door to open it." :
                     sealedDoor ? SealedFieldTargets.DoorInstruction(field.SceneId, story) :
                     teleportPad is not null && !scripted.Any(a => a.Kind == "Warp")
                     ? "Teleportation is currently unavailable." : null),
                 guidanceRestriction: restriction,
                 passageOpening: omenDoor && omenDoorOpening,
-                arrivalAnnouncement: omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
-                arrivalInstruction: book is not null ? "Press Confirm to open or close the book." :
+                arrivalAnnouncement: genoDoorOpen ? "The door to the main room is open." :
+                    omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
+                arrivalInstruction: genoDoorOpen ? "Continue up through the doorway." :
+                    book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
                     field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." :
                     BlackbirdDuctTargets.ArrivalInstruction(field.SceneId, actor.Index),
-                contactPosition: field.SceneId == 642 && actor.Index is 14 or 15 ||
+                contactPosition: field.SceneId == 256 && actor.Index == 25 && GenoDomeTargets.IsPod(field.SceneId, actor) ||
+                    field.SceneId == 642 && actor.Index is 14 or 15 ||
                     field.SceneId == 600 && actor.Index == 21 && terrainContact
                     ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1, actor.FineY) : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
@@ -765,7 +788,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
             ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
-        var compensateFloor = field.SceneIdCoherent && SunkenDesertNavigation.IsScene(field.SceneId);
+        var compensateFloor = field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256);
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
@@ -1048,6 +1071,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
         {
+            if (GenoDomeTargets.IsPod(field.SceneId, actor))
+            {
+                // Atel0355 uses precise half-tile centres for all four pods.
+                // Rounding them to a tile centre puts the goal in a pod wall.
+                // This floor point below the live centre is inside 178980's
+                // leading contact probe, including the arrival tolerance.
+                return At((actor.FineX + 32) / 64 * 64, (actor.FineY + (actor.Index == 25 ? 288 : 160)) / 64 * 64)
+                    .Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+            }
             if (field.SceneId == 642 && actor.Index is 14 or 15)
             {
                 // Atel0642 0320/0397 places equivalent warp contacts on both

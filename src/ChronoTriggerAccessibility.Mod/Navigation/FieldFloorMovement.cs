@@ -18,6 +18,8 @@ public static class FieldFloorMovement
     public static FieldNavigationPad Adjust(NavigationFrame frame, NavigationResult result, FieldFloorSnapshot? native)
     {
         var pad = FieldNavigationRuntime.DirectionBits(result.Direction);
+        if (GenoDomeMovement.IsScene(frame.Scene) && frame.CompensateMovingFloor && pad != 0)
+            return GenoDomeMovement.Adjust(frame, result, native);
         var sand = SunkenDesertNavigation.IsScene(frame.Scene);
         if (frame.MovingFloor is not { Speed: 16 } floor || !sand && !Opposes(result.Direction, floor.Direction) || pad == 0)
             return new(pad);

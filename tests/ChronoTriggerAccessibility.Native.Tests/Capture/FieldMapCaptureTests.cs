@@ -85,6 +85,42 @@ public sealed class FieldMapCaptureTests
         Assert.Equal(new byte[] { 128, 128, 0, 128 }, map.ExitCells);
     }
 
+    [Fact]
+    public void GenoCapturesTheNativeVisibleTileLayersAlongsideCollision()
+    {
+        var memory=Geno();
+        Assert.True(FieldMapCapture.TryCapture(memory,Field with{SceneId=256},out var map,out var error),error);
+        Assert.Equal(new byte[]{101,102,0,255},Assert.IsType<FieldTileLayer>(map.TileLayer1).Tiles);
+        Assert.Equal(new byte[]{0,0,0,0},Assert.IsType<FieldTileLayer>(map.TileLayer2).Tiles);
+        Assert.Equal(2,map.TileLayer1!.Width);Assert.Equal(2,map.TileLayer2!.Height);
+    }
+
+    [Theory]
+    [InlineData("changing")] [InlineData("unreadable")] [InlineData("oversize")]
+    public void UnavailableVisibleTilesNeverDestroyTheNativeCollisionMap(string cause)
+    {
+        var memory=Geno();
+        if(cause=="changing")memory.ChangeOnSecondRead=0x17000;
+        if(cause=="unreadable")memory.Unreadable=0x17000;
+        if(cause=="oversize")memory.Word(0x14FDC,0x7fffffff);
+        Assert.True(FieldMapCapture.TryCapture(memory,Field with{SceneId=256},out var map,out var error),error);
+        Assert.Null(map.TileLayer1);Assert.Equal(new byte[]{1,2,3,4},map.CollisionShapes);
+        Assert.InRange(memory.LargestRead,0,65536);
+    }
+
+    private static Memory Geno()
+    {
+        var memory=Valid();memory.Word(0x3010,256);
+        memory.Word(0x1e58,0x18000);memory.Word(0x1e5c,0x18404);
+        for(var i=0;i<2;i++)
+        {
+            var d=0x14FD0+i*20;var data=0x17000+i*256;
+            memory.Word(d,data);memory.Word(d+4,data+4);memory.Word(d+8,data+4);memory.Word(d+12,2);memory.Word(d+16,2);
+        }
+        new byte[]{101,102,0,255}.CopyTo(memory.Bytes,0x17000);
+        return memory;
+    }
+
     private static Memory Valid()
     {
         var m = new Memory();

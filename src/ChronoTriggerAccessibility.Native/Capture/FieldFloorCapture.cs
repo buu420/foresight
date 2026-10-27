@@ -61,13 +61,13 @@ public static class FieldFloorCapture
                 0 => (0, -speed), 1 => (0, speed), 2 => (-speed, 0), _ => (speed, 0),
             };
             // 173750 leaves a refused probe in +138 while 1734D0 still applies
-            // the committed +88/+8C next frame. In the audited Desert, retain
+            // the committed +88/+8C next frame. In the audited Desert and Geno Dome, retain
             // that bounded movement fact without calling the probe a surface.
             var rejected = unchecked((int)rawX) != x || unchecked((int)rawY) != y;
             if (rejected)
             {
                 x = unchecked((int)rawX); y = unchecked((int)rawY);
-                if (player.Scene is not (159 or 160 or 161) ||
+                if (player.Scene is not (159 or 160 or 161 or 256) ||
                     !(x == 0 && Math.Abs((long)y) is 0 or 8 or 16 or 32 ||
                       y == 0 && Math.Abs((long)x) is 0 or 8 or 16 or 32)) return null;
             }
