@@ -105,7 +105,7 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
         else if (wasMoving) speak(IsConveyor(value.Scene) ? "Off the conveyor." : "Off the moving floor.");
     }
 
-    private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 437;
+    private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 256 or 437;
     private static string DescribeSand(FieldFloorSnapshot floor, bool advice)
     {
         var direction = floor.ForceX < 0 ? "west" : floor.ForceX > 0 ? "east" : floor.ForceY < 0 ? "north" : "south";

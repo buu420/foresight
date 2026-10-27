@@ -180,7 +180,7 @@ public sealed class Mod : ModBase
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic,
             () => $"field={motionCaptureStage}; world={worldSource.MotionStage}", worldSource.CaptureMotion);
         var genoFeedback = new GenoDomeFeedback(
-            text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text) { Interrupt = false }),
             character => navigationText.CharacterName(navigationImageBase, character));
         var navigationSource = new FieldNavigationSource(memory, dispatcher.RecordDiagnostic, scene =>
         {

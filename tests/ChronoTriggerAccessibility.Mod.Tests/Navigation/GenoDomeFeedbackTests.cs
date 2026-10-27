@@ -129,9 +129,9 @@ public sealed class GenoDomeFeedbackTests
         var map=new FieldMapSnapshot(64,64,new byte[4096],new byte[4096],Enumerable.Repeat((byte)1,4096).ToArray(),1,false,64,64,
             Enumerable.Repeat((byte)128,4096).ToArray());
         source.Build(Field(charged:true),map,View,[],Story(charge:true));
-        Assert.Equal("Robo is electrically charged.",Assert.Single(said));
+        Assert.Equal("The party leader is electrically charged.",Assert.Single(said));
         source.Build(Field(),map,View,[],Story());
-        Assert.Equal("Robo's electrical charge has faded.",said.Last());
+        Assert.Equal("The party leader's electrical charge has faded.",said.Last());
     }
 
     private static readonly FieldViewport View=new(0,0,16384,16384);

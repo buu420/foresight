@@ -67,6 +67,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             diagnostic($"Navigation field: scene={field.SceneId}; engine=0x{field.Engine:X}; map={map.Width}x{map.Height}; layer={map.PlayerLayer}; actors={field.ActorCount}; viewport={viewport}.");
         }
         fieldObserver?.Invoke(field, map, map.TransitionPending ? null : story, viewport);
+        var genoObstacles=field.SceneIdCoherent?GenoDomeObstacles.Read(field.SceneId,map,story):[];
         var collisions = new FieldActorCollisionRules(field);
         var touchGoals = new List<(int Actor, IReadOnlyList<NavigationPoint> Goals)>();
         var graph = new FieldNavigationGraph(map, collisions, touchGoals, treasureGrid:
@@ -244,7 +245,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ? "The mobile Sentinel is following you. Choose another destination to lead it there." :
                     conveyorRobot ? "Conveyor robot is a moving hazard. Choose another destination for guidance or automatic walking." :
                     lairHole && !actor.ScriptCallsEnabled ? "Hole interaction is currently unavailable." : null,
-                arrivalInstruction: genoMeeting is not null ? "Wait here for the following droid." :
+                arrivalInstruction: genoMeeting is not null ? "Wait here for the following Sentinel." :
                     book is not null ? "Press Confirm to open or close the book." :
                     entranceTerminal ? "Press Confirm to use the entrance security terminal." :
                     forestGate ? "Press Confirm to enter the Time Gate." :
@@ -418,8 +419,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
                 TileVisible(actor.TileX, actor.TileY), storyOnly: !omenDoor && genoMarker is null && (knownTouch || touch && scripted.Length == 0),
                 guideAvailable: guideActive && (omenDoor || genoMarker is not null || !touch || scripted.Length != 0),
-                instruction: restriction ?? GenoDomeTargets.PodInstruction(actor.Index, genoPodOpen) ??
-                    (TileVisible(actor.TileX, actor.TileY - 1) ? GenoDomeTargets.SwitchLamp(field.SceneId, actor, map) : null) ??
+                instruction: restriction ?? GenoDomeObstacles.ControlInstruction(field.SceneId,actor,map,viewport,genoPodOpen,genoObstacles) ??
                     (genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." : null) ??
                     (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
                     omenDoor || keepDoor ? "Walk up to the door to open it." :
@@ -428,7 +428,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ? "Teleportation is currently unavailable." : null),
                 guidanceRestriction: restriction,
                 passageOpening: omenDoor && omenDoorOpening,
-                arrivalAnnouncement: genoDoorOpen ? "The door to the main room is open." :
+                arrivalAnnouncement: genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." :
                     omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
                 arrivalInstruction: genoDoorOpen ? "Continue up through the doorway." :
                     book is not null ? "Press Confirm to open or close the book." :
@@ -805,6 +805,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ? (direction,goal)=>FieldFloorMovement.ManualDirection(player,direction,goal,moving,graph.CanTraverseFloorStep) : null,
                 ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
                 RouteEvidence = RouteFailureEvidence.For(field, map, story, targets.AsReadOnly(), treasures),
+                RouteFailureExplanation = genoObstacles.Any(o=>!o.Open)
+                    ? (from,target)=>GenoDomeObstacles.Explain(map,from,target,genoObstacles,collisions,touchGoals) : null,
             };
 
         bool CanReachStagedPart()

@@ -159,6 +159,9 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     /// <summary>Diagnostic only: encodes the captured state this frame was built from for a
     /// failed route (failure kind, target id). Never consulted for movement.</summary>
     public Func<string, string?, string?>? RouteEvidence { get; init; }
+    /// <summary>Optional state-backed obstacle explanation, evaluated only after
+    /// the real search fails. It cannot supply a route or authorize movement.</summary>
+    public Func<NavigationPoint,NavigationTarget,string?>? RouteFailureExplanation { get; init; }
 }
 
 public sealed record NavigationLeg(NavigationPoint End, NavigationDirection Direction, int UnitsPerStep, long Revision)
@@ -176,4 +179,6 @@ public sealed record NavigationResult(IReadOnlyList<string> Speech, NavigationDi
     public NavigationPoint? SteeringPoint { get; init; }
     /// <summary>Ordinary facing input required at the selected stationary contact.</summary>
     public NavigationDirection InteractionFacing { get; init; }
+    /// <summary>A native facing turn or contact push, rather than a walking step.</summary>
+    public bool NativeInteractionInput { get; init; }
 }

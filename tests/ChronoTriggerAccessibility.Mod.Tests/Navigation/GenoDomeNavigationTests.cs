@@ -28,8 +28,8 @@ public sealed class GenoDomeNavigationTests
     [InlineData(256,28,25,16,"Northern receiver pod")]
     [InlineData(267,8,55,30,"Rear elevator door")]
     [InlineData(268,8,43,32,"Elevator door")]
-    [InlineData(268,10,29,15,"Left doll pedestal")]
-    [InlineData(268,11,44,15,"Right doll pedestal")]
+    [InlineData(268,10,29,15,"Left figurine pedestal")]
+    [InlineData(268,11,44,15,"Right figurine pedestal")]
     public void NativeControlsHaveDistinctUsefulNames(int scene,int slot,int x,int y,string label)
     {
         var target=Assert.Single(Frame(scene,Marker(slot,x,y)).Targets,t=>t.Id==$"landmark:{slot}");

@@ -52,11 +52,12 @@ public static class GenoDomeTargets
         return opened!=closed && opened==expected?expected:null;
     }
 
-    public static string? PodInstruction(int actor,bool? opened)=>opened switch
+    public static string? PodInstruction(int actor,bool? opened,bool? receiverComplete=null)=>opened switch
     {
         false=>"The pod is closed.",
-        true when actor==25=>"The charging pod is open. Walk inside to charge the robot.",
-        true=>"The receiver pod is open. Walk inside with an electrical charge.",
+        true when actor==25=>"The charging pod is open. Walk inside to charge the party leader.",
+        true when receiverComplete==false=>"The receiver pod is open. Walk inside with an electrical charge.",
+        true=>"The receiver pod is open.",
         _=>null,
     };
 
@@ -111,8 +112,8 @@ public static class GenoDomeTargets
             (256,28) => "Northern receiver pod",
             (267,8) => "Rear elevator door", // Atel0358
             (268,8) => "Elevator door", // Atel0359
-            (268,10) => "Left doll pedestal",
-            (268,11) => "Right doll pedestal",
+            (268,10) => "Left figurine pedestal",
+            (268,11) => "Right figurine pedestal",
             _ => null,
         };
     }

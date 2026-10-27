@@ -12,17 +12,18 @@ public sealed class GenoDomeFeedback(Action<string> speak,Func<int,string?>? cha
     private bool enabled;
     private int epoch;
     private bool? charge;
-    private string chargeName="Robo";
+    private string chargeName="The party leader";
     private DroidState? droid;
     private string? status;
     private readonly Dictionary<int,string> lamps=[];
     private readonly Dictionary<int,bool> pods=[];
+    private readonly Dictionary<string,bool> obstacles=[];
     private enum DroidState { Waiting,Following,Stopped }
 
     public string? Status { get { lock(gate) return status; } }
     public void Enable() { lock(gate) { Reset();enabled=true; } }
     public void Disable() { lock(gate) { enabled=false;Reset(); } }
-    public void Reset() { lock(gate) { owner=null;charge=null;droid=null;status=null;chargeName="Robo";lamps.Clear();pods.Clear();epoch++; } }
+    public void Reset() { lock(gate) { owner=null;charge=null;droid=null;status=null;chargeName="The party leader";lamps.Clear();pods.Clear();obstacles.Clear();epoch++; } }
     public void Suspend() { lock(gate) status=null; }
 
     public void Observe(FieldNavigationSnapshot? field,FieldStoryState? story,FieldViewport viewport)=>Observe(field,null,story,viewport);
@@ -53,9 +54,9 @@ public sealed class GenoDomeFeedback(Action<string> speak,Func<int,string?>? cha
             };
             if(nextCharge==true && charge!=true)
             {
-                var name=characterName?.Invoke(3);
+                var name=field.LeadPlayer.VisualIndex is >=0 and <=6?characterName?.Invoke(field.LeadPlayer.VisualIndex):null;
                 if(!enabled || epoch!=observedEpoch) return;
-                chargeName=string.IsNullOrWhiteSpace(name)?"Robo":name;
+                chargeName=string.IsNullOrWhiteSpace(name)?"The party leader":name;
                 messages.Add($"{chargeName} is electrically charged.");
             }
             else if(nextCharge==false && charge==true) messages.Add($"{chargeName}'s electrical charge has faded.");
@@ -101,6 +102,12 @@ public sealed class GenoDomeFeedback(Action<string> speak,Func<int,string?>? cha
                     if(pods.TryGetValue(actor.Index,out var prior) && prior!=open)messages.Add(label+(open?" opened.":" closed."));
                     pods[actor.Index]=open;
                 }
+            }
+            if(map is not null)
+            foreach(var obstacle in GenoDomeObstacles.Read(field.SceneId,map,story).Where(o=>o.Visible(viewport)))
+            {
+                if(obstacles.TryGetValue(obstacle.Id,out var prior) && prior!=obstacle.Open)messages.Add(obstacle.Change);
+                obstacles[obstacle.Id]=obstacle.Open;
             }
             status=string.Join(" ",new[]{nextCharge==true?$"{chargeName} is electrically charged.":null,
                 nextDroid is { } current?DroidText(current):null}.Where(s=>s is not null));

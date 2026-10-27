@@ -35,13 +35,13 @@ public sealed class GenoDomeRouteTests
     }
 
     [Fact]
-    public void ANativeRunSettingWithNoSelectableWalkDoesNotHoldIntoTheWall()
+    public void AnUnselectableGaitKeepsNativeMovementInsteadOfInventingARestriction()
     {
         var sample=Live(2646);var graph=new FieldNavigationGraph(sample.Map,new FieldActorCollisionRules(sample.Field));
         var result=new NavigationResult([],NavigationDirection.North,true,true){SteeringPoint=new(9906,10864,1)};
         var pad=FieldFloorMovement.Adjust(sample.Frame with{CompensateMovingFloor=true,CanTraverseFloorStep=graph.CanTraverseFloorStep},
             result,new(0x1000,0x4000,256,4,0,0,1,1));
-        Assert.Equal(0u,pad.Pad);Assert.Contains("walking",pad.StopReason!);
+        Assert.Equal(0x800u,pad.Pad);Assert.Null(pad.StopReason);
     }
 
     [Fact]
@@ -140,6 +140,7 @@ public sealed class GenoDomeRouteTests
         var frame=new FieldNavigationSource(new Empty(),_=>{}).Build(field,map,new(0,0,16384,16384),[],story);
         var target=Assert.Single(frame.Targets,t=>t.Id=="landmark:1");
         Assert.Contains("open",target.Instruction!);Assert.Contains("Continue up",target.ArrivalInstruction!);
+        Assert.Contains("Continue up",target.ArrivalAnnouncement!);
         Assert.Null(target.ConfirmFacings);Assert.NotEmpty(target.ApproachPoints);
     }
 

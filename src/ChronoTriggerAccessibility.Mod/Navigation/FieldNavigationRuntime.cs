@@ -9,6 +9,7 @@ public enum NavigationMode { Field, World, Epoch, Dactyl }
 public readonly record struct FieldNavigationPad(uint Pad, string? StopReason = null)
 {
     public bool DashMustBeReleased { get; init; }
+    public bool OverrideDash { get; init; }
 }
 
 /// <summary>Runs only at the game's accepted field-input boundary. It returns one
@@ -480,6 +481,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                         $"gust={startFloor?.WindGusting?.ToString() ?? "null"}; building={startFloor?.WindBuilding?.ToString() ?? "null"}; {startNotice}");
                 }
                 var movementPad = DirectionBits(result.Direction);
+                var overrideDash = false;
                 // At the audited tree, plain Up either cancels the native south
                 // push while walking or meets both trunk corners while running.
                 // Climbing's run requirement must not release a stationary hold.
@@ -499,7 +501,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                         resetMotion?.Invoke();
                         movementPad = 0;
                     }
-                    else movementPad = adjusted.Pad;
+                    else { movementPad = adjusted.Pad; overrideDash = adjusted.OverrideDash; }
                 }
                 if (climbArmCancellation is { } armCancellation)
                 {
@@ -524,12 +526,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 synchronizeFootsteps?.Invoke(flight ? null : result.ManualLeg);
                 if (speech.Count != 0) speak(string.Join(" ", speech));
                 if (current != NavigationMode.Field) worldDirection = movementPad;
-                // These automatic routes choose a selectable native gait. A
-                // physical Dash must not turn a short corner step into running,
-                // or turn an uphill running step into walking.
+                // Override Dash only for an input that selected a native gait.
+                // Ordinary steps, facing turns and contacts retain physical Dash.
                 // All other manual actions already cancelled above; preserve them.
                 var delivered = current == NavigationMode.Field && result.AutoWalking &&
-                    (controller.TargetId == DeathPeakClimbAssist.TargetId || frame.CompensateMovingFloor && GenoDomeMovement.IsScene(frame.Scene))
+                    (controller.TargetId == DeathPeakClimbAssist.TargetId || overrideDash)
                     ? originalPad & ~8u : originalPad;
                 return delivered | movementPad;
             }

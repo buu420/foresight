@@ -404,7 +404,8 @@ public sealed class NavigationController
             nextCreatureCheck = clock + 500;
             return false;
         }
-        speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." : $"No route to {destination.Label} is available.");
+        speech.Add(search.LimitReached ? "The route search limit was reached. Try a closer destination." :
+            frame.RouteFailureExplanation?.Invoke(frame.Player,destination) ?? $"No route to {destination.Label} is available.");
         Stop();
         return false;
     }
@@ -1009,6 +1010,8 @@ public sealed class NavigationController
                 ? route[Math.Min(nextPoint, route.Count - 1)] : null,
             InteractionFacing = walking && destination?.KeepInteractionReach == true && facingStarted is not null
                 ? facingDirection : NavigationDirection.None,
+            NativeInteractionInput = walking && (facingStarted is not null || contactStarted is not null ||
+                transitionContactStarted is not null || passageWaitStarted is not null && intermediateContact is not null),
             ManualLeg = guiding && !walking && !nativePassageOpening && nativeTransitionStarted is null && transitionContactStarted is null &&
                 !waitingForManualStop && route is not null && nextPoint < route.Count
                 ? new(route[LegEnd(nextPoint)], GuidanceDirection(nextPoint), unitsPerTile, instructionRevision)
