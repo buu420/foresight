@@ -162,6 +162,22 @@ public sealed class MovingFloorInteractionTests
     }
 
     [Fact]
+    public void OrdinaryFloorRoutesKeepTheSameQuietManualDriftPolicyWithoutAnInteractionHold()
+    {
+        var (_,frame)=Start(false);
+        var target=frame.Targets[0] with{KeepInteractionReach=false,ConfirmFacings=null,ArrivalAnnouncement=null};
+        frame=frame with{Targets=[target],CompensateMovingFloor=true,
+            MovingFloor=new(NavigationDirection.South,16),Graph=new HorizontalFirst()};
+        var controller=new NavigationController();var speech=new List<string>();
+        controller.Handle(NavigationCommand.Guide,frame,1);
+        for(var n=1;n<=150;n++)speech.AddRange(controller.Update(frame with{Player=new(0,128+n*16,1)},n*16).Speech);
+        Assert.True(controller.IsActive);
+        Assert.InRange(speech.Count(s=>s=="Route updated."),0,2);
+        Assert.InRange(speech.Count(s=>s.StartsWith("Run up and right")),0,2);
+        Assert.False(controller.IsHolding);
+    }
+
+    [Fact]
     public void UnavailableTargetOrChangedSceneRevokesInteractionAuthority()
     {
         var (controller, frame) = Start(true);

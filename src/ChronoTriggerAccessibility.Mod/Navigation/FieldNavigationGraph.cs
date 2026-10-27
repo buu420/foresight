@@ -23,6 +23,14 @@ public sealed class FieldNavigationGraph(FieldMapSnapshot map, FieldActorCollisi
     public INavigationGraph? WithoutCreatures => actors?.WithoutCreatures() is { } open
         ? new FieldNavigationGraph(map, open, touchGoals, selectedGoals, treasureGrid) : null;
 
+    public bool CanTraverseFloorStep(NavigationPoint from,int dx,int dy)
+    {
+        if(dx==0 && dy==0)return false;
+        var next=from;
+        if(dx!=0 && !TryTraverse(next,next with{X=next.X+dx},out next))return false;
+        return dy==0 || TryTraverse(next,next with{Y=next.Y+dy},out _);
+    }
+
     /// <summary>The actor whose native contact refuses the first frame of this edge, walked as
     /// <see cref="TryTraverse"/> walks it (or the slide's one held frame). Terrain is not judged.</summary>
     public int? BlockingActor(NavigationPoint from, NavigationPoint to)

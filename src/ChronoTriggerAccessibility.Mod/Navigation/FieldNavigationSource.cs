@@ -747,6 +747,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         if (DeathPeakTargets.Climb(field, map, viewport, story, graph, targets) is { } climb)
             targets.Insert(0, climb);
         ReportInventory();
+        var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
+            ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
+        var compensateFloor = field.SceneIdCoherent && SunkenDesertNavigation.IsScene(field.SceneId);
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
@@ -756,8 +759,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId)),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
-                MovingFloor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
-                    ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null,
+                MovingFloor = floor,
+                CompensateMovingFloor = compensateFloor,
+                CanTraverseFloorStep = compensateFloor ? graph.CanTraverseFloorStep : null,
+                MovingFloorGuidance = compensateFloor && floor is { Speed:16 } moving
+                    ? (direction,goal)=>FieldFloorMovement.ManualDirection(player,direction,goal,moving,graph.CanTraverseFloorStep) : null,
                 ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
                 RouteEvidence = RouteFailureEvidence.For(field, map, story, targets.AsReadOnly(), treasures),
             };

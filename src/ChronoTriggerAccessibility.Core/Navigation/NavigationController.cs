@@ -49,6 +49,8 @@ public sealed class NavigationController
     private long interactionProgressElapsed;
     private bool interactionProgressActive;
     private NavigationFloor? guidanceFloor;
+    private bool compensateMovingFloor;
+    private Func<NavigationDirection,NavigationPoint,NavigationDirection>? movingFloorGuidance;
     private int guidanceLayer;
     private long? lastDriftReplan;
     // Survives Stop(), which a failed plan performs before anyone can read the
@@ -234,6 +236,8 @@ public sealed class NavigationController
         if (frame.UnitsPerTile is < 1 or > 65536) throw new ArgumentOutOfRangeException(nameof(frame));
         unitsPerTile = frame.UnitsPerTile;
         guidanceFloor = frame.MovingFloor;
+        compensateMovingFloor = frame.CompensateMovingFloor;
+        movingFloorGuidance = frame.MovingFloorGuidance;
         guidanceLayer = frame.Player.Layer;
         if (scene != frame.Scene)
         {
@@ -1001,7 +1005,7 @@ public sealed class NavigationController
             walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
-            SteeringPoint = walking && destination?.KeepInteractionReach == true && route is { Count: > 0 }
+            SteeringPoint = walking && (compensateMovingFloor || destination?.KeepInteractionReach == true) && route is { Count: > 0 }
                 ? route[Math.Min(nextPoint, route.Count - 1)] : null,
             InteractionFacing = walking && destination?.KeepInteractionReach == true && facingStarted is not null
                 ? facingDirection : NavigationDirection.None,
@@ -1055,8 +1059,10 @@ public sealed class NavigationController
         var direction = LegDirection(index);
         // Keep the graph's approach while reaching a different floor. A lateral
         // correction can pull the foot off the narrow layer-changing contact.
-        if (walking || destination?.KeepInteractionReach != true || route![^1].Layer != guidanceLayer ||
+        if (walking || (!compensateMovingFloor && destination?.KeepInteractionReach != true) || route![^1].Layer != guidanceLayer ||
             guidanceFloor is not { Speed: 16 } floor) return direction;
+        if (compensateMovingFloor && movingFloorGuidance is not null)
+            return movingFloorGuidance(direction,route[index]);
         return (direction, floor.Direction) switch
         {
             (NavigationDirection.North, NavigationDirection.East) or (NavigationDirection.West, NavigationDirection.South) => NavigationDirection.NorthWest,

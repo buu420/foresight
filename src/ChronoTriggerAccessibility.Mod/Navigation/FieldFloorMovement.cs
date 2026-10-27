@@ -50,26 +50,48 @@ public static class FieldFloorMovement
             var dash = native.RunMode == 1 ? !canWalk && toggle != 1 : canWalk;
             return FieldNavigationRuntime.DirectionBits(result.InteractionFacing) | (dash ? 8u : 0u);
         }
+        return SelectSandInput(frame.Player,result.Direction,goal,native.ForceX,native.ForceY,native.RunMode,toggle,
+            fallback,frame.CanTraverseFloorStep,false);
+    }
+
+    internal static NavigationDirection ManualDirection(NavigationPoint player,NavigationDirection direction,NavigationPoint goal,
+        NavigationFloor floor,Func<NavigationPoint,int,int,bool> clear)
+    {
+        var fx=floor.Direction==NavigationDirection.West?-floor.Speed:floor.Direction==NavigationDirection.East?floor.Speed:0;
+        var fy=floor.Direction==NavigationDirection.North?-floor.Speed:floor.Direction==NavigationDirection.South?floor.Speed:0;
+        var pad=SelectSandInput(player,direction,goal,fx,fy,0,1,FieldNavigationRuntime.DirectionBits(direction),clear,true);
+        return (pad&0xF00) switch
+        {
+            0x100=>NavigationDirection.East,0x200=>NavigationDirection.West,0x400=>NavigationDirection.South,0x800=>NavigationDirection.North,
+            0x500=>NavigationDirection.SouthEast,0x600=>NavigationDirection.SouthWest,
+            0x900=>NavigationDirection.NorthEast,0xA00=>NavigationDirection.NorthWest,_=>direction,
+        };
+    }
+
+    private static uint SelectSandInput(NavigationPoint player,NavigationDirection leg,NavigationPoint goal,
+        int forceX,int forceY,int? mode,int toggle,uint fallback,Func<NavigationPoint,int,int,bool>? clear,bool runningOnly)
+    {
         uint best = fallback; var score = double.PositiveInfinity;
         for (var gait = 0; gait < 2; gait++)
         {
             var running = gait == 0;
-            if (!running && native.RunMode == 1 && toggle == 1) continue;
+            if (!running && (runningOnly || mode == 1 && toggle == 1)) continue;
             var speed = running ? 32 : 16;
-            var dash = native.RunMode == 1 ? running && toggle != 1 : !running;
+            var dash = mode == 1 ? running && toggle != 1 : !running;
             foreach (var direction in Directions)
             {
                 var bits = FieldNavigationRuntime.DirectionBits(direction);
                 var dx = (bits & 0x100) != 0 ? speed : (bits & 0x200) != 0 ? -speed : 0;
                 var dy = (bits & 0x400) != 0 ? speed : (bits & 0x800) != 0 ? -speed : 0;
-                var x = dx != 0 && dy != 0 ? (int)(native.ForceX + dx / 1.39f) : native.ForceX + dx;
-                var y = dx != 0 && dy != 0 ? (int)(native.ForceY + dy / 1.39f) : native.ForceY + dy;
-                if (result.Direction == NavigationDirection.North && y >= 0 || result.Direction == NavigationDirection.South && y <= 0 ||
-                    result.Direction == NavigationDirection.West && x >= 0 || result.Direction == NavigationDirection.East && x <= 0) continue;
-                var horizontalWeight = result.Direction is NavigationDirection.North or NavigationDirection.South ? 16 : 1;
-                var verticalWeight = result.Direction is NavigationDirection.West or NavigationDirection.East ? 16 : 1;
-                var distance = horizontalWeight * Math.Pow((double)goal.X - frame.Player.X - x, 2) +
-                    verticalWeight * Math.Pow((double)goal.Y - frame.Player.Y - y, 2);
+                var x = dx != 0 && dy != 0 ? (int)(forceX + dx / 1.39f) : forceX + dx;
+                var y = dx != 0 && dy != 0 ? (int)(forceY + dy / 1.39f) : forceY + dy;
+                if (leg == NavigationDirection.North && y >= 0 || leg == NavigationDirection.South && y <= 0 ||
+                    leg == NavigationDirection.West && x >= 0 || leg == NavigationDirection.East && x <= 0) continue;
+                if(clear is not null && !clear(player,x,y))continue;
+                var horizontalWeight = leg is NavigationDirection.North or NavigationDirection.South ? 16 : 1;
+                var verticalWeight = leg is NavigationDirection.West or NavigationDirection.East ? 16 : 1;
+                var distance = horizontalWeight * Math.Pow((double)goal.X - player.X - x, 2) +
+                    verticalWeight * Math.Pow((double)goal.Y - player.Y - y, 2);
                 if (distance >= score) continue;
                 score = distance; best = bits | (dash ? 8u : 0u);
             }

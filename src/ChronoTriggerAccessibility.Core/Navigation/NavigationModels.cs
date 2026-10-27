@@ -147,6 +147,13 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public NavigationDirection PlayerFacing { get; init; }
     /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
     public NavigationFloor? MovingFloor { get; init; }
+    /// <summary>Enable route steering against moving ground independently of
+    /// stationary interaction reach. Ordinary exits retain ordinary arrival.</summary>
+    public bool CompensateMovingFloor { get; init; }
+    /// <summary>Conservative component sweeps through captured body collision,
+    /// not permission to move or a substitute for native collision.</summary>
+    public Func<NavigationPoint,int,int,bool>? CanTraverseFloorStep { get; init; }
+    public Func<NavigationDirection,NavigationPoint,NavigationDirection>? MovingFloorGuidance { get; init; }
     /// <summary>Fresh native script identity, not merely loss of player control.</summary>
     public IReadOnlySet<string> ActiveTransitions { get; init; } = new HashSet<string>();
     /// <summary>Diagnostic only: encodes the captured state this frame was built from for a
