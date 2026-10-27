@@ -119,7 +119,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // 178980 tests the leading probe against +/-160 native units. Up's
         // probe is 112 above the foot; horizontal probes are 64 above it.
         yield return new(x, y + 128, layer);
-        // Atel0600 actor21 opens the wall before its optional native battle.
+        // Atel0600 actor21 opens the wall before its conditional native battle.
         // The live floor starts here; the four ordinary probes lie in the wall.
         if (scene == 600 && actor.Index == 21) yield return new(x, y + 256, layer);
         if (scene == 464 && actor.Index == 25) yield break; // Native door requires facing up.

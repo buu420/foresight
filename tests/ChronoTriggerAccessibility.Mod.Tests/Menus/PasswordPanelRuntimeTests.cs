@@ -1,5 +1,6 @@
 using ChronoTriggerAccessibility.Mod.Menus;
 using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Native.Memory;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Menus;
@@ -9,6 +10,41 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Menus;
 /// capture's atlas-proven table.</summary>
 public sealed class PasswordPanelRuntimeTests
 {
+    [Theory]
+    [InlineData(0x11)] [InlineData(0x4A)] [InlineData(0x75)] [InlineData(0xAD)] [InlineData(0xBB)] [InlineData(0xE3)]
+    public void IdleOrdinaryOpcodesDoNotReadMemory(int opcode)
+    {
+        var memory=new CountingMemory();var originals=0;var foreground=0;
+        var runtime=new PasswordPanelRuntime((context,_)=>PasswordPanelCapture.Capture(memory,0x400000,(nuint)context),
+            ()=>{foreground++;return true;},_=>{},_=>{});
+        runtime.Enable();runtime.Dispatch(0x1000,opcode,()=>originals++);
+        Assert.Equal(1,originals);Assert.Equal(0,memory.Reads);Assert.Equal(0,foreground);
+    }
+
+    [Fact]
+    public void AnOpenPanelStillPollsFocusAndClosureOnOrdinaryOpcodes()
+    {
+        var h=new Harness();h.Run(Shown(0));
+        h.Next.Enqueue(Shown(1));h.Runtime.Dispatch(1,0x75,()=>{});
+        h.Next.Enqueue(Hidden(true));h.Runtime.Dispatch(1,0xE3,()=>{});
+        h.Runtime.Dispatch(1,0x75,()=>{});
+        Assert.Equal(3,h.Captures);
+        Assert.Equal([$"{LatinPanel} F, row 1, column 1.","R, row 1, column 2.",Closed],h.Speech);
+    }
+
+    [Fact]
+    public void AProvenAbsentPanelDoesNotProbeTheForegroundWindow()
+    {
+        var foreground=0;
+        var runtime=new PasswordPanelRuntime((_,_)=>Absent(),()=>{foreground++;return true;},_=>{},_=>{});
+        runtime.Enable();runtime.Dispatch(1,0x2D,()=>{});Assert.Equal(0,foreground);
+    }
+
+    private sealed class CountingMemory:IReadableMemory
+    {
+        public int Reads;
+        public bool TryRead(nuint address,Span<byte> bytes){Reads++;return false;}
+    }
     private const string LatinPanel = "Password panel. Row 1: F, R, O, C, Z. Row 2: A, W, T, L, I.";
     private const string Closed = "Password panel closed.";
 

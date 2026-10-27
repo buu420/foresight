@@ -12,7 +12,7 @@ Fresh Ghidra exports of RVA 1734D0 and 175E90 establish committed force ordering
 
 ## Vortex passages
 
-- Scene 600 has actual captured planes, actors and story state. Its native actor 21 copies tiles from source 18–19, 60–63 to destination 7,3. The usable opening contact is beyond the old four fixed probes. Scoped continuation reaches its native touch before waiting. The E3 00 control lock stops navigation before the game's optional battle.
+- Scene 600 has actual captured planes, actors and story state. Its native actor 21 copies tiles from source 18–19, 60–63 to destination 7,3. The usable opening contact is beyond the old four fixed probes. Scoped continuation reaches its native touch before waiting. The E3 00 control lock stops navigation before the game's conditional battle.
 - The fine standing bands in scenes 599, 600 and 643 miss tile centres. Warp goals now use the exit lattice (0, 64, 112, 128, 192, 240), keep the arrival box inside the coordinate guard and retain at most 64 nearest points. Cell-distance bounds avoid expanding long guards unnecessarily. Scene 600 can publish exact native-copy preview goals; staged search must still prove the opening contact on the live map.
 - Scene 599 uses Extra28 to identify the next currently present child, slot 8–11. Story Events supplies no answer. After all four, it follows the real passage.
 - Scene 643 identifies actor 8 as a door console without its private sequence. Its separate forward doorway works in either console state.
@@ -27,7 +27,7 @@ The PC scene uses a two-row letter grid, not a sequence of SNES button names. `P
 
 The reader requires coherent scene 4 / Atel 26, the current global actor store, the scene-4 script header and VirtualPad vtables. The global stick at image+41C3E0 points to pad+290. The grid's manager is pad+2D4, its focus key is manager+2C4 and its hidden input lock is manager+290. Logical visibility, node visibility and input lock must agree; owners and identities are reread. Unknown data stays unknown.
 
-The loaded language chooses atlas-proven glyphs: `F R O C Z / A W T L I`, with Q replacing R in Japanese and both Chinese atlases. Only visible focus and layout are spoken. A hidden panel closes the speech session only after native player control returns. This preserves the accepted-letter hide/show gap without a timer heuristic. Success and timeout leave through native scene transitions. No answer, entry history or correct/incorrect judgement is extracted.
+The loaded language chooses atlas-proven glyphs: `F R O C Z / A W T L I`, with Q replacing R in Japanese and both Chinese atlases. These are the stock localized atlases; runtime texture overrides are not detected. Only visible focus and layout are spoken. A hidden panel closes the speech session only after native player control returns. This preserves the accepted-letter hide/show gap without a timer heuristic. Success and timeout leave through native scene transitions. No answer, entry history or correct/incorrect judgement is extracted.
 
 Fresh Ghidra show/grid exports are supplemented by hide/build evidence `ev_e2584a95b2c54f1ecf1949e1e79a2bada994264b1d50e981bd48ef99e555e4bb`. The accident's machine objective is gated by Global7C/20 and no longer reveals the password.
 
@@ -41,7 +41,9 @@ Both UI readers share the existing opcode hook. Neither adds native hooks, write
 
 ## Verification boundaries
 
-The first unrestricted solution run had two test-wording failures (the mod says “up,” not “north”) and three scheduling timeouts in existing Settings, racing and title tests. The three timing tests passed together on retry. The complete suite then passed with the documented xUnit `MaxParallelThreads=4` setting, without product changes for those timeouts. Preserve the first log alongside the passing run.
+The first unrestricted solution run had two test-wording failures (the mod says “up,” not “north”) and three scheduling timeouts in existing Settings, racing and title tests. The three timing tests passed together on retry; earlier full-run logs also contain two of these timing failures. The complete suite then passed with the xUnit command-line setting `MaxParallelThreads=4`, without product changes for those timeouts. Preserve the first log alongside the passing run.
+
+The fresh review found excess reads on ordinary script instructions. The password reader now begins observation only on native pad handlers 2D, 34–39 or 3F–44; an open panel continues observing every dispatch until closure or owner loss. Proven absence resets without a foreground-window query. The flashback reader observes AD anchors, then retains observation only while a spoken or withheld entry needs rearming. Counting-memory tests require zero reads for idle, unwatched instructions while preserving active focus, closure and scene-change behavior. The initial sixteen assertions failed before the fix.
 
 The native UI delivery first failed 71 positive assertions against API-only stubs, then passed all 130 tests; ten safety mutations were caught. Canonical tests and exact-payload x86 checks are recorded separately. A pre-wiring hook test compilation failure is not counted as a behavioral RED result.
 

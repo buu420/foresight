@@ -1,5 +1,6 @@
 using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Native.Memory;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
@@ -9,6 +10,34 @@ namespace ChronoTriggerAccessibility.Mod.Tests.AudioDescriptions;
 /// (monster.txt) and the current character names.</summary>
 public sealed class LavosFlashbackRuntimeTests
 {
+    [Theory]
+    [InlineData(0x11)] [InlineData(0x4A)] [InlineData(0x75)] [InlineData(0xAE)] [InlineData(0xBB)] [InlineData(0xE3)]
+    public void IdleOrdinaryOpcodesDoNotReadMemory(int opcode)
+    {
+        var memory=new CountingMemory();var originals=0;var foreground=0;
+        var runtime=new LavosFlashbackRuntime((context,op)=>LavosFlashbackCapture.Capture(memory,(nuint)context,op),
+            ()=>{foreground++;return true;},_=>null,_=>null,_=>{},_=>{});
+        runtime.Enable();runtime.Dispatch(0x1000,opcode,()=>originals++);
+        Assert.Equal(1,originals);Assert.Equal(0,memory.Reads);Assert.Equal(0,foreground);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ASpokenOrWithheldEntryStillObservesAnOrdinaryOpcodeToRearm(bool withheld)
+    {
+        var h=new Harness();if(withheld)h.Monsters.Remove(0x93);
+        h.Run(Flash(LavosFlashbackSubject.DragonTank));
+        h.Next.Enqueue(Outside(467));h.Runtime.Dispatch(1,0x75,()=>{});
+        h.Runtime.Dispatch(1,0x75,()=>{});Assert.Equal(2,h.Captures);
+        h.Monsters[0x93]="Dragon Tank";h.Run(Flash(LavosFlashbackSubject.DragonTank));
+        Assert.Equal(withheld?1:2,h.Speech.Count);
+    }
+
+    private sealed class CountingMemory:IReadableMemory
+    {
+        public int Reads;
+        public bool TryRead(nuint address,Span<byte> bytes){Reads++;return false;}
+    }
     private static readonly Dictionary<int, string> English = new()
     {
         [0x93] = "Dragon Tank", [0xD4] = "Guardian", [0xA9] = "Heckran", [0xB4] = "Zombor", [0x99] = "Masa & Mune",

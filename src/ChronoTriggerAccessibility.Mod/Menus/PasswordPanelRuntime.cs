@@ -36,7 +36,9 @@ public sealed class PasswordPanelRuntime(Func<nint, int, PasswordPanelFrame?> ca
         // Native execution is owned by this single call and always happens first.
         try { original(); }
         catch { lock (gate) Reset(); throw; }
-        lock (gate) if (!enabled) return;
+        // Only these native pad handlers can begin a session. Once shown,
+        // poll every dispatch through focus changes, hide gaps and E3 closure.
+        lock (gate) if (!enabled || !open && !CanShowPanel(opcode)) return;
         PasswordPanelFrame? frame;
         try { frame = capture(context, opcode); }
         catch (Exception exception)
@@ -45,6 +47,11 @@ public sealed class PasswordPanelRuntime(Func<nint, int, PasswordPanelFrame?> ca
             return;
         }
         if (frame is null) return;
+        if (frame.State == PasswordPanelState.Absent)
+        {
+            lock (gate) Reset();
+            return;
+        }
         bool focused;
         try { focused = foreground(); }
         catch (Exception) { focused = false; }
@@ -104,6 +111,8 @@ public sealed class PasswordPanelRuntime(Func<nint, int, PasswordPanelFrame?> ca
             : null;
 
     private void Reset() { open = false; owner = null; focus = null; }
+
+    private static bool CanShowPanel(int opcode) => opcode is 0x2D or >= 0x34 and <= 0x39 or >= 0x3F and <= 0x44;
 
     private void Report(string message)
     {

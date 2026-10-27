@@ -24,6 +24,8 @@ public sealed class VortexRoomGeometryTests
         var result=Start(frame,target.Id,automatic);
         Assert.True(result.Guiding,string.Join(" ",result.Speech));
         Assert.Equal(automatic,result.AutoWalking);
+        var route=NavigationPathfinder.Search(frame.Graph,frame.Player,target.ApproachPoints).Route!;
+        Assert.InRange(route[^1].X,2032,2064);
     }
 
     [Theory]
@@ -45,6 +47,10 @@ public sealed class VortexRoomGeometryTests
         var target=frame.Targets.SingleOrDefault(t=>t.Id=="script-region:0:599:6:5:255:5");
         if(target is not null)
             Assert.Null(NavigationPathfinder.Search(frame.Graph,frame.Player,target.ApproachPoints).Route);
+        // Even if target filtering removes the row, prove that the graph cannot
+        // gain the known open doorway's floor from an unavailable contact.
+        var openGoals=Hall(true).Targets.Single(t=>t.Id=="script-region:0:599:6:5:255:5").ApproachPoints;
+        Assert.Null(NavigationPathfinder.Search(frame.Graph,frame.Player,openGoals).Route);
     }
 
     [Theory]
@@ -122,6 +128,20 @@ public sealed class VortexRoomGeometryTests
         Assert.NotNull(path.Route);
         Assert.True(Start(frame,passage.Id,automatic).Guiding);
         Assert.NotNull(passage.ContactAt(path.Route[^1]));
+        var controller=new NavigationController();frame=frame with{Targets=[passage]};
+        for(var i=0;i<(int)passage.Category;i++)controller.Handle(NavigationCommand.NextCategory,frame,0);
+        controller.Handle(automatic?NavigationCommand.ToggleWalk:NavigationCommand.Guide,frame,1);
+        var finish=controller.Update(frame with{Player=path.Route[^1]},100);
+        Assert.True(finish.Guiding);
+        Assert.Contains(finish.Speech,s=>s.Contains("Continue left",StringComparison.Ordinal));
+        if(automatic)Assert.Equal(NavigationDirection.West,finish.Direction);
+        // Native178980's leading probe for a 16-unit west step. ContactActor
+        // reports only blocking sprites, so check the unloaded touch markers'
+        // first-match arithmetic independently instead of inventing a loaded flag.
+        var end=path.Route[^1];var probeX=end.X-16-112;var probeY=end.Y-64;
+        var markers=new[]{(Slot:15,X:1920,Y:7423),(Slot:14,X:1664,Y:7423)};
+        var winner=markers.First(m=>Math.Abs(m.X-probeX-1)<160 && Math.Abs(m.Y-probeY)<160);
+        Assert.Equal(14,winner.Slot);
     }
 
     [Fact]

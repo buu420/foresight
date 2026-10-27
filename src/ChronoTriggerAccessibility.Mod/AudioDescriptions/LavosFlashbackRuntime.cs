@@ -32,7 +32,9 @@ public sealed class LavosFlashbackRuntime(Func<nint, int, LavosFlashbackFrame?> 
     {
         ArgumentNullException.ThrowIfNull(original);
         bool observing;
-        lock (gate) observing = enabled;
+        // AD is the only caption anchor. After a spoken or withheld caption,
+        // retain observation until a coherent scene/owner change rearms it.
+        lock (gate) observing = enabled && (opcode == 0xAD || spoken is not null || unavailable is not null);
         LavosFlashbackFrame? frame = null;
         if (observing)
         {

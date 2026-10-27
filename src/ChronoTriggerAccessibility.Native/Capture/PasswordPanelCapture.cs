@@ -99,7 +99,7 @@ public static class PasswordPanelCapture
         {
             if (memory is null || imageBase == 0 || !Fits(imageBase, CurrentStickRva + 4) ||
                 !Fits(context, ScriptIdOffset + 4) || !ReadScene(memory, context, out var field, out var scene)) return null;
-            // Polled after every dispatch: other coherent scenes cost four reads (plus the reread).
+            // A watched dispatch in another coherent scene costs eight reads including the coherence reread.
             if (scene != SceneId)
                 return ReadScene(memory, context, out var fieldAgain, out var sceneAgain) && fieldAgain == field && sceneAgain == scene
                     ? new(PasswordPanelState.Absent, (uint)context, field, (int)scene, 0, 0, null, -1, false)

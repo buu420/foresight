@@ -35,13 +35,15 @@ public sealed class IntroTraceHookSetTests
         var hooks=new IntroTraceHookSet(factory,recorder,passwordPanel:password,lavosFlashbacks:flashback);
         var build=new Build(0x400000,GameVersionCatalog.Hooks.ToDictionary(x=>x.Id,x=>(nuint)(0x400000+x.Rva)));
         hooks.Prepare(build,new(errors,errors));hooks.AfterHooksActivated();
-        factory.Detour!(0x1000,0xAD);
+        factory.Detour!(0x1000,0x2D); // Native pad handler opens the panel.
+        Assert.Equal(["password-after"],order);Assert.Single(speech);order.Clear();
+        factory.Detour(0x1000,0xAD);
         Assert.Equal(["flashback-before","password-after"],order);
-        Assert.Equal(2,speech.Count);Assert.Equal(1,factory.Originals);Assert.Equal(1,factory.Created);
+        Assert.Equal(2,speech.Count);Assert.Equal(2,factory.Originals);Assert.Equal(1,factory.Created);
         hooks.AfterHooksDisabled();factory.Detour(0x1000,0xAD);
-        Assert.Equal(2,factory.Originals);Assert.Equal(2,speech.Count);Assert.Equal(2,order.Count);
-        hooks.AfterHooksActivated();factory.Detour(0x1000,0xAD);
-        Assert.Equal(3,factory.Originals);Assert.Equal(4,speech.Count);Assert.Empty(errors.Messages);
+        Assert.Equal(3,factory.Originals);Assert.Equal(2,speech.Count);Assert.Equal(2,order.Count);
+        hooks.AfterHooksActivated();factory.Detour(0x1000,0x2D);factory.Detour(0x1000,0xAD);
+        Assert.Equal(5,factory.Originals);Assert.Equal(4,speech.Count);Assert.Empty(errors.Messages);
     }
     [Fact]
     public void CopyGameUsesTheExistingOpcodeHookAndResetsWhenHooksAreDisabled()
