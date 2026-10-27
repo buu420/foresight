@@ -92,6 +92,18 @@ public sealed class FieldContentCoverageTests
             // scenery. Its covered loot is tested after the native reveal below.
             if(row.Scene==179&&row.Actor==1)continue;
             var actor = Snapshot(new(row.Actor, row.Class, row.Visual, row.X, row.Y));
+            if(row.Scene==256 && row.Actor==18)
+            {
+                // Atel0355:0B94 -> Robo fn5 -> actor18 fn1. The transient
+                // menu screen is accessed through its real wall terminal19,
+                // rather than offered as a second "Sparkle" destination.
+                var controlRow=Assert.Single(Content.Actors,r=>r.Scene==256 && r.Actor==19);
+                var control=Snapshot(new(controlRow.Actor,controlRow.Class,controlRow.Visual,controlRow.X,controlRow.Y));
+                var paired=Build(256,[actor,control],States(256,control).First(),Open(controlRow.X,controlRow.Y));
+                Assert.DoesNotContain(paired.Targets,t=>t.Id==Id(actor,256));
+                Assert.Contains(paired.Targets,t=>t.Id=="landmark:19" && t.Label=="Information terminal");
+                continue;
+            }
             var offered = false;
             foreach (var state in States(row.Scene, actor))
             {
