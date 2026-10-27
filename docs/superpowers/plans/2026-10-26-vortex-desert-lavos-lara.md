@@ -33,17 +33,17 @@ Files: Core/Navigation/NavigationModels.cs and NavigationController.cs; Mod/Navi
 
 Files: current BonusStoryObjectives/FullStoryTargets, FieldNavigationSource/FieldTransitions and focused scene targets only where the audit proves a gap; Native capture for live overrides if required. Tests: VortexStoryNavigationTests and a dedicated copied-room regression fixture from supplied route evidence.
 
-- [ ] Match every logged no-route/empty-target failure to current code and native scripts. Fill exact file/interface choices from the read-only audit before product edits.
-- [ ] Add RED cases for missing verified contacts, copied-map destinations and floor/layer transitions, plus unavailable state controls.
-- [ ] Implement only proven bindings/corrections and verify both navigation modes, adjacent scenes and no backward/hidden fallback. Record and commit.
+- [x] Match every logged no-route/empty-target failure to current code and native scripts. Fill exact file/interface choices from the read-only audit before product edits.
+- [x] Add RED cases for missing verified contacts, copied-map destinations and floor/layer transitions, plus unavailable state controls.
+- [x] Implement only proven bindings/corrections and verify both navigation modes, adjacent scenes and no backward/hidden fallback. Record and commit.
 
 ## Task3: Native Lavos/password presentation
 
 Files/interfaces to be fixed by the native UI audit before implementation: a read-only capture per native presentation owner, its semantic event/formatter/runtime integration, and owned-memory/render lifecycle tests.
 
-- [ ] Verify displayed Lavos imitation and password selector paths with existing evidence and focused fresh Ghidra procedures. Record exact executable/script identities and offsets.
-- [ ] Add RED tests for displayed identity/selection changes, localization/control glyphs, native results and stale/foreign/unreadable owner rejection.
-- [ ] Implement bounded captures and announcements without inputs or timing changes. Correct any premature password answer in Story Events using visible clue state. Verify and commit each independently.
+- [x] Verify displayed Lavos imitation and password selector paths with existing evidence and focused fresh Ghidra procedures. Record exact executable/script identities and offsets.
+- [x] Add RED tests for displayed identity/selection changes, localization/control glyphs, native results and stale/foreign/unreadable owner rejection.
+- [x] Implement bounded captures and announcements without inputs or timing changes. Correct any premature password answer in Story Events using visible clue state. Verify and commit each independently.
 
 ## Task4: Review, validation and local tester delivery
 
@@ -51,3 +51,5 @@ Files/interfaces to be fixed by the native UI audit before implementation: a rea
 - [ ] Run the appropriate focused suites and complete solution; build Release with zero warnings/errors.
 - [ ] Version the tester build, update pinned manifests, package the exact payload and replay its x86 assemblies with no source fallback.
 - [ ] Verify archive/installation, deploy with backup and preserved files, copy ZIP/checklist to Downloads and record a handoff. Keep publication separate until requested.
+
+Execution notes: UI delivery was implemented in an isolated binary-reference overlay by Opus5.5/max, then copied and verified in the canonical assemblies by root. The fresh whole-change reviewer is a separate Opus session. Original-instruction vortex-motion replay adds8/8 coordinate-region entries on captured/derived/native planes, in addition to the Desert8/8 exits and11 chest cases. Full suite5,036 passes with xUnit.MaxParallelThreads=4; first unrestricted failures and the35-case follow-up remain retained. Source commits for tasks2/3 are grouped with the payload after review so all production assembly revisions identify the reviewed implementation.

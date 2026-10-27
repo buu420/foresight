@@ -124,6 +124,10 @@ public static class BonusStoryObjectives
         V("antiquity:enter", "Explore the Dimensional Vortex in 12000 BC", Switch(662, 0x28, 0), NavigationCategory.Exits),
         new("bonus:vortex:shifting-path", "Follow the shifting passages to the Nameless Cave",
             [Actor(601, 10), Actor(663, 10), Actor(664, 10)], Category: NavigationCategory.Exits),
+        V("quiz:0", "Speak with the child ahead", Actor(599, 8), NavigationCategory.People),
+        V("quiz:1", "Speak with the child ahead", Actor(599, 9), NavigationCategory.People),
+        V("quiz:2", "Speak with the child ahead", Actor(599, 10), NavigationCategory.People),
+        V("quiz:3", "Speak with the child ahead", Actor(599, 11), NavigationCategory.People),
         V("present:cave", "Take the forward Gate from the Nameless Cave", Actor(601, 10), NavigationCategory.Exits),
         V("antiquity:cave", "Take the forward Gate from the Nameless Cave", Actor(664, 10), NavigationCategory.Exits),
         V("future:cave", "Take the forward Gate from the Nameless Cave", Actor(663, 10), NavigationCategory.Exits),
@@ -346,6 +350,8 @@ public static class BonusStoryObjectives
             var mask = scene == 595 ? 4 : scene == 661 ? 2 : 1;
             if ((clears & mask) == 0) AddV(scene == 595 ? "present:enter" : scene == 661 ? "future:enter" : "antiquity:enter");
         }
+        else if (scene == 599 && s.Extra(0x28) is >= 0 and < 4)
+            AddV("quiz:" + s.Extra(0x28));
         else if (scene is >= 625 and <= 644 or >= 596 and <= 600 or 659 or 660) AddV("shifting-path");
         else if (scene is 601 or 663 or 664)
             AddV(scene == 601 ? "present:cave" : scene == 663 ? "future:cave" : "antiquity:cave");

@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.78 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.79 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.78 speeds up world navigation, corrects a controller timeout during slow work, announces unexpected menu closures, keeps landing and entrance approaches clear of parked vehicles, and makes Story Events follow the local Dimensional Vortex objective. Manual guidance and auto-walk use the same native targets. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.78.md).
+Version 0.3.79 repairs narrow Dimensional Vortex passages and their local controls, improves Sunken Desert exit steering through moving sand, announces the earlier bosses visibly shown during Lavos flashbacks, and reads the letter panel in Lucca's past. Both navigation modes retain native opening events and restrictions. The timed letter panel keeps your own selections and Confirm. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.79.md).
 
 At North Cape, the encounter's sparkling light is listed as **Magus encounter**, using his current name if renamed. In Bekkler's copy game, each demonstrated pose gives a short cue such as **Y. Laugh.** Button letters follow the game's current configuration. Repeat the action with the normal game controls after its signal; the game keeps its original timing. The native instructions, result and prize dialogue remain readable.
 

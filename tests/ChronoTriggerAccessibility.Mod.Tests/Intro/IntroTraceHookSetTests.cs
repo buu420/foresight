@@ -10,11 +10,39 @@ using ChronoTriggerAccessibility.Native.Hooks;
 using ChronoTriggerAccessibility.Native.Memory;
 using Reloaded.Hooks.Definitions;
 using Xunit;
+using ChronoTriggerAccessibility.Mod.Menus;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Intro;
 
 public sealed class IntroTraceHookSetTests
 {
+    [Fact]
+    public void PasswordAndFlashbackReadersShareTheOpcodeHookWithTheNativeCallInBetween()
+    {
+        var factory=new Factory();var errors=new Errors();var speech=new List<string>();
+        var recorder=new IntroTraceRecorder(new NoMemory(),_=>{});
+        var order=new List<string>();
+        var password=new PasswordPanelRuntime((_,_)=>
+        {
+            Assert.True(factory.Originals>0);order.Add("password-after");
+            return new(PasswordPanelState.Shown,0x1000,0x5000,4,0x7000,0x8000,0,1,false);
+        },()=>true,speech.Add,_=>{});
+        var flashback=new LavosFlashbackRuntime((_,_)=>
+        {
+            order.Add("flashback-before");
+            return new(LavosFlashbackKind.Flashback,0x1000,0x2000,0x3000,0x5000,347,311,LavosFlashbackSubject.DragonTank);
+        },()=>true,_=>"Dragon Tank",_=>null,speech.Add,_=>{});
+        var hooks=new IntroTraceHookSet(factory,recorder,passwordPanel:password,lavosFlashbacks:flashback);
+        var build=new Build(0x400000,GameVersionCatalog.Hooks.ToDictionary(x=>x.Id,x=>(nuint)(0x400000+x.Rva)));
+        hooks.Prepare(build,new(errors,errors));hooks.AfterHooksActivated();
+        factory.Detour!(0x1000,0xAD);
+        Assert.Equal(["flashback-before","password-after"],order);
+        Assert.Equal(2,speech.Count);Assert.Equal(1,factory.Originals);Assert.Equal(1,factory.Created);
+        hooks.AfterHooksDisabled();factory.Detour(0x1000,0xAD);
+        Assert.Equal(2,factory.Originals);Assert.Equal(2,speech.Count);Assert.Equal(2,order.Count);
+        hooks.AfterHooksActivated();factory.Detour(0x1000,0xAD);
+        Assert.Equal(3,factory.Originals);Assert.Equal(4,speech.Count);Assert.Empty(errors.Messages);
+    }
     [Fact]
     public void CopyGameUsesTheExistingOpcodeHookAndResetsWhenHooksAreDisabled()
     {

@@ -50,6 +50,8 @@
     <EmbeddedResource Include="Navigation\black-omen-initial-maps-0372.json" />
     <EmbeddedResource Include="Navigation\black-omen-persistent-state-0377.json" />
     <EmbeddedResource Include="Navigation\sunken-desert-initial-0374.json" />
+    <EmbeddedResource Include="Navigation\vortex-hall-live-0377.json" />
+    <EmbeddedResource Include="Navigation\vortex-native-rooms.json" />
     <EmbeddedResource Include="Navigation\black-omen324-reconstructed-0372.json" />
     <EmbeddedResource Include="Navigation\mammon-415-map.json" />
     <EmbeddedResource Include="Navigation\arris-rat-map-0342.json" />

@@ -352,7 +352,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
             if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
                 OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
-                QuestObjectLabels.Marker(field.SceneId, actor);
+                QuestObjectLabels.Marker(field.SceneId, actor) ??
+                (field.SceneId == 643 && actor.Index == 8 ? "Door console" : null);
             if (knownTouch && label is null && !scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null)) continue;
             if (label is null && scripted.Any(a => a.Kind == "Encounter") &&
                 !scripted.Any(a => a.Kind is "Item" or "Warp" or "Menu" or "Talk" or "Terrain")) continue;
@@ -413,6 +414,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     bike ? "Press Confirm to interact with the jet bike." :
                     field.SceneId == 465 && actor.Index == 15 ? "Continue down through the doorway." :
                     BlackbirdDuctTargets.ArrivalInstruction(field.SceneId, actor.Index),
+                contactPosition: field.SceneId == 642 && actor.Index is 14 or 15 ||
+                    field.SceneId == 600 && actor.Index == 21 && terrainContact
+                    ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1, actor.FineY) : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[landmarkId] = Anchors(actor);
         }
@@ -423,7 +427,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         targets.RemoveAll(t => t.Category != NavigationCategory.People && genericIds.Contains(t.Id) &&
             standInsOf.Any(s => s.StandIn == t.Id && targets.Any(owner => owner.Id == s.Owner)));
         if (field.SceneIdCoherent)
-        foreach (var group in FieldContentFacts.MarkerGroups(field.SceneId))
+        foreach (var group in FieldContentFacts.MarkerGroups(field.SceneId)
+                     // Atel0642's two side-by-side contacts run the same guarded
+                     // warp. They are one passage, not two distinct doorways.
+                     .Concat(field.SceneId == 642 ? new[] { new[] { 14, 15 } } : []))
         {
             var members = targets.Where(t => genericIds.Contains(t.Id) && group.Any(index => t.Id == $"landmark:{index}")).ToList();
             if (members.Count < 2) continue;
@@ -465,6 +472,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             if (!InsideMap(actor)) continue;
             if (KeepFieldTargets.ConcealedEncounter(field.SceneId, actor)) continue;
+            if (field.SceneId == 600 && actor.Index == 21 && actor.ClassTag == 7) continue;
             if (OceanPalaceTargets.ConcealedSprite(field.SceneId, actor)) continue;
             if (field.SceneId == 464 && actor.Index == EpochDockTargets.Actor) continue;
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
@@ -489,6 +497,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
+                     !(field.SceneId == 600 && r.Kind == "Encounter") &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (BlackOmenTargets.IsPad(field.SceneId, r) ||
@@ -555,6 +564,13 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         foreach (var (id, points) in exitGroups.OrderBy(entry => entry.Key))
         {
+            // Added PC rooms retain a destination-zero placeholder at (0,0).
+            // It is not a native doorway. A current positive destination takes
+            // precedence over the static placeholder when the game replaces it.
+            if (map.ExitDestinations?.TryGetValue(id, out var liveDestination) == true
+                ? liveDestination == 0
+                : GameNavigationCatalog.ForScene(field.SceneId)?.Exits.Any(e => e.Id == id && e.Destination == 0) == true)
+                continue;
             if (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id) &&
                 !ZealFieldLabels.PassageOpen(story)) continue;
             var key = $"exit:{id}";
@@ -854,6 +870,64 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
+            if (field.SceneId is 599 or 600 or 643 && region.Kind == "Warp")
+            {
+                // These native half-tile doorways have no standing room at a
+                // tile centre. Search the same fine lattice as map exits, keeping
+                // the arrival box inside the script's region. Visit nearby cells
+                // first and retain only 64 points, rather than expanding every
+                // point of a long coordinate guard on every capture.
+                var best = new SortedSet<NavigationPoint>(Comparer<NavigationPoint>.Create((a, b) =>
+                {
+                    var order = Distance(a).CompareTo(Distance(b));
+                    if (order != 0) return order;
+                    order = a.X.CompareTo(b.X); if (order != 0) return order;
+                    order = a.Y.CompareTo(b.Y); return order != 0 ? order : a.Layer.CompareTo(b.Layer);
+                }));
+                foreach (var point in points) best.Add(point);
+                // The hall's north floor does not exist until its live marker
+                // opens it. Publish native-copy goals for staged proof only;
+                // FindStage must still reach that marker on the current map.
+                var previews = field.SceneId == 600 && story is not null
+                    ? field.Actors.Where(a => a.Index == 21 && a.ClassTag == 7 && a.IsUsable && a.ScriptCallsEnabled)
+                        .SelectMany(a => GameNavigationCatalog.ActorInfo(600, a)?.Actions.Where(c =>
+                            c.Touch && c.Kind == "Terrain" && c.Copy is not null &&
+                            FieldTerrainGraph.ActionAvailable(600, 21, c, story)) ?? [])
+                        .Select(c => FieldTerrainGraph.Preview(map, c.Copy!)).OfType<FieldMapSnapshot>()
+                        .Select(m => new FieldNavigationGraph(m)).ToArray() : [];
+                IEnumerable<NavigationPoint> DoorPoints(int x, int y)
+                {
+                    foreach (var point in At(x, y)) yield return point;
+                    foreach (var preview in previews)
+                    for (var layer = 1; layer <= 3; layer++)
+                        if (preview.TryPosition(x, y, layer, out var point)) yield return point;
+                }
+                var cells = from y in Enumerable.Range(Math.Max(0, region.Top),
+                        Math.Max(0, Math.Min(map.Height - 1, region.Bottom) - Math.Max(0, region.Top) + 1))
+                    from x in Enumerable.Range(Math.Max(0, region.Left),
+                        Math.Max(0, Math.Min(map.Width - 1, region.Right) - Math.Max(0, region.Left) + 1))
+                    let distance = Math.Max(0L, Math.Max((long)x * 256 - player.X, player.X - ((long)x * 256 + 240))) +
+                        Math.Max(0L, Math.Max((long)y * 256 - player.Y, player.Y - ((long)y * 256 + 240)))
+                    orderby distance, y, x
+                    select (x, y, distance);
+                foreach (var (x, y, distance) in cells)
+                {
+                    if (best.Count == 64 && distance > Distance(best.Max)) break;
+                    foreach (var oy in new[] { 0, 64, 112, 128, 192, 240 })
+                    foreach (var ox in new[] { 0, 64, 112, 128, 192, 240 })
+                    {
+                        var px = x * 256 + ox; var py = y * 256 + oy;
+                        if (px < region.Left * 256 + 32 || px > (region.Right + 1) * 256 - 33 ||
+                            py < region.Top * 256 + 32 || py > (region.Bottom + 1) * 256 - 33) continue;
+                        foreach (var point in DoorPoints(px, py).Where(p => !graph.IsTerminal(p)))
+                        {
+                            best.Add(point);
+                            if (best.Count > 64) best.Remove(best.Max);
+                        }
+                    }
+                }
+                return best.ToArray();
+            }
             for (var y = Math.Max(0, region.Top); y <= Math.Min(map.Height - 1, region.Bottom); y++)
             for (var x = Math.Max(0, region.Left); x <= Math.Min(map.Width - 1, region.Right); x++)
                 points.AddRange(At(x * 256 + 128, y * 256 + 128).Where(p => !graph.IsTerminal(p)));
@@ -974,6 +1048,22 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         IReadOnlyList<NavigationPoint> TouchApproach(FieldActorSnapshot actor)
         {
+            if (field.SceneId == 642 && actor.Index is 14 or 15)
+            {
+                // Atel0642 0320/0397 places equivalent warp contacts on both
+                // sides of a narrow corridor. Their tile centres are walls.
+                // The midpoint one native pixel below their head row is real
+                // standing room. A south approach meets slot15; starting here
+                // and facing either live centre meets that same passage.
+                var peer = field.Actors.FirstOrDefault(a => a.Index == (actor.Index == 14 ? 15 : 14) &&
+                    a.ClassTag == 7 && a.IsUsable && a.ScriptCallsEnabled &&
+                    GameNavigationCatalog.ActorInfo(642,a)?.Actions.Any(c => c.Touch && c.Kind == "Warp" && c.Available(story)) == true);
+                if (peer is null || Math.Abs((long)actor.FineX-peer.FineX) != 256 || actor.FineY != peer.FineY)
+                    return [];
+                var sx = (actor.FineX + peer.FineX) / 2;
+                var sy = (actor.FineY + 32) / 64 * 64 - 64;
+                return At(sx,sy).Where(p => !graph.IsTerminal(p)).Distinct().ToArray();
+            }
             if (field.SceneId == 28 && actor.Index == 1)
             {
                 // Atel0409's upper bridge contact shares confirm and touch code.

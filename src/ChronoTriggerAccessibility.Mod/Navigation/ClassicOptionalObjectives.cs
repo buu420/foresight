@@ -51,7 +51,7 @@ public static class ClassicOptionalObjectives
             "Examine Robo at the back of the shrine. The campfire scene follows."),
         Actor("lucca:gate", "Follow the red gate from the campfire", 83, 4, category: NavigationCategory.Exits),
         Actor("lucca:machine", "Reach the machine's emergency control in Lucca's past", 4, 12,
-            "The nearby notes identify Lara's name as the password. Enter it at the control when prompted; this sequence is timed."),
+            "Examine the emergency control. When its letter panel appears, choose a letter with the direction buttons, then press Confirm. This sequence is timed."),
         Actor("lucca:return", "Return through the gate in Lucca's room", 10, 13, category: NavigationCategory.Exits),
         Person("lucca:robo", "Speak with Robo after returning from Lucca's past", 83, 2),
 
@@ -259,7 +259,7 @@ public static class ClassicOptionalObjectives
         if (scene is 10 or 4 or 3 or 9 && !Bit(s, 0x5A, 2)) return null;
         if (Bit(s, 0x6A, 0x10)) return scene == 83 ? "lucca:robo" : null;
         if (Bit(s, 0x7C, 0x40)) return "lucca:return";
-        if (Bit(s, 0x5A, 4)) return "lucca:machine";
+        if (Bit(s, 0x5A, 4)) return Bit(s, 0x7C, 0x20) ? "lucca:machine" : null;
         return "lucca:gate";
     }
 

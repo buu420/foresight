@@ -126,7 +126,11 @@ public sealed class ClassicOptionalObjectivesTests
         Assert.Null(Quest("lucca", State(), 57));
         Assert.Null(Quest("lucca", State(0xD4, (0x19E, 3)), 4));
         Assert.Equal("full:quest:lucca:gate", Quest("lucca", State(0xD4, (0x19E, 3)), 436)!.Id);
-        Assert.Equal("full:quest:lucca:machine", Quest("lucca", State(0xD4, (0x19E, 3), (0x5A, 6)), 4)!.Id);
+        Assert.Null(Quest("lucca", State(0xD4, (0x19E, 3), (0x5A, 6)), 4));
+        var machine=Quest("lucca", State(0xD4, (0x19E, 3), (0x5A, 6), (0x7C,0x20)), 4)!;
+        Assert.Equal("full:quest:lucca:machine",machine.Id);
+        Assert.DoesNotContain("Lara",machine.Instruction);
+        Assert.DoesNotContain("password",machine.Instruction);
         Assert.Equal("full:quest:lucca:return", Quest("lucca", State(0xD4, (0x19E, 3), (0x5A, 6), (0x7C, 0x40)), 10)!.Id);
         Assert.Null(Quest("lucca", State(0xD4, (0x19E, 3), (0x6A, 0x10)), 496));
     }

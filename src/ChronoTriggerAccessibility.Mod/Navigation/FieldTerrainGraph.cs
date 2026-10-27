@@ -104,7 +104,7 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // The stairs and lesson marker have separately audited native effects.
         // Other terrain triggers can also start cutscenes: preserve their old
         // wait rather than introduce a push into an unaudited interaction.
-        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) ||
+        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) or (600, 21) ||
         actions.Any(a => a.Touch && a.Kind == "Terrain") && actions.Where(a => a.Touch).All(a => a.Kind == "Terrain");
 
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
@@ -119,6 +119,9 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // 178980 tests the leading probe against +/-160 native units. Up's
         // probe is 112 above the foot; horizontal probes are 64 above it.
         yield return new(x, y + 128, layer);
+        // Atel0600 actor21 opens the wall before its optional native battle.
+        // The live floor starts here; the four ordinary probes lie in the wall.
+        if (scene == 600 && actor.Index == 21) yield return new(x, y + 256, layer);
         if (scene == 464 && actor.Index == 25) yield break; // Native door requires facing up.
         yield return new(x, y - 64, layer);
         yield return new(x - 128, y + 64, layer);

@@ -1,6 +1,7 @@
 using ChronoTriggerAccessibility.Mod.Diagnostics;
 using ChronoTriggerAccessibility.Mod.AudioDescriptions;
 using ChronoTriggerAccessibility.Mod.Minigames;
+using ChronoTriggerAccessibility.Mod.Menus;
 using ChronoTriggerAccessibility.Mod.Navigation;
 using ChronoTriggerAccessibility.Mod.Reloaded;
 using ChronoTriggerAccessibility.Mod.Runtime;
@@ -17,11 +18,14 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
     private readonly StoryActionRuntime? storyActions;
     private readonly BlackbirdGrateViewRuntime? grateViews;
     private readonly BekklerMimicRuntime? mimic;
+    private readonly PasswordPanelRuntime? passwordPanel;
+    private readonly LavosFlashbackRuntime? lavosFlashbacks;
     private bool prepared;
 
     public IntroTraceHookSet(IRuntimeNativeHookFactory factory, IntroTraceRecorder recorder,
         IokaContestRuntime? contest = null, StoryActionRuntime? storyActions = null,
-        BlackbirdGrateViewRuntime? grateViews = null, BekklerMimicRuntime? mimic = null)
+        BlackbirdGrateViewRuntime? grateViews = null, BekklerMimicRuntime? mimic = null,
+        PasswordPanelRuntime? passwordPanel = null, LavosFlashbackRuntime? lavosFlashbacks = null)
     {
         this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
         this.recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
@@ -29,6 +33,8 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         this.storyActions = storyActions;
         this.grateViews = grateViews;
         this.mimic = mimic;
+        this.passwordPanel = passwordPanel;
+        this.lavosFlashbacks = lavosFlashbacks;
         Registrations = Array.AsReadOnly<IHookRegistration>([this]);
     }
 
@@ -58,10 +64,20 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
                 if (mimic is null) ContestAndCall();
                 else mimic.Dispatch(context, opcode, ContestAndCall);
             }
+            void PasswordAndCall()
+            {
+                if (passwordPanel is null) MimicAndCall();
+                else passwordPanel.Dispatch(context, opcode, MimicAndCall);
+            }
+            void FlashbackAndCall()
+            {
+                if (lavosFlashbacks is null) PasswordAndCall();
+                else lavosFlashbacks.Dispatch(context, opcode, PasswordAndCall);
+            }
             // Before the original: an E0 return must be read before the scene changes.
             grateViews?.Dispatch(context, opcode);
-            if (storyActions is null) MimicAndCall();
-            else storyActions.Dispatch(context, opcode, MimicAndCall);
+            if (storyActions is null) FlashbackAndCall();
+            else storyActions.Dispatch(context, opcode, FlashbackAndCall);
         });
         // The factory only prepares an inactive hook. Bind the trampoline before
         // returning it to ReloadedHookInstaller, which owns the later activation.
@@ -79,6 +95,12 @@ public sealed class IntroTraceHookSet : IHookActivationObserver, IHookRegistrati
         storyActions?.Enable();
         grateViews?.Enable();
         mimic?.Enable();
+        passwordPanel?.Enable();
+        lavosFlashbacks?.Enable();
     }
-    public void AfterHooksDisabled() { mimic?.Disable(); grateViews?.Disable(); storyActions?.Disable(); contest?.Disable(); recorder.Disable(); }
+    public void AfterHooksDisabled()
+    {
+        lavosFlashbacks?.Disable(); passwordPanel?.Disable(); mimic?.Disable();
+        grateViews?.Disable(); storyActions?.Disable(); contest?.Disable(); recorder.Disable();
+    }
 }

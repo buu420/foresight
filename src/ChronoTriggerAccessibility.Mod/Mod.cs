@@ -349,7 +349,21 @@ public sealed class Mod : ModBase
             text => navigationSpeech.Publish(new NavigationAnnouncement(text)),
             () => NavigationKeyboard.IsGameForeground() && NavigationKeyboard.IsKeyDown(0x4B),
             dispatcher.RecordDiagnostic);
-        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions, grateViews, mimic);
+        var passwordPanel = new PasswordPanelRuntime(
+            (context, _) => PasswordPanelCapture.Capture(memory, navigationImageBase, (nuint)context),
+            NavigationKeyboard.IsGameForeground,
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        // TextManager's startup constructor loads monster.txt into slot 0x32
+        // alongside field messages; flashbacks do not need a battle-only bank.
+        var monsterText = new LoadedGameTextCapture(memory);
+        var lavosFlashbacks = new LavosFlashbackRuntime(
+            (context, opcode) => LavosFlashbackCapture.Capture(memory, (nuint)context, opcode),
+            NavigationKeyboard.IsGameForeground,
+            monster => monsterText.Get(navigationImageBase, BattleCapture.MonsterBank, monster),
+            character => navigationText.CharacterName(navigationImageBase, character),
+            text => navigationSpeech.Publish(new NavigationAnnouncement(text)), dispatcher.RecordDiagnostic);
+        var introTrace = new IntroTraceHookSet(sharedFanout, introRecorder, contest, storyActions, grateViews, mimic,
+            passwordPanel, lavosFlashbacks);
         var registrations = startupTitle.Registrations
             .Concat(newGame.Registrations)
             .Concat(extras.Registrations)
