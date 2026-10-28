@@ -7,6 +7,8 @@ public sealed record NavigationSearchResult(IReadOnlyList<NavigationPoint>? Rout
     /// <summary>A native touch target that must be approached with movement while
     /// waiting for the live terrain to change. Never authorizes Confirm.</summary>
     public NavigationPoint? IntermediateContact { get; init; }
+    /// <summary>A named native contact to announce when a staged route is selected.</summary>
+    public string? IntermediateLabel { get; init; }
     public NavigationTransition? Transition { get; init; }
 }
 

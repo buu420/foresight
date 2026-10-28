@@ -104,12 +104,12 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // The stairs and lesson marker have separately audited native effects.
         // Other terrain triggers can also start cutscenes: preserve their old
         // wait rather than introduce a push into an unaudited interaction.
-        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) or (600, 21) ||
+        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) or (600, 21) or (617, 11) ||
         actions.Any(a => a.Touch && a.Kind == "Terrain") && actions.Where(a => a.Touch).All(a => a.Kind == "Terrain");
 
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
-        if (LostSanctumTargets.DoorExit(scene, actor) is not null)
+        if (LostSanctumTargets.DoorExit(scene, actor) is not null || TemporalLabTargets.DoorExit(scene, actor) is not null)
             yield return new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY + 256, layer);
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;

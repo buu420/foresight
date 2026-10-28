@@ -147,6 +147,7 @@ public static class BonusStoryObjectives
         V("future:door", "Return to the laboratory security door", Actor(618, 13)),
         V("future:rescuers", "Meet the other party members at the laboratory entrance", Arrival(617), NavigationCategory.People),
         V("future:alarm", "Reach the east laboratory's security chamber", Arrival(622)),
+        V("future:maze-door", "Open the east laboratory's security chamber door", Actor(621, 23)),
         V("future:register", "Register an administrator at the east laboratory console", Actor(622, 8)),
         V("future:release", "Release the security locks using the laboratory console", Actor(620, 8)),
         new("bonus:eclipse:gaspar", "Ask the old man about the completed Dimensional Vortices",
@@ -375,6 +376,7 @@ public static class BonusStoryObjectives
             if (Has(s, 0x2A, 4)) AddV(Has(s, 0x2A, 1) ? "future:grotto" : "future:release");
             else if (!Has(s, 0x2A, 2))
                 AddV(!Has(s, 0x2A, 1) ? "future:security" : scene == 617 ? "future:rescuers" : "future:door");
+            else if (scene == 621 && s.Local(30) == 0) AddV("future:maze-door");
             else AddV(Has(s, 0x2A, 0x10) ? "future:register" : "future:alarm");
         }
     }

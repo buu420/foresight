@@ -54,6 +54,7 @@
     <EmbeddedResource Include="Navigation\vortex-native-rooms.json" />
     <EmbeddedResource Include="Navigation\geno-dome-live-0379.json" />
     <EmbeddedResource Include="Navigation\lost-sanctum-live-0380.json" />
+    <EmbeddedResource Include="Navigation\temporal-lab-navigation-0382.json" />
     <EmbeddedResource Include="Navigation\black-omen324-reconstructed-0372.json" />
     <EmbeddedResource Include="Navigation\mammon-415-map.json" />
     <EmbeddedResource Include="Navigation\arris-rat-map-0342.json" />

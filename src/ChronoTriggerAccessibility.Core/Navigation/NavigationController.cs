@@ -25,6 +25,7 @@ public sealed class NavigationController
     private long instructionRevision;
     private int manualLegBeats;
     private string? intermediateId;
+    private string? intermediateLabel;
     private NavigationPoint? intermediateContact;
     private NavigationTransition? transition;
     private long? transitionContactStarted;
@@ -373,8 +374,11 @@ public sealed class NavigationController
         }
         transition = nextTransition;
         var nextIntermediate = search.IntermediateId ?? transition?.Id;
+        if (search.Route is not null && nextIntermediate != intermediateId && search.IntermediateLabel is { } nextLabel)
+            speech.Add($"Next passage: {nextLabel}.");
         if (intermediateId != nextIntermediate) passageWaitStarted = null;
         intermediateId = nextIntermediate;
+        intermediateLabel = search.IntermediateLabel;
         intermediateContact = search.IntermediateContact;
         plannedGoals = goals;
         nextPoint = 1;
@@ -449,6 +453,13 @@ public sealed class NavigationController
         if (currentTarget is null)
         {
             speech.Add("Navigation stopped: destination is no longer available.");
+            Stop();
+            return;
+        }
+        if (intermediateLabel is not null && !frame.Targets.Any(t => t.Id == intermediateId &&
+            t.Label == intermediateLabel && t.GuideAvailable && t.GuidanceRestriction is null && t.ContactPosition == intermediateContact))
+        {
+            speech.Add("Navigation stopped: the next passage is no longer available.");
             Stop();
             return;
         }
@@ -576,7 +587,9 @@ public sealed class NavigationController
                 var contactLabel = frame.Targets.FirstOrDefault(t => t.Id == intermediateId)?.Label;
                 // A passage opens where the player is standing; a way out has to be
                 // walked through. Telling someone to wait at a door strands them.
-                speech.Add(intermediateContact is { } touch
+                speech.Add(intermediateContact is { } namedTouch && intermediateLabel is not null
+                    ? $"Continue {DirectionName(ContactBearing(frame.Player, namedTouch))} onto {intermediateLabel}."
+                    : intermediateContact is { } touch
                     ? $"Continue {DirectionName(ContactBearing(frame.Player, touch))} until the passage opens."
                     : TakesAnExit
                     ? contactLabel is null ? "Take the exit here to continue." : $"Take {contactLabel} to continue."
@@ -785,6 +798,7 @@ public sealed class NavigationController
             transitionContactStarted = nativeTransitionStarted = null;
             transitionLanded = false;
             intermediateId = null;
+            intermediateLabel = null;
             intermediateContact = null;
             passageWaitStarted = null;
             if (destination!.Id == completed.Id)
@@ -1196,6 +1210,7 @@ public sealed class NavigationController
         nativePassageOpening = false;
         manualLegBeats = 0;
         intermediateId = null;
+        intermediateLabel = null;
         intermediateContact = null;
         transition = null;
         transitionContactStarted = nativeTransitionStarted = null;
