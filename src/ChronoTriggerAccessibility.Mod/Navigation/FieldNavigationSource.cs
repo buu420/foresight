@@ -172,7 +172,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (lairHole && ReptiteLairTargets.IsParked(actor)) continue;
             if (lairHole) description = (ReptiteLairTargets.HoleLabel(field.SceneId, actor), NavigationCategory.Exits);
             var scriptInfo = field.SceneIdCoherent ? GameNavigationCatalog.ActorInfo(field.SceneId, actor) : null;
-            var labWarp = field.SceneIdCoherent ? TemporalLabTargets.Pad(field.SceneId, actor, story) : null;
+            var labWarp = field.SceneIdCoherent ? TemporalLabTargets.Pad(field.SceneId, actor, story, field.Actors) : null;
             // Atel_0114 actor9's Confirm sets local9; actor1 performs the warp.
             // The catalog cannot infer that handoff from actor9's handler alone.
             var forestGate = field.SceneIdCoherent && EarlyStoryTargets.IsForestGateAvailable(field.SceneId, story, actor);

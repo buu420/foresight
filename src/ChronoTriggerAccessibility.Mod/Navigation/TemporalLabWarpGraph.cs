@@ -16,7 +16,7 @@ internal sealed class TemporalLabWarpGraph(INavigationGraph inner, IReadOnlyList
         var floor = new FieldNavigationGraph(map);
         var entries = new List<Entry>();
         foreach (var actor in field.Actors)
-            if (TemporalLabTargets.Pad(field.SceneId, actor, story) is { } pad &&
+            if (TemporalLabTargets.Pad(field.SceneId, actor, story, field.Actors) is { } pad &&
                 targets.FirstOrDefault(t => t.ActorSlot == actor.Index && t.ContactPosition is not null && t.ApproachPoints.Count != 0) is { } target &&
                 floor.TryPosition(pad.Arrival.X, pad.Arrival.Y, pad.Arrival.Layer, out var landing) && landing == pad.Arrival)
                 entries.Add(new(target, landing));

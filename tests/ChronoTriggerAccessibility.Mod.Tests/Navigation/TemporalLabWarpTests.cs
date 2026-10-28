@@ -52,6 +52,7 @@ public sealed class TemporalLabWarpTests
 
     [Theory]
     [InlineData("missing")] [InlineData("hidden")] [InlineData("calls")] [InlineData("wrong-visual")]
+    [InlineData("busy")] [InlineData("unknown-priority")] [InlineData("wrong-pc")] [InlineData("processing")]
     public void UnavailableFirstPadsCannotInventTheForwardWarpConnection(string variant)
     {
         var sample = Sample(621);
@@ -59,7 +60,9 @@ public sealed class TemporalLabWarpTests
             .Select(a => a.Index != 8 ? a : variant switch
             {
                 "hidden" => a with { DrawMode = 0 }, "calls" => a with { ScriptCallsEnabled = false },
-                "wrong-visual" => a with { VisualIndex = 232 }, _ => a,
+                "wrong-visual" => a with { VisualIndex = 232 },
+                "busy" => a with { ScriptPriority = 2 }, "unknown-priority" => a with { ScriptPriority = null },
+                "wrong-pc" => a with { ScriptAddress = a.ScriptAddress + 1 }, "processing" => a with { ScriptProcessingEnabled = false }, _ => a,
             }).ToArray();
         var frame = Build(sample.Field with { Actors = actors }, sample.Map, sample.Story);
         var goals = sample.Frame.Targets.Single(t => t.Id == "landmark:23").ApproachPoints;
@@ -220,6 +223,37 @@ public sealed class TemporalLabWarpTests
         var limited = ((IStagedNavigationGraph)frame.Graph).FindStage(frame.Player, target.ApproachPoints, 1);
         Assert.Null(limited.Route);
         Assert.True(limited.LimitReached);
+    }
+
+    [Theory]
+    [InlineData("calls")] [InlineData("busy")] [InlineData("missing")]
+    public void ReturnPadsRequireTheirSharedNativeWarpHandler(string variant)
+    {
+        var sample = Sample(621);
+        var lead = Move(sample.Field.LeadPlayer!, 6784, 4351); // Native pad10 landing, with only return pad22.
+        var actors = sample.Field.Actors.Where(a => variant != "missing" || a.Index != 17).Select(a =>
+            a.Index == lead.Index ? lead : a.Index != 17 ? a : variant == "calls"
+                ? a with { ScriptCallsEnabled = false } : a with { ScriptPriority = 4 }).ToArray();
+        var frame = Build(sample.Field with { Actors = actors, LeadPlayer = lead }, sample.Map, sample.Story);
+        var goals = sample.Frame.Targets.Single(t => t.Id == "landmark:23").ApproachPoints;
+        Assert.Null(NavigationPathfinder.Search(frame.Graph, frame.Player, goals).Route);
+    }
+
+    [Theory]
+    [InlineData(1152, 7007, "actor:8:4:231")]
+    [InlineData(4224, 6143, "actor:11:4:231")]
+    [InlineData(5632, 2175, "actor:12:4:231")]
+    [InlineData(14592, 4223, "actor:14:4:231")]
+    [InlineData(11008, 5247, null)]
+    public void TheOnwardHintsMatchTheIndependentlyAuditedNativeChain(int x, int y, string? nextPad)
+    {
+        var sample = Sample(621); var lead = Move(sample.Field.LeadPlayer!, x, y);
+        var field = sample.Field with { LeadPlayer = lead, Actors = sample.Field.Actors.Select(a => a.Index == lead.Index ? lead : a).ToArray() };
+        var frame = Build(field, sample.Map, sample.Story);
+        var target = frame.Targets.Single(t => t.Id == "story:full:lavos");
+        var route = NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints);
+        Assert.NotNull(route.Route);
+        Assert.Equal(nextPad, route.IntermediateId);
     }
 
     private static FieldMapSnapshot ApplyNativeCopy(FieldMapSnapshot original, GameNavigationCatalog.TileCopy copy)
