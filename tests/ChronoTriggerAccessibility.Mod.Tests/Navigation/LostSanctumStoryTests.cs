@@ -86,6 +86,24 @@ public sealed class LostSanctumStoryTests
         Assert.Contains(choices, o => o.Id == "bonus:sanctum:lumicite:request" && o.Category == NavigationCategory.People);
     }
 
+    [Theory]
+    [InlineData(576, "Primeval Fortress")] [InlineData(583, "Primeval Fortress")]
+    [InlineData(587, "Primeval Fortress")] [InlineData(653, "Primeval Fortress")]
+    [InlineData(577, "Great Bridge")] [InlineData(585, "Great Bridge")]
+    [InlineData(581, "Great Bridge")] [InlineData(654, "Great Bridge")]
+    public void HubObjectivesPreferAnAcceptedQuestReachableInTheCurrentEra(int scene, string area)
+    {
+        var state = State((0x10, 0x7F), (0x11, 9), (0x12, 0x78), (0x13, 1), (0x14, 1),
+            (0x19, 0x1A), (0x16, 2), (0x1D, 2), (0x15, 8), (0x1B, 0x80)) with
+        { Inventory = new Dictionary<int, int> { [0x401E] = 1 } };
+        var choices = FullStoryObjectives.Build(scene, state);
+        var primary = Assert.Single(choices, o => o.Category == NavigationCategory.StoryEvents);
+        Assert.Contains(area, primary.Label);
+        Assert.NotNull(new SceneConnectionRouter().DistanceWithinFields(scene, state, primary.Goals.Select(g => g.Scene).ToArray()));
+        Assert.Contains(choices, o => o.Id == "bonus:sanctum:bridge:feed");
+        Assert.Contains(choices, o => o.Id == "bonus:sanctum:defend:leaders");
+    }
+
     internal static FieldStoryState State(params (int Cell, int Value)[] changes)
     {
         var extra = Enumerable.Range(0, 80).ToDictionary(i => i, _ => 0);

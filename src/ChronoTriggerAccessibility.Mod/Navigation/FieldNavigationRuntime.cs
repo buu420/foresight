@@ -47,6 +47,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
     private long lastControllerPoll = -1;
     private bool climbArmed, climbArmEnteredField;
     private string? climbArmCancellation;
+    private string? lastNarrowWalkingCue;
 
     /// <summary>Called before physical controller state is mapped into game actions.
     /// Commands are tentative until ProcessInput validates a fresh frame at the
@@ -169,7 +170,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
 
     public void Enable()
     {
-        lock (gate) { enabled = true; climbArmed = climbArmEnteredField = false; lastCall = -1; controllerInputAllowed = false; keyboard.Suspend(); gamepad?.Suspend(); }
+        lock (gate) { enabled = true; lastNarrowWalkingCue = null; climbArmed = climbArmEnteredField = false; lastCall = -1; controllerInputAllowed = false; keyboard.Suspend(); gamepad?.Suspend(); }
     }
 
     public void Disable()
@@ -187,6 +188,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
             var wasActive = controller.IsActive;
             var menuWasOpen = gamepad?.IsOpen == true;
             var cancellation = controller.Cancel(reason);
+            lastNarrowWalkingCue = null;
             climb.Reset();
             if (!preserveClimbArm) CancelClimbArm(reason);
             keyboard.Suspend();
@@ -463,6 +465,11 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 }
                 controllerMenuScene = gamepad?.IsOpen == true ? frame.Scene : null;
                 foreach (var command in commands) Handle(command);
+                var walkingCue = current == NavigationMode.Field
+                    ? LostSanctumMovement.GuidanceCue(frame, result, fieldFloor?.Invoke(), originalPad) : null;
+                if (walkingCue is not null && (walkingCue != lastNarrowWalkingCue || processedCommands.Contains(NavigationCommand.Repeat)))
+                    speech.Add(walkingCue);
+                lastNarrowWalkingCue = walkingCue;
                 // Menu/motion resets can revoke the floor sampled at the beginning
                 // of this same input callback. Revalidate before a new route uses it.
                 if (current == NavigationMode.Field && result.AutoWalking && fieldFloor is not null &&

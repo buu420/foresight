@@ -50,7 +50,7 @@ public sealed class LostSanctumNavigationTests
     }
 
     [Fact]
-    public void AnUnfinishedBridgeDoesNotPromiseAPathAcrossTheMissingSpan()
+    public void AnUnfinishedBridgeDoesNotPromiseAPathPastTheNativeWorkers()
     {
         var sample = Live(28572);
         var target = Assert.Single(sample.Frame.Targets, t => t.Id == "exit:1");
@@ -94,6 +94,7 @@ public sealed class LostSanctumNavigationTests
     public void FortressDoorsStageThroughTheirNativeOpeningContacts(int exit, int marker)
     {
         var sample = Live(39808);
+        Assert.Equal("Passage to exit " + (char)('A' + exit), sample.Frame.Targets.Single(t => t.Id == $"landmark:{marker}").Label);
         var target = Assert.Single(sample.Frame.Targets, t => t.Id == $"exit:{exit}");
         var stage = Assert.IsAssignableFrom<IStagedNavigationGraph>(sample.Frame.Graph)
             .FindStage(sample.Frame.Player, target.ApproachPoints, NavigationPathfinder.DefaultMaximumVisited);
@@ -153,8 +154,16 @@ public sealed class LostSanctumNavigationTests
         var steering = new NavigationResult([], NavigationDirection.West, true, true)
             { SteeringPoint = new(9088, 6012, 1) };
         var pad = FieldFloorMovement.Adjust(sample.Frame, steering, new(0x1000, 0x4000, 581, 0, 0, 0, mode, toggle));
-        Assert.Equal(expected, pad.Pad);
-        Assert.Null(pad.StopReason);
+        if (mode == 1 && toggle == 1)
+        {
+            Assert.Equal(0u, pad.Pad);
+            Assert.Contains("Tap and release Dash", pad.StopReason!);
+        }
+        else
+        {
+            Assert.Equal(expected, pad.Pad);
+            Assert.Null(pad.StopReason);
+        }
     }
 
     [Theory]

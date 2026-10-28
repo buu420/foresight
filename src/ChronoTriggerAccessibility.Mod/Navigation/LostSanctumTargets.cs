@@ -24,8 +24,8 @@ internal static class LostSanctumTargets
         (scene, actor.Index, actor.ClassTag, actor.VisualIndex) is
             (556, 8, 5 or 6, 289) or (556, 9, 4, 76);
 
-    // Atel0556 actor0 opens the completed span only on E1A&40. The visible
-    // builder and Nu do not make that unfinished floor a traversable exit.
+    // Atel0556 hides the Nu and builder on E1A&40. Before completion one of
+    // them occupies the narrow strip; the bridge is not a usable onward exit.
     public static string? ExitRestriction(int scene, int exit, FieldStoryState? state) =>
         scene == 556 && exit == 1 && state?.Extra(0x1A) is { } n && (n & 0x40) == 0
             ? "The bridge is not complete." : null;
@@ -33,6 +33,6 @@ internal static class LostSanctumTargets
     public static int? DoorExit(int scene, FieldActorSnapshot actor) => actor.ClassTag != 7 ? null :
         (scene, actor.Index) switch { (545, >= 9 and <= 11) => actor.Index - 7, (554, 9) => 1, _ => null };
 
-    public static string? DoorLabel(int scene, FieldActorSnapshot actor) => DoorExit(scene, actor) is not null
-        ? scene == 545 ? "Door " + (char)('A' + actor.Index - 9) : "Door" : null;
+    public static string? DoorLabel(int scene, FieldActorSnapshot actor) => DoorExit(scene, actor) is { } exit
+        ? "Passage to exit " + (char)('A' + exit) : null;
 }

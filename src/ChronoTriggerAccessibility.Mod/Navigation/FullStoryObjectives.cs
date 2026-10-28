@@ -312,11 +312,13 @@ public static class FullStoryObjectives
                 !o.Id.EndsWith(":request", StringComparison.Ordinal) && o.Id != "bonus:sanctum:waystone:hint").ToArray();
             var local = choices.FirstOrDefault(o => o.Goals.Any(g => g.Scene == scene)) ??
                 choices.FirstOrDefault(o => SanctumArea(scene) >= 0 &&
-                    o.Goals.Any(g => SanctumArea(g.Scene) == SanctumArea(scene))) ?? choices.FirstOrDefault();
+                    o.Goals.Any(g => SanctumArea(g.Scene) == SanctumArea(scene))) ??
+                choices.FirstOrDefault(o => SanctumEra(scene) >= 0 &&
+                    o.Goals.Any(g => SanctumEra(g.Scene) == SanctumEra(scene))) ?? choices.FirstOrDefault();
             return local is not null
                 ? local with { Id = "full:lavos", Category = NavigationCategory.StoryEvents }
                 : new("full:lavos", "Explore the Lost Sanctum", [],
-                    "No current Lost Sanctum objective is available. Browse People, Exits and Interactable Objects for the available interactions.");
+                    "Lost Sanctum progress or a current objective is unavailable. Browse People, Exits and Interactable Objects for the available interactions.");
         }
         // Inside a vortex, the primary Story Events row follows that local
         // sequence. The generic final-battle route otherwise leads back outside.
@@ -349,6 +351,18 @@ public static class FullStoryObjectives
         >= 536 and <= 539 or 556 or 668 => 1,        // mountain and bridge in600AD
         >= 557 and <= 575 or 652 => 2,              // beyond the bridge and tower
         >= 532 and <= 535 => 3,                     // prehistoric mountain
+        _ => -1,
+    };
+
+    // The native MapJump/Atel connections keep these hub and interior scenes
+    // within one era. An accepted errand in the other era remains a choice,
+    // but must not displace a usable same-era errand in a village or entrance.
+    private static int SanctumEra(int scene) => scene switch
+    {
+        >= 532 and <= 535 or >= 540 and <= 555 or 576 or >= 578 and <= 580 or
+            >= 582 and <= 584 or 587 or 653 => 0,
+        >= 536 and <= 539 or >= 556 and <= 575 or 577 or 581 or 585 or 586 or 589 or
+            652 or 654 or 668 => 1,
         _ => -1,
     };
 

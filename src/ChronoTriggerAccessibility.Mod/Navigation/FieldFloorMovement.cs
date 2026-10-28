@@ -18,6 +18,8 @@ public static class FieldFloorMovement
     public static FieldNavigationPad Adjust(NavigationFrame frame, NavigationResult result, FieldFloorSnapshot? native)
     {
         var pad = FieldNavigationRuntime.DirectionBits(result.Direction);
+        if (LostSanctumMovement.ForcedRunStopReason(frame, result, native) is { } walkingReason)
+            return new(0, walkingReason);
         var narrowStep = (GenoDomeMovement.IsScene(frame.Scene) || LostSanctumTargets.NarrowCave(frame.Scene)) && frame.CompensateMovingFloor;
         if (narrowStep && pad != 0 && (frame.MovingFloor is not { Speed: 16 } conveyor || !Opposes(result.Direction, conveyor.Direction)))
             return GenoDomeMovement.Adjust(frame, result, native);
