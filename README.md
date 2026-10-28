@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.80 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.81 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.80 adds distinct Geno Dome control, energy pod, Sentinel and figurine labels; visible lamp, pod, locked-door and laser-barrier feedback; and short cues for the party leader's electrical aura and Sentinel following. It repairs charger and Sentinel contacts in both navigation modes and selects short walking steps where the native Run setting permits, preserving wall slides and contact input. Failed routes can identify a verified closed obstacle. Puzzle choices, timing, battles and Confirm remain with the game and player. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.80.md).
+Version 0.3.81 repairs Lost Sanctum cave entrances, Waystone and bridge-character contacts, and native touch-opening doors in the Primeval Fortress. Story Events follows current accepted Sanctum errands inside the area, and the unfinished bridge remains identified as blocked. Winding Passage auto-walk can use short native walking steps at tight corners when the current Run setting permits. Previous fixes remain included. See [this build's changes and testing notes](docs/releases/v0.3.81.md).
 
 At North Cape, the encounter's sparkling light is listed as **Magus encounter**, using his current name if renamed. In Bekkler's copy game, each demonstrated pose gives a short cue such as **Y. Laugh.** Button letters follow the game's current configuration. Repeat the action with the normal game controls after its signal; the game keeps its original timing. The native instructions, result and prize dialogue remain readable.
 

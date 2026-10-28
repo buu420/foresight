@@ -104,6 +104,21 @@ public sealed class LostSanctumNavigationTests
             Assert.True(VortexRoomGeometryTests.Start(sample.Frame, target.Id, automatic).Guiding);
     }
 
+    [Fact]
+    public void TheLaterFortressDoorAlsoUsesItsVerifiedNativeOpening()
+    {
+        // Initial installed terrain plus an explicit synthetic south-entry pose.
+        var sample = Live(554000);
+        var target = sample.Frame.Targets.Single(t => t.Id == "exit:1");
+        var stage = Assert.IsAssignableFrom<IStagedNavigationGraph>(sample.Frame.Graph)
+            .FindStage(sample.Frame.Player, target.ApproachPoints, NavigationPathfinder.DefaultMaximumVisited);
+        Assert.NotNull(stage.Route);
+        Assert.Equal("landmark:9", stage.IntermediateId);
+        Assert.NotNull(stage.IntermediateContact);
+        foreach (var automatic in new[] { false, true })
+            Assert.True(VortexRoomGeometryTests.Start(sample.Frame, target.Id, automatic).Guiding);
+    }
+
     [Theory]
     [InlineData("disabled")] [InlineData("missing")] [InlineData("unknown-local")]
     public void ClosedDoorPreviewRequiresItsLiveNativeHandler(string variant)
@@ -140,6 +155,81 @@ public sealed class LostSanctumNavigationTests
         var pad = FieldFloorMovement.Adjust(sample.Frame, steering, new(0x1000, 0x4000, 581, 0, 0, 0, mode, toggle));
         Assert.Equal(expected, pad.Pad);
         Assert.Null(pad.StopReason);
+    }
+
+    [Theory]
+    [InlineData(false, true)] [InlineData(true, true)] [InlineData(true, false)]
+    public void TheLoggedChestRouteFinishesWithNativeMovementFrames(bool automatic, bool shortSteps)
+    {
+        var sample = Live(18917);
+        var target = sample.Frame.Targets.Single(t => t.Id == "chest:301");
+        var frame = sample.Frame with { Targets = [target], CompensateMovingFloor = shortSteps };
+        var controller = new NavigationController();
+        for (var i = 0; i < 5 && controller.TargetId != target.Id; i++)
+            controller.Handle(NavigationCommand.NextCategory, frame, 0);
+        var result = controller.Handle(automatic ? NavigationCommand.ToggleWalk : NavigationCommand.Guide, frame, 1);
+        var speech = new List<string>(result.Speech);
+        for (var tick = 1; tick < 6000 && result.Guiding; tick++)
+        {
+            var direction = automatic ? result.Direction : result.ManualLeg?.Direction ?? NavigationDirection.None;
+            var speed = 16; // Manual replay uses the native walking control.
+            if (automatic)
+            {
+                var pad = FieldFloorMovement.Adjust(frame, result, new(0x1000, 0x4000, 581, 0, 0, 0, 0, 1));
+                Assert.Null(pad.StopReason);
+                speed = (pad.Pad & 8) == 0 ? 32 : 16;
+            }
+            frame = frame with { Player = NativeWalkingReplay.Move(sample.Map, frame.Player, direction, speed), PlayerFacing = direction };
+            result = controller.Update(frame, tick * 16, !automatic && direction != NavigationDirection.None);
+            speech.AddRange(result.Speech);
+        }
+        var reached = target.ApproachPoints.Any(p => p.Layer == frame.Player.Layer &&
+            Math.Abs(p.X - frame.Player.X) <= 32 && Math.Abs(p.Y - frame.Player.Y) <= 32);
+        Assert.True(reached == (!automatic || shortSteps),
+            $"Stopped at{frame.Player}: {string.Join(" | ", speech.TakeLast(8))}");
+        if (reached) Assert.DoesNotContain(speech, s => s.Contains("blocked"));
+        else Assert.Contains(speech, s => s.Contains("blocked")); // Baseline0.3.80 gait reproduces the logged stall.
+    }
+
+    [Fact]
+    public void CaveWarpGoalsKeepTheWholeArrivalBoxInsideTheNativeTrigger()
+    {
+        var target = Live(31620).Frame.Targets.Single(t => t.Id == "script-region:0:580:0:2:4:9");
+        Assert.All(target.ApproachPoints, p =>
+        {
+            Assert.InRange(p.X, 32, 5 * 256 - 33);
+            Assert.InRange(p.Y, 2 * 256 + 32, 10 * 256 - 33);
+        });
+    }
+
+    [Theory]
+    [InlineData(2054, 4039, 3)] [InlineData(2054, 4615, 1)]
+    [InlineData(2316, 3579, 2)] [InlineData(2316, 3835, 3)]
+    [InlineData(8332, 4379, 1)] [InlineData(6528, 3519, 1)] [InlineData(14830, 5877, 1)]
+    public void TheOpenCaveRemainsReachableAcrossTheLoggedFloorLevels(int x, int y, int layer)
+    {
+        var sample = Live(36521);
+        var lead = Move(sample.Field.LeadPlayer!, x, y);
+        var field = sample.Field with { LeadPlayer = lead, Actors = sample.Field.Actors.Select(a => a.Index == lead.Index ? lead : a).ToArray() };
+        var frame = new FieldNavigationSource(new Empty(), _ => { }).Build(field, sample.Map with { PlayerLayer = layer },
+            new(0, 0, sample.Map.Width * 256, sample.Map.Height * 256), [], sample.Story);
+        const string id = "script-region:0:579:0:2:4:9";
+        foreach (var automatic in new[] { false, true })
+            Assert.True(VortexRoomGeometryTests.Start(frame, id, automatic).Guiding);
+    }
+
+    [Theory]
+    [InlineData(22562)] [InlineData(22600)] [InlineData(22722)]
+    public void TheWaystoneRouteEndsAtAWinningNativePickupHandler(int line)
+    {
+        var sample = Live(line);
+        var target = sample.Frame.Targets.Single(t => t.Id == "actor:8:4:110");
+        var path = NavigationPathfinder.Search(sample.Frame.Graph, sample.Frame.Player, target.ApproachPoints);
+        var end = Assert.IsAssignableFrom<IReadOnlyList<NavigationPoint>>(path.Route)[^1];
+        var facings = target.ConfirmFacings!(end);
+        Assert.NotEmpty(facings);
+        Assert.All(facings, facing => Assert.Contains(FieldInteractionRange.ConfirmWinner(sample.Field.Actors,
+            sample.Field.LeadPlayerActorIndex, end.X, end.Y, facing), new[] { 8, 10 }));
     }
 
     private static FieldActorSnapshot Move(FieldActorSnapshot actor, int x, int y) => actor with

@@ -1,4 +1,3 @@
-using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Native.Capture;
 
 namespace ChronoTriggerAccessibility.Mod.Navigation;
@@ -24,22 +23,6 @@ internal static class LostSanctumTargets
     public static bool PreciseRow(int scene, FieldActorSnapshot actor) =>
         (scene, actor.Index, actor.ClassTag, actor.VisualIndex) is
             (556, 8, 5 or 6, 289) or (556, 9, 4, 76);
-
-    public static IEnumerable<NavigationPoint> PassagePoints(int scene, GameNavigationCatalog.Region region,
-        FieldNavigationGraph graph)
-    {
-        if (scene != 578 || region.Kind != "Warp" || region.Destination is not (579 or 580) ||
-            (region.Left, region.Top, region.Right, region.Bottom) != (0, 2, 4, 9)) yield break;
-        // The installed floor and logged poses need the last pixel at2559.
-        // A tile centre can be valid in isolation while no native body step
-        // can stand there. Every proposed point still passes the live graph.
-        foreach (var y in Enumerable.Range(region.Top, region.Bottom - region.Top + 1))
-        foreach (var x in Enumerable.Range(region.Left, region.Right - region.Left + 1))
-        foreach (var oy in new[] { 0, 64, 112, 128, 192, 240, 255 })
-        foreach (var ox in new[] { 0, 64, 112, 128, 192, 240, 255 })
-        for (var layer = 1; layer <= 3; layer++)
-            if (graph.TryPosition(x * 256 + ox, y * 256 + oy, layer, out var point)) yield return point;
-    }
 
     // Atel0556 actor0 opens the completed span only on E1A&40. The visible
     // builder and Nu do not make that unfinished floor a traversable exit.

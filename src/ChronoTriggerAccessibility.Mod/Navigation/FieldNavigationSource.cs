@@ -913,8 +913,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
-            points.AddRange(LostSanctumTargets.PassagePoints(field.SceneId, region, graph).Where(p => !graph.IsTerminal(p)));
-            if (field.SceneId is 599 or 600 or 643 && region.Kind == "Warp")
+            if (field.SceneId is 578 or 599 or 600 or 643 && region.Kind == "Warp")
             {
                 // These native half-tile doorways have no standing room at a
                 // tile centre. Search the same fine lattice as map exits, keeping
