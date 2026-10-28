@@ -23,6 +23,15 @@ def encounter(bounds, value, guards):
 
 
 def for_scene(scene):
+    if scene == 578:
+        # Atel0578: the village/encounter branches rejoin at037E. Its cave
+        # predicate0382..039C reads only leader X<=4, 2<=Y<=9 and E13&01.
+        # The bounded walker loses the ambush path and retains unrelated
+        # E11/E12 guards. These clauses absorb those stronger, false gates.
+        return [dict(Actor=0, Kind='Warp', Destination=destination, Value=0,
+                     Left=0, Top=2, Right=4, Bottom=9,
+                     Guards=[extra(0x13, 1, expected=lit)])
+                for destination, lit in [(579, True), (580, False)]]
     if scene == 587:
         return [
             encounter((22, 23, 29, 31), 0x0082,

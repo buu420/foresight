@@ -306,6 +306,17 @@ public static class FullStoryObjectives
 
     private static FullStoryObjective? ContextObjective(int scene, FieldStoryState state)
     {
+        if (BonusStoryObjectives.IsSanctum(scene))
+        {
+            var choices = BonusStoryObjectives.Build(scene, state);
+            var local = choices.FirstOrDefault(o => o.Goals.Any(g => g.Scene == scene)) ??
+                choices.FirstOrDefault(o => SanctumArea(scene) >= 0 &&
+                    o.Goals.Any(g => SanctumArea(g.Scene) == SanctumArea(scene))) ?? choices.FirstOrDefault();
+            return local is not null
+                ? local with { Id = "full:lavos", Category = NavigationCategory.StoryEvents }
+                : new("full:lavos", "Explore the Lost Sanctum", [],
+                    "No current Lost Sanctum objective is available. Browse People, Exits and Interactable Objects for the available interactions.");
+        }
         // Inside a vortex, the primary Story Events row follows that local
         // sequence. The generic final-battle route otherwise leads back outside.
         //655 is its volcano side room;659/660 are shuffled Geno Dome copies.
@@ -328,6 +339,17 @@ public static class FullStoryObjectives
         if (scene == 474) return ContextSteps[4];
         return null;
     }
+
+    // Native connected area chains select among concurrently accepted errands;
+    // these bands never supply a walking coordinate or bypass a passage guard.
+    private static int SanctumArea(int scene) => scene switch
+    {
+        >= 540 and <= 555 or >= 578 and <= 580 => 0, // prehistoric cave and fortress
+        >= 536 and <= 539 or 556 or 668 => 1,        // mountain and bridge in600AD
+        >= 557 and <= 575 or 652 => 2,              // beyond the bridge and tower
+        >= 532 and <= 535 => 3,                     // prehistoric mountain
+        _ => -1,
+    };
 
     /// <summary>Every objective this catalogue can ever return, for validation.</summary>
     public static IReadOnlyList<FullStoryObjective> All { get; } =

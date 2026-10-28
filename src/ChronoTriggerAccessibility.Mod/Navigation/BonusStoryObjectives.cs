@@ -159,12 +159,14 @@ public static class BonusStoryObjectives
     private static readonly IReadOnlyDictionary<string, FullStoryObjective> byId = entries.ToDictionary(e => e.Id);
     public static IReadOnlyList<FullStoryObjective> All { get; } = Array.AsReadOnly(entries);
 
+    public static bool IsSanctum(int scene) => scene is >= 532 and <= 587 or 589 or 652 or 653 or 654 or 668;
+
     public static IReadOnlyList<FullStoryObjective> Build(int scene, FieldStoryState? state)
     {
         if (state is null) return [];
         var result = new List<FullStoryObjective>();
         var world = scene is >= 496 and <= 502;
-        var sanctum = scene is >= 532 and <= 587 or 589 or 652 or 653 or 654 or 668;
+        var sanctum = IsSanctum(scene);
         if ((world && state.Point >= 0xD2 || sanctum) &&
             Enumerable.Range(0x10, 0x10).All(i => state.Extra(i).HasValue))
             Sanctum(scene, state, result);

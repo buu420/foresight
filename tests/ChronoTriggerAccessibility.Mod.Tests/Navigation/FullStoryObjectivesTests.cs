@@ -171,10 +171,10 @@ public sealed class FullStoryObjectivesTests
     }
 
     [Fact]
-    public void TheStoryObjectiveIsOfferedFromAnyScene()
+    public void TheStoryObjectiveIsOfferedOutsideTheActiveBonusAreas()
     {
         var expected = Story(1, State(0xD3))!.Id;
-        foreach (var scene in new[] { 0, 36, 214, 424, 464, 668 })
+        foreach (var scene in new[] { 0, 36, 214, 424, 464 })
             Assert.Equal(expected, Story(scene, State(0xD3))!.Id);
     }
 
