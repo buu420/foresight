@@ -18,7 +18,9 @@ namespace ChronoTriggerAccessibility.Mod.Navigation;
 /// Only bindings whose target actually opens a menu are listed, because those are the ones
 /// where the reachable proxy and the recognisable sprite differ. A scan of every scene found
 /// 123 pure activate proxies, of which three call a menu actor:
-/// artifacts/research/shop-enemies-0325/navigation/proxies.py.</summary>
+/// artifacts/research/shop-enemies-0325/navigation/proxies.py. A separately audited
+/// shared handler in Atel0539 (both fn1=01F4) makes the pedestal a front contact
+/// for the stone. Both live identities and call gates are checked by the source.</summary>
 public static class FieldActorProxies
 {
     private static readonly (int Scene, int Target, int Proxy)[] Bindings =
@@ -26,6 +28,7 @@ public static class FieldActorProxies
         (40, 8, 11),     // Melchior's Cabin, 1F
         (118, 8, 9),     // Truce, Market
         (243, 12, 11),   // Keeper's Dome, Epoch Storage Room
+        (539, 8, 10),    // Waystone and its pedestal share native Confirm01F4
     ];
 
     /// <summary>The actor whose position stands in for this one, if any.</summary>

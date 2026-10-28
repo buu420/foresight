@@ -18,8 +18,8 @@ public static class FieldFloorMovement
     public static FieldNavigationPad Adjust(NavigationFrame frame, NavigationResult result, FieldFloorSnapshot? native)
     {
         var pad = FieldNavigationRuntime.DirectionBits(result.Direction);
-        var geno = GenoDomeMovement.IsScene(frame.Scene) && frame.CompensateMovingFloor;
-        if (geno && pad != 0 && (frame.MovingFloor is not { Speed: 16 } conveyor || !Opposes(result.Direction, conveyor.Direction)))
+        var narrowStep = (GenoDomeMovement.IsScene(frame.Scene) || LostSanctumTargets.NarrowCave(frame.Scene)) && frame.CompensateMovingFloor;
+        if (narrowStep && pad != 0 && (frame.MovingFloor is not { Speed: 16 } conveyor || !Opposes(result.Direction, conveyor.Direction)))
             return GenoDomeMovement.Adjust(frame, result, native);
         var sand = SunkenDesertNavigation.IsScene(frame.Scene);
         if (frame.MovingFloor is not { Speed: 16 } floor || !sand && !Opposes(result.Direction, floor.Direction) || pad == 0)
@@ -33,9 +33,9 @@ public static class FieldFloorMovement
         if (toggle == 0) toggle = mode switch { 0 => 1, 1 => 2, _ => 0 };
         // A synthetic held Dash changes the speed in mode1; it does not
         // synthesize the separate release edge that changes native toggles.
-        if (mode == 1) return new(sand ? SandPad(frame, result, value, toggle, pad) : pad | (toggle != 1 ? 8u : 0u)) { OverrideDash = geno };
+        if (mode == 1) return new(sand ? SandPad(frame, result, value, toggle, pad) : pad | (toggle != 1 ? 8u : 0u)) { OverrideDash = narrowStep };
         if (mode is 0 or 2 && toggle is 0 or 1)
-            return new(sand ? SandPad(frame, result, value, toggle, pad) : pad) { DashMustBeReleased = sand, OverrideDash = geno };
+            return new(sand ? SandPad(frame, result, value, toggle, pad) : pad) { DashMustBeReleased = sand, OverrideDash = narrowStep };
         if (sand) return new(0, SunkenDesertNavigation.SelectRunning);
         return new(0, "running is required to move against " + (wind ? "the wind" : "this conveyor") +
             ". Use your Dash control to enable running, then start automatic walking again");

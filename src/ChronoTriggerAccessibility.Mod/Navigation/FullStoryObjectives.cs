@@ -308,7 +308,8 @@ public static class FullStoryObjectives
     {
         if (BonusStoryObjectives.IsSanctum(scene))
         {
-            var choices = BonusStoryObjectives.Build(scene, state);
+            var choices = BonusStoryObjectives.Build(scene, state).Where(o =>
+                !o.Id.EndsWith(":request", StringComparison.Ordinal) && o.Id != "bonus:sanctum:waystone:hint").ToArray();
             var local = choices.FirstOrDefault(o => o.Goals.Any(g => g.Scene == scene)) ??
                 choices.FirstOrDefault(o => SanctumArea(scene) >= 0 &&
                     o.Goals.Any(g => SanctumArea(g.Scene) == SanctumArea(scene))) ?? choices.FirstOrDefault();

@@ -75,6 +75,17 @@ public sealed class LostSanctumStoryTests
         Assert.Contains("Exits", objective.Instruction!);
     }
 
+    [Fact]
+    public void ANewLocalRequestDoesNotDisplaceAnAcceptedQuestInStoryEvents()
+    {
+        // The Nu's food errand is accepted. New smith conversations in the
+        // village remain optional People entries rather than the primary route.
+        var state = State((0x10, 0x3F), (0x19, 0x1A), (0x16, 2), (0x1D, 2), (0x15, 8), (0x1B, 0x80));
+        var choices = FullStoryObjectives.Build(585, state);
+        Assert.Contains("Nu's sweet fruit", Assert.Single(choices, o => o.Category == NavigationCategory.StoryEvents).Label);
+        Assert.Contains(choices, o => o.Id == "bonus:sanctum:lumicite:request" && o.Category == NavigationCategory.People);
+    }
+
     internal static FieldStoryState State(params (int Cell, int Value)[] changes)
     {
         var extra = Enumerable.Range(0, 80).ToDictionary(i => i, _ => 0);

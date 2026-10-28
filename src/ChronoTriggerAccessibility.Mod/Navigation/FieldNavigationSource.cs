@@ -102,6 +102,15 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             BlackOmenTargets.OpeningFinalDoor(field.SceneId, a, story));
         var openedOmenDoor = omenDoorCopy is not null && FieldTerrainGraph.Preview(map, omenDoorCopy) is { } omenOpen
             ? new FieldNavigationGraph(omenOpen, collisions, touchGoals) : null;
+        var openedSanctumDoors = new Dictionary<int, FieldNavigationGraph>();
+        if (guideActive)
+            foreach (var actor in field.Actors.Where(a => a.IsUsable && a.ScriptCallsEnabled && !a.IsPartyMember))
+                if (LostSanctumTargets.DoorExit(field.SceneId, actor) is { } exit &&
+                    GameNavigationCatalog.ActorInfo(field.SceneId, actor) is { } door)
+                    foreach (var action in door.Actions.Where(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null &&
+                        FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story!)))
+                        if (FieldTerrainGraph.Preview(map, action.Copy!) is { } opened)
+                            openedSanctumDoors[exit] = new(opened, collisions, touchGoals);
         // A save point's sparkle and checker are offered once, as the save point itself; the
         // engine briefly makes the checker an activation candidate while the leader is on it.
         var savePoints = FieldSavePoints.Find(field, story).Where(s => KeepFieldTargets.SaveIsObservable(field, story, s)).ToArray();
@@ -187,7 +196,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var id = $"actor:{actor.Index}:{actor.ClassTag}:{actor.VisualIndex}";
             var currentName = actor.IsPlayerClass && actor.VisualIndex is >= 0 and < 7
                 ? characterName?.Invoke(actor.VisualIndex) : null;
-            var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) : null;
+            var nu = field.SceneIdCoherent ? NuNpcLabels.ActorLabel(field.SceneId, actor, story) ??
+                LostSanctumTargets.ActorLabel(field.SceneId, actor, story) : null;
             var capeEncounter = field.SceneIdCoherent ? NorthCapeTargets.EncounterLabel(field.SceneId, actor, story, characterName) : null;
             var recurring = field.SceneIdCoherent ? RecurringNpcLabels.Resolve(field.SceneId, actor, story) : default;
             var familiarName = recurring.Handled ? recurring.Name :
@@ -366,7 +376,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
-            if (scripted.Length != 0) label ??= TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
+            if (scripted.Length != 0) label ??= LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
+                TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
                 OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
                 QuestObjectLabels.Marker(field.SceneId, actor) ??
                 (field.SceneId == 643 && actor.Index == 8 ? "Door console" : null);
@@ -438,7 +449,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     BlackbirdDuctTargets.ArrivalInstruction(field.SceneId, actor.Index),
                 contactPosition: field.SceneId == 256 && actor.Index == 25 && GenoDomeTargets.IsPod(field.SceneId, actor) ||
                     field.SceneId == 642 && actor.Index is 14 or 15 ||
-                    field.SceneId == 600 && actor.Index == 21 && terrainContact
+                    field.SceneId == 600 && actor.Index == 21 && terrainContact ||
+                    terrainContact && LostSanctumTargets.DoorExit(field.SceneId, actor) is not null
                     ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1, actor.FineY) : null,
                 confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
             if (!touch && !terrainContact) markerAnchors[landmarkId] = Anchors(actor);
@@ -597,6 +609,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id) &&
                 !ZealFieldLabels.PassageOpen(story)) continue;
             var key = $"exit:{id}";
+            var sanctumRestriction = field.SceneIdCoherent ? LostSanctumTargets.ExitRestriction(field.SceneId, id, story) : null;
             var label = (field.SceneIdCoherent && ZealFieldLabels.ConcealedExit(field.SceneId, id)
                 ? "Opening behind the bookcase" : null) ??
                 (field.SceneIdCoherent ? TyrannoLairLabels.ExitLabel(field.SceneId, id, story) : null) ??
@@ -608,6 +621,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var catalogLabel = field.SceneIdCoherent ? map.ExitDestinations?.TryGetValue(id, out var destination) == true
                 ? GameNavigationCatalog.DestinationLabel(destination) : GameNavigationCatalog.ExitLabel(field.SceneId, id) : null;
             if (label == "Exit" && catalogLabel is not null) label = catalogLabel;
+            if (sanctumRestriction is not null) label = "Unfinished bridge";
             var optionalGuide = guideActive && (optionalLabel is not null || catalogLabel is not null);
             // Story objectives use the entire current native exit, including tiles
             // outside the camera. Retain goals to keep an active route stable.
@@ -621,7 +635,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var guide = new NavigationTarget(key, label, NavigationCategory.Exits,
                 (visible.Length != 0 ? visible : points.ToArray()).MinBy(Distance), guideGoals,
                 visible.Length != 0, discovered.ContainsKey(key) || visible.Length != 0)
-                { PassageOpening = omenDoorOpening && id == 1 };
+                { PassageOpening = omenDoorOpening && id == 1,
+                    GuidanceRestriction = sanctumRestriction, Instruction = sanctumRestriction };
             guideGeometry[key] = guide;
             storyCandidates.Add(guide);
             if (visible.Length == 0)
@@ -632,6 +647,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 {
                     Visible = false, Discovered = true,
                     PassageOpening = omenDoorOpening && id == 1,
+                    GuidanceRestriction = sanctumRestriction, Instruction = sanctumRestriction,
                     ApproachPoints = old.ApproachPoints.Where(p => StillExitGoal(p, id)).ToArray(),
                 });
                 continue;
@@ -645,7 +661,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var approaches = retained.Concat(footprint.SelectMany(ExitApproach).Distinct().OrderBy(Distance)).Distinct().Take(64)
                 .OrderBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Layer).ToArray();
             Add(key, label, NavigationCategory.Exits, position, approaches, true, storyCandidate: false, guideAvailable: optionalGuide,
-                passageOpening: omenDoorOpening && id == 1);
+                passageOpening: omenDoorOpening && id == 1,
+                instruction: sanctumRestriction, guidanceRestriction: sanctumRestriction);
         }
         if (field.SceneIdCoherent)
         foreach (var passage in FutureScriptedPassage.ForScene(field.SceneId, story, field.Actors))
@@ -788,7 +805,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
             ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
-        var compensateFloor = field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256);
+        var compensateFloor = field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256 ||
+            LostSanctumTargets.NarrowCave(field.SceneId));
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
@@ -895,6 +913,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
+            points.AddRange(LostSanctumTargets.PassagePoints(field.SceneId, region, graph).Where(p => !graph.IsTerminal(p)));
             if (field.SceneId is 599 or 600 or 643 && region.Kind == "Warp")
             {
                 // These native half-tile doorways have no standing room at a
@@ -1060,6 +1079,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var reach = FieldInteractionRange.Along + NavigationUnits.LocalStep / 8;
             var actorX = actor.FineX - actor.CollisionOffsetX * 16;
             var actorY = actor.FineY;
+            if (field.SceneIdCoherent && LostSanctumTargets.PreciseRow(field.SceneId, actor))
+                for (var dx = -384; dx <= 384; dx += 64)
+                    if (FieldInteractionRange.FacingsWithin(actorX + dx, actorY, actor.FineX, actor.FineY,
+                            actor.CollisionOffsetX, NavigationUnits.LocalStep / 8).Count != 0)
+                        found.AddRange(At(actorX + dx, actorY).Where(point => !graph.IsTerminal(point)));
             for (var py = (actorY - reach) / 64 * 64; py <= actorY + reach; py += 64)
             for (var px = (actorX - reach) / 64 * 64; px <= actorX + reach; px += 64)
             {
@@ -1191,6 +1215,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                         if (openedKeepEntrance.TryPosition(px, py, layer, out var point)) yield return point;
                 if (openedOmenDoor is not null && graph.ExitAt(px, py) == 1 &&
                     openedOmenDoor.TryPosition(px, py, 1, out var omenPoint)) yield return omenPoint;
+                if (openedSanctumDoors.TryGetValue(graph.ExitAt(px, py), out var sanctumDoor))
+                    for (var layer = 1; layer <= 3; layer++)
+                        if (sanctumDoor.TryPosition(px, py, layer, out var sanctumPoint)) yield return sanctumPoint;
             }
         }
         void Add(string id, string label, NavigationCategory category, NavigationPoint position,

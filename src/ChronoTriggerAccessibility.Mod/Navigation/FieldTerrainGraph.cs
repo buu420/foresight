@@ -109,6 +109,8 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
 
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
+        if (LostSanctumTargets.DoorExit(scene, actor) is not null)
+            yield return new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY + 256, layer);
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
         if (FacingGuard(scene, actor.Index) is { Value: 1 })
