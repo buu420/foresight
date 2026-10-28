@@ -40,34 +40,45 @@ internal sealed class TemporalLabWarpGraph(INavigationGraph inner, IReadOnlyList
         // There are exactly15 audited sources,10 distinct landings. Each landing
         // is expanded once. Individual walking searches keep a finite budget.
         var budget = Math.Min(maximumVisited, 32768);
+        var unblocked = inner.WithoutCreatures;
+        // A creature on the current walking leg still owns the ordinary wait.
+        // Do not send the player around the maze to reset that local encounter.
+        if (goals.Any(g => regions.Connected(start, g) == true) && unblocked is not null &&
+            NavigationPathfinder.Search(unblocked, start, goals, budget).Route is not null) return new(null, false);
+        // Every621 E1 reload rebuilds the actors. Current creature positions
+        // cannot veto a later leg. Only the returned first leg uses those live
+        // collisions; the new landing must be captured and guided again.
+        var beyondReload = unblocked ?? inner;
         var queue = new Queue<(Entry First, NavigationSearchResult Approach, NavigationPoint Landing)>();
         var visited = new HashSet<NavigationPoint>();
         var limited = false;
         foreach (var pad in pads.OrderBy(p => Distance(start, p.Target.Position)))
         {
-            var approach = Walk(start, pad.Target.ApproachPoints, true);
+            var approach = Walk(inner, start, pad.Target.ApproachPoints);
             if (approach.Route is not null && visited.Add(pad.Landing)) queue.Enqueue((pad, approach, pad.Landing));
         }
         while (queue.TryDequeue(out var node))
         {
-            if (Walk(node.Landing, goals, false).Route is not null)
+            if (Walk(beyondReload, node.Landing, goals).Route is not null)
                 return node.Approach.IntermediateId is not null ? node.Approach : node.Approach with
                 {
                     IntermediateId = node.First.Target.Id, IntermediateContact = node.First.Target.ContactPosition,
                     IntermediateLabel = node.First.Target.Label,
                 };
             foreach (var pad in pads)
-                if (!visited.Contains(pad.Landing) && Walk(node.Landing, pad.Target.ApproachPoints, true).Route is not null)
+                if (!visited.Contains(pad.Landing) && Walk(beyondReload, node.Landing, pad.Target.ApproachPoints).Route is not null)
                 {
                     visited.Add(pad.Landing); queue.Enqueue((node.First, node.Approach, pad.Landing));
                 }
         }
         return new(null, limited);
 
-        NavigationSearchResult Walk(NavigationPoint from, IReadOnlyList<NavigationPoint> to, bool rejectDisconnected)
+        NavigationSearchResult Walk(INavigationGraph graph, NavigationPoint from, IReadOnlyList<NavigationPoint> to)
         {
-            if (rejectDisconnected && to.All(g => regions.Connected(from, g) == false)) return new(null, false);
-            var found = NavigationPathfinder.Search(inner, from, to, budget);
+            //621 has no movement-opened door preview. Its security door needs
+            // Confirm, so definitely separate floor components need no search.
+            if (to.All(g => regions.Connected(from, g) == false)) return new(null, false);
+            var found = NavigationPathfinder.Search(graph, from, to, budget);
             limited |= found.LimitReached;
             return found;
         }

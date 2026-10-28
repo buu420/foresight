@@ -256,6 +256,78 @@ public sealed class TemporalLabWarpTests
         Assert.Equal(nextPad, route.IntermediateId);
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void AnEnemyBeyondAReloadDoesNotHoldTheCurrentReachableWarpLeg(bool automatic)
+    {
+        var sample = Sample(621);
+        // Derived active patrol pose from Atel0621. It blocks the later door
+        // corridor, not the player's entrance corridor. E1 reloads its actors.
+        var field = sample.Field with { Actors = sample.Field.Actors.Select(a => a.Index == 26
+            ? Move(a, 11008, 4096) with { DrawMode = 1, ActivationBinding = 128 } : a).ToArray() };
+        var frame = Build(field, sample.Map, sample.Story);
+        var goal = frame.Targets.Single(t => t.Id == "story:full:lavos");
+        var path = NavigationPathfinder.Search(frame.Graph, frame.Player, goal.ApproachPoints);
+        Assert.NotNull(path.Route);
+        Assert.Equal("actor:8:4:231", path.IntermediateId);
+        var result = Start(frame, goal.Id, automatic);
+        Assert.True(result.Guiding);
+        Assert.DoesNotContain(result.Speech, s => s.Contains("temporarily blocked", StringComparison.Ordinal));
+        Assert.Contains(result.Speech, s => s.Contains("Warp pad A", StringComparison.Ordinal));
+        if (automatic) Assert.NotEqual(NavigationDirection.None, result.Direction);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void TheSameEnemyStillBlocksTheCurrentWalkingLeg(bool automatic)
+    {
+        var sample = Sample(621); var lead = Move(sample.Field.LeadPlayer!, 11008, 5247);
+        var field = sample.Field with { LeadPlayer = lead, Actors = sample.Field.Actors.Select(a => a.Index == lead.Index
+            ? lead : a.Index == 26 ? Move(a, 11008, 4096) with { DrawMode = 1, ActivationBinding = 128 } : a).ToArray() };
+        var frame = Build(field, sample.Map, sample.Story);
+        var goal = frame.Targets.Single(t => t.Id == "story:full:lavos");
+        Assert.Null(NavigationPathfinder.Search(frame.Graph, frame.Player, goal.ApproachPoints).Route);
+        var result = Start(frame, goal.Id, automatic);
+        Assert.True(result.Guiding);
+        Assert.Equal(NavigationDirection.None, result.Direction);
+        Assert.Contains(result.Speech, s => s.Contains("blocking the way", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false, 16)] [InlineData(false, 32)] [InlineData(true, 16)] [InlineData(true, 32)]
+    public void TheDoorArrivalUsesFreshNativeConfirmReadiness(bool automatic, int speed)
+    {
+        var sample = Sample(621); var lead = Move(sample.Field.LeadPlayer!, 11008, 5247) with { Facing = 0, FacingValid = true };
+        var field = sample.Field with { LeadPlayer = lead, Actors = sample.Field.Actors.Select(a => a.Index == lead.Index ? lead : a).ToArray() };
+        var frame = Build(field, sample.Map, sample.Story);
+        var controller = new NavigationController();
+        const string id = "story:full:lavos";
+        var target = frame.Targets.Single(t => t.Id == id);
+        for (var i = 0; i < (int)target.Category; i++) controller.Handle(NavigationCommand.NextCategory, frame, 0);
+        for (var i = 0; i < frame.Targets.Count && controller.TargetId != id; i++) controller.Handle(NavigationCommand.NextTarget, frame, 0);
+        Assert.Equal(id, controller.TargetId);
+        var result = controller.Handle(automatic ? NavigationCommand.ToggleWalk : NavigationCommand.Guide, frame, 1);
+        var speech = new List<string>(result.Speech);
+        for (var tick = 1; tick < 600 && result.Guiding; tick++)
+        {
+            var direction = automatic ? result.Direction : result.ManualLeg?.Direction ?? NavigationDirection.None;
+            var point = NativeWalkingReplay.Move(sample.Map, frame.Player, direction, speed);
+            lead = Move(lead, point.X, point.Y);
+            // Derived camera-cache update, not a live observation. The invisible
+            // scenery marker has DrawMode1;17A6C0 enables its scan near the door.
+            field = field with { LeadPlayer = lead, Actors = field.Actors.Select(a => a.Index == lead.Index ? lead :
+                a.Index == 23 ? a with { ActivationBinding = Math.Abs(point.Y - a.FineY) < 1400 ? 128 : 0 } : a).ToArray() };
+            frame = Build(field, sample.Map, sample.Story);
+            result = controller.Update(frame, tick * 16, !automatic && direction != NavigationDirection.None);
+            speech.AddRange(result.Speech);
+        }
+        Assert.False(result.Guiding, string.Join(" | ", speech));
+        Assert.Contains(speech, s => s.Contains("Press Confirm", StringComparison.Ordinal));
+        Assert.DoesNotContain(speech, s => s.Contains("did not become ready", StringComparison.Ordinal));
+        Assert.Equal(23, FieldInteractionRange.ConfirmWinner(field.Actors, field.LeadPlayerActorIndex,
+            frame.Player.X, frame.Player.Y, frame.PlayerFacing));
+    }
+
     private static FieldMapSnapshot ApplyNativeCopy(FieldMapSnapshot original, GameNavigationCatalog.TileCopy copy)
     {
         // Independent replay of this installed E5 FB copy, not a new capture.

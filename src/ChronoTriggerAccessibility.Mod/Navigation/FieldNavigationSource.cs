@@ -445,7 +445,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 passageOpening: omenDoor && omenDoorOpening,
                 arrivalAnnouncement: genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." :
                     omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
-                arrivalInstruction: genoDoorOpen ? "Continue up through the doorway." :
+                arrivalInstruction: labConfirmDoor ? "Press Confirm to open the security chamber door." :
+                    genoDoorOpen ? "Continue up through the doorway." :
                     book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
                     bike ? "Press Confirm to interact with the jet bike." :
@@ -750,17 +751,21 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         // Preserve its full staged proof. A marker in another disconnected room
         // cannot make every guide target in that room available from here.
         var stagedPart = CanReachStagedPart();
-        bool Disconnected(NavigationTarget t) =>
+        var labWarpPart = routeGraph is TemporalLabWarpGraph warps && warps.HasConnectedPad(player);
+        bool Disconnected(NavigationTarget t, bool storyCandidate = false) =>
             field.SceneIdCoherent && OceanPalaceTargets.DifferentRoom(field.SceneId, player, t) ||
             !stagedPart && !t.IsStoryNote && t.ApproachPoints.Count != 0 &&
-            t.ApproachPoints.All(p => regions.Connected(player, p) == false);
+            t.ApproachPoints.All(p => regions.Connected(player, p) == false) &&
+            // Native warp look-ahead can bind a story goal and route to seen
+            // destinations. It cannot disclose unseen pads, items or creatures.
+            !(labWarpPart && (storyCandidate || t.Category == NavigationCategory.StoryEvents || t.Visible || t.Discovered));
         // Atel_0164 gates these two exterior doorways through scene303's
         // Confirm wall switches. No touch-opening copy covers either exit.
         // Other maps can have automatic doors whose staged goals need their
         // own proof; an empty approach alone must not classify those doors.
         bool BlockedExit(NavigationTarget t) => field.SceneIdCoherent && field.SceneId == 298 &&
             t.Id is "exit:5" or "exit:8" && t.ApproachPoints.Count == 0;
-        storyCandidates.RemoveAll(t => Disconnected(t) || BlockedExit(t));
+        storyCandidates.RemoveAll(t => Disconnected(t, true) || BlockedExit(t));
         if (field.SceneIdCoherent)
         {
             var available = storyCandidates.ToArray();
@@ -837,7 +842,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         {
             if (routeGraph is not IStagedNavigationGraph || GameNavigationCatalog.ForScene(field.SceneId) is not { } metadata)
                 return false;
-            if (routeGraph is TemporalLabWarpGraph warps && warps.HasConnectedPad(player)) return true;
+            if (routeGraph is TemporalLabWarpGraph) return false;
             if (transitions.Any(t => (t.Available || t.Active) && regions.Connected(player, t.Transition.Approach) == true)) return true;
             var landingIds = metadata.Exits.Where(e =>
                 (map.ExitDestinations?.TryGetValue(e.Id, out var current) == true ? current : e.Destination) == field.SceneId)

@@ -531,7 +531,10 @@ public sealed class NavigationController
             FinishFacing(frame, now, speech);
             return;
         }
-        frame = frame with { Graph = frame.Graph.ForGoals(currentTarget.ApproachPoints) };
+        // A named stage was planned with that contact as its destination. Keep
+        // the same native touch permission while validating the walking edges.
+        frame = frame with { Graph = frame.Graph.ForGoals(intermediateLabel is not null && route is { Count: > 0 }
+            ? [route[^1]] : currentTarget.ApproachPoints) };
         if (creatureBlockedSince is not null && route is null && now < nextCreatureCheck) return;
         if (mustReplan)
         {

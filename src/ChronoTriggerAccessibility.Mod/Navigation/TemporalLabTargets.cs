@@ -10,7 +10,7 @@ internal static class TemporalLabTargets
     internal sealed record Warp(GameNavigationCatalog.Action Action, string Label, string Landing, NavigationPoint Arrival);
     private static readonly (int X, int Y, string Name)[] landings =
     [
-        (16, 23, "western junction"), (22, 17, "northwestern junction"),
+        (16, 23, "western junction"), (22, 17, "western column"),
         (26, 16, "central corridor"), (22, 8, "upper western corridor"),
         (57, 16, "eastern junction"), (47, 6, "upper eastern corridor"),
         (43, 20, "eastern corridor"), (37, 28, "lower eastern corridor"),
@@ -59,7 +59,7 @@ internal static class TemporalLabTargets
         scene == 617 ? "Warp-maze entrance door" : "Security chamber door";
     public static string? ExitRestriction(int scene, int exit, FieldStoryState? story) =>
         scene == 621 && exit == 1 && story?.Local(30) == 0
-            ? "The security chamber door is closed. Choose Security chamber door under Interactable Objects and press Confirm." : null;
+            ? "The security chamber door is closed. Reach the door and press Confirm to open it." : null;
     public static string? AreaName(int scene) => scene switch
     {
         617 => "Temporal Research Lab, conveyor room", 621 => "Temporal Research Lab, warp maze",
