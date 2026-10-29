@@ -545,9 +545,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
                      !(field.SceneId == 600 && r.Kind == "Encounter") &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
+                     FrozenCliffsTargets.WatcherAvailable(field, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (BlackOmenTargets.IsPad(field.SceneId, r) ||
-                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : r.Available(story))) &&
+                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : FrozenCliffsTargets.RegionAvailable(field.SceneId, r, story))) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
                          (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
@@ -556,6 +557,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                           a.ClassTag == 7 && a.ScriptProcessingEnabled))).GroupBy(r => r.Id))
         {
             var region = group.First();
+            var cliffCave = FrozenCliffsTargets.IsCave(field.SceneId, region);
             var omenPad = BlackOmenTargets.IsPad(field.SceneId, region);
             var padRestriction = omenPad ? BlackOmenTargets.PadRestriction(field.SceneId, region, story) : null;
             var pillar = FutureAreaLabels.IsPillar(field.SceneId, region);
@@ -586,14 +588,16 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (grate) (regionLabel, regionCategory) = (BlackbirdDuctTargets.GrateLabel(field.SceneId, region, map), NavigationCategory.Objects);
             if (omenPad) (regionLabel, regionCategory) =
                 ("Teleport pad to " + GameNavigationCatalog.AreaName(region.Destination), NavigationCategory.Objects);
+            if (cliffCave) regionLabel = FrozenCliffsTargets.CaveLabel(field.SceneId, region)!;
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                 storyOnly: region.Kind is not ("Warp" or "Encounter") ||
                     OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
-                instruction: padRestriction ?? (grate ? BlackbirdDuctTargets.GrateInstruction : null),
+                instruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : padRestriction ?? (grate ? BlackbirdDuctTargets.GrateInstruction : null),
                 guidanceRestriction: padRestriction,
-                arrivalInstruction: omenPad ? "Step onto the pad to teleport." :
-                    pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null);
+                arrivalInstruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : omenPad ? "Step onto the pad to teleport." :
+                    pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null,
+                contactDirection: cliffCave ? NavigationDirection.North : NavigationDirection.None);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -1245,13 +1249,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             string? guidanceRestriction = null, int? actorSlot = null,
             (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null,
             NavigationHold? arrivalHold = null, bool passageOpening = false, bool keepInteractionReach = false,
-            IReadOnlyList<NavigationPoint>? preferredApproaches = null)
+            IReadOnlyList<NavigationPoint>? preferredApproaches = null, NavigationDirection contactDirection = NavigationDirection.None)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
                 visible || discovered.ContainsKey(id))
                 {
                     Instruction = instruction, ArrivalInstruction = arrivalInstruction, ContactPosition = contactPosition,
+                    ContactDirection = contactDirection,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
                     ArrivalHold = arrivalHold, PassageOpening = passageOpening,
@@ -1268,6 +1273,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     visible || discovered.ContainsKey(id))
                 {
                     GuideAvailable = guideAvailable, Instruction = instruction, ArrivalInstruction = arrivalInstruction,
+                    ContactDirection = contactDirection,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
                     ArrivalHold = arrivalHold, PassageOpening = passageOpening,
@@ -1285,6 +1291,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
+                ContactDirection = contactDirection,
                 ArrivalHold = arrivalHold, PassageOpening = passageOpening,
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,

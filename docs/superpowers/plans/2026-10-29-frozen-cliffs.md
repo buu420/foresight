@@ -12,7 +12,7 @@ Tech: .NET9/x86, native resource/Ghidra evidence and private offline x86 emulati
 1. [x] Preserve the tester log, native identities and fresh protected-file hashes.
    Establish a clean5398-test baseline in .worktrees/frozen-cliffs-0384. Audit
    six cave tiles, native facing, starting/landing poses and all12 chest records.
-2. [ ] Add FrozenCliffsNavigationTests and embedded initial maps/derived poses.
+2. [x] Add FrozenCliffsNavigationTests and embedded initial maps/derived poses.
    RED: list6 stable distinct caves for facings0..3; unknown/stopped owner fails
    closed; Story Events binds the forward605 cave; native North entry, both modes.
    Implement FrozenCliffsTargets.RegionAvailable(scene,region,story), owner and

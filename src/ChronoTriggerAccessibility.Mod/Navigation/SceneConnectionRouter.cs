@@ -198,7 +198,7 @@ public sealed class SceneConnectionRouter
             return info.Actors.Any(a => a.Id == link.Actor && a.Actions.Any(action =>
                 action.Kind == "Warp" && action.Destination == link.NativeDestination && action.Available(state)));
         if (link.Target?.StartsWith("script-region:") == true)
-            return info.Regions.Any(r => r.Id == link.Target && r.Available(state));
+            return info.Regions.Any(r => r.Id == link.Target && FrozenCliffsTargets.RegionAvailable(scene, r, state));
         return true;
     }
 
