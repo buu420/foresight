@@ -13,6 +13,9 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
     private bool sandPending;
     private (int? Mode, int? Toggle)? sandRun;
     private bool announcedSlide;
+    private (int X, int Y)? beltSpoken;
+    private long beltChangedAt = -1;
+    private long lastBeltSpeech = -1;
     public FieldFloorSnapshot? Current { get; private set; }
     public string? Status
     {
@@ -30,7 +33,7 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
                 ? SunkenDesertNavigation.IsScene(floor.Scene) ? DescribeSand(floor, true) : Describe(floor) : null;
         }
     }
-    public void Reset() { Current = null; identity = null; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; }
+    public void Reset() { Current = null; identity = null; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; beltSpoken = null; beltChangedAt = -1; lastBeltSpeech = -1; }
     /// <summary>Revoke current movement/status facts without repeating unchanged
     /// announcements after a navigation-menu or input pause.</summary>
     public void Suspend() => Current = null;
@@ -41,7 +44,26 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
         // the announcement cursor, while revoking movement and repeat facts.
         if (floor is not { } value) return;
         var context = (value.Engine, value.ActorBase, value.Scene, value.Actor);
-        if (identity != context) { identity = context; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; }
+        if (identity != context) { identity = context; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; beltSpoken = null; beltChangedAt = -1; lastBeltSpeech = -1; }
+        if (value.Scene == 617)
+        {
+            // Rejected probes and narrow belt edges alternate32/0 every frame.
+            // Keep Current/Repeat immediate; speak a settled direction once, on
+            // the background channel, rather than interrupting the route.
+            var now = clock?.Invoke() ?? Environment.TickCount64;
+            var current = (value.ForceX, value.ForceY);
+            if (announced != current)
+            {
+                announced = current; beltChangedAt = now;
+                diagnostic($"Field floor: scene=617; force=({value.ForceX},{value.ForceY}); runMode={value.RunMode}; runToggle={value.RunToggle}.");
+            }
+            if (beltSpoken == current || current == (0, 0) && beltSpoken is null ||
+                lastBeltSpeech >= 0 && now >= lastBeltSpeech && now - lastBeltSpeech < 1500 ||
+                beltSpoken is not null && now >= beltChangedAt && now - beltChangedAt < (current == (0, 0) ? 500 : 200)) return;
+            (background ?? speak)(current == (0, 0) ? "Off the conveyor." : Describe(value));
+            beltSpoken = current; lastBeltSpeech = now;
+            return;
+        }
         if (value.Scene == 604 && value.ForceX == 0 && value.ForceY is 0 or 32)
         {
             // Narrow calm lips and rejected probes are not new slide sections.
@@ -120,7 +142,7 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
         else if (wasMoving) speak(IsConveyor(value.Scene) ? "Off the conveyor." : "Off the moving floor.");
     }
 
-    private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 256 or 437;
+    private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 256 or 437 or 617;
     private static string DescribeSlide(FieldFloorSnapshot floor) =>
         "Downhill slide. While running, hold Up to stop sliding. Select a cave and start automatic walking for slide assistance." +
         " " + FrozenCliffsMovement.RunAdvice(floor);

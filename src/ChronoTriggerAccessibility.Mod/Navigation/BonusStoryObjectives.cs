@@ -145,12 +145,14 @@ public static class BonusStoryObjectives
         V("present:shade", "Confront the Steel Shade in the Leene Square Dreamscape", Arrival(646)),
         V("future:shade", "Confront the Crimson Shade in the Household Dreamscape", Arrival(647)),
         V("future:security", "Use the Temporal Research Lab security console", Actor(620, 8)),
-        V("future:door", "Return to the laboratory security door", Actor(618, 13)),
+        // Atel0617 actor0 starts the rescue on any arrival with E2A bit01.
+        // The ordinary618 exit0 reaches the same entry as its parked marker13.
+        V("future:door", "Return to the laboratory conveyor room", Arrival(617), NavigationCategory.Exits),
         V("future:rescuers", "Meet the other party members at the laboratory entrance", Arrival(617), NavigationCategory.People),
         V("future:alarm", "Reach the east laboratory's security chamber", Arrival(622)),
         V("future:maze-door", "Open the east laboratory's security chamber door", Actor(621, 23)),
         V("future:register", "Register an administrator at the east laboratory console", Actor(622, 8)),
-        V("future:release", "Release the security locks using the laboratory console", Actor(620, 8)),
+        V("future:release", "Return to the laboratory patrol room", Arrival(618), NavigationCategory.Exits),
         new("bonus:eclipse:gaspar", "Ask the old man about the completed Dimensional Vortices",
             [Actor(464, 28)], Category: NavigationCategory.People),
         new("bonus:eclipse:gate", "Use the End of Time Gate to reach Time's Eclipse",
@@ -375,7 +377,10 @@ public static class BonusStoryObjectives
         {
             if (scene == 665) { AddV("future:grotto"); return; }
             if (s.Extra(0x2A) is null) return;
-            if (Has(s, 0x2A, 4)) AddV(Has(s, 0x2A, 1) ? "future:grotto" : "future:release");
+            // Atel0618's background release sets08 and clears04. Console620
+            // operates only at zero; console622 stops responding once08 is set.
+            if (Has(s, 0x2A, 8)) AddV("future:grotto");
+            else if (Has(s, 0x2A, 4)) AddV("future:release");
             else if (!Has(s, 0x2A, 2))
                 AddV(!Has(s, 0x2A, 1) ? "future:security" : scene == 617 ? "future:rescuers" : "future:door");
             else if (scene == 621 && s.Local(30) == 0) AddV("future:maze-door");

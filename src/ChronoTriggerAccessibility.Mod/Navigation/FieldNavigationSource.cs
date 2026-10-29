@@ -224,6 +224,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // A sprite rises from its feet: Mune's and Masa's heads show before their feet enter the window.
             var inView = viewport.Contains(position.X, position.Y) ||
                 field.SceneIdCoherent && OceanPalaceSight.TwinHeadShown(field.SceneId, actor, viewport);
+            label ??= field.SceneIdCoherent ? TemporalLabTargets.RobotLabel(field.SceneId, actor, inView) : null;
             var seen = inView || discovered.ContainsKey(id);
             var npcRegion = guideActive ? genoMeeting ?? OceanPalaceTargets.NpcRegion(field, actor, story, seen) ??
                 OceanPalaceStoryTargets.NpcRegion(field, actor, story) : null;
@@ -384,8 +385,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
+            label ??= TemporalLabTargets.DoorLabel(field.SceneId, actor);
             if (scripted.Length != 0) label ??= (vortexDoor ? VortexRoomTargets.DoorLabel : null) ??
-                TemporalLabTargets.DoorLabel(field.SceneId, actor) ?? LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
+                LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
                 TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
                 OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
                 QuestObjectLabels.Marker(field.SceneId, actor) ??
@@ -410,7 +412,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 .SelectMany(a => ActorApproach(a, Position(a.FineX, a.FineY))).Distinct().ToArray();
             var terrainContact = !confirmDoor && (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
-            if (terrainContact || omenDoor)
+            var labDoor = TemporalLabTargets.DoorExit(field.SceneId, actor) is not null;
+            var labContact = labDoor && scripted.Any(a => a.Touch);
+            if (terrainContact || omenDoor || labDoor)
             {
                 // A door marker can lie beyond its own closed floor. Publish
                 // goals on its guarded native copy as well as the live floor;
@@ -461,10 +465,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 contactPosition: field.SceneId == 256 && actor.Index == 25 && GenoDomeTargets.IsPod(field.SceneId, actor) ||
                     field.SceneId == 642 && actor.Index is 14 or 15 ||
                     field.SceneId == 600 && actor.Index == 21 && terrainContact ||
-                    terrainContact && (LostSanctumTargets.DoorExit(field.SceneId, actor) is not null || TemporalLabTargets.DoorExit(field.SceneId, actor) is not null)
+                    labContact || terrainContact && LostSanctumTargets.DoorExit(field.SceneId, actor) is not null
                     ? Position(actor.FineX - actor.CollisionOffsetX * 16 - 1, actor.FineY) : null,
-                confirm: touch || terrainContact ? null : ActorConfirm(Anchors(actor)));
-            if (!touch && !terrainContact) markerAnchors[landmarkId] = Anchors(actor);
+                confirm: touch || terrainContact || labDoor ? null : ActorConfirm(Anchors(actor)));
+            if (!touch && !terrainContact && !labDoor) markerAnchors[landmarkId] = Anchors(actor);
         }
         // A counter that only runs its keeper's script is the keeper's destination, already
         // offered under the keeper's name with the counter's reach. A visible character that

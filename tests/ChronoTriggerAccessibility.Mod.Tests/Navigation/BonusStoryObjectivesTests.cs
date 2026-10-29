@@ -256,14 +256,14 @@ public sealed class BonusStoryObjectivesTests
     }
 
     [Fact]
-    public void ResearchLabRequiresAdministratorAndSecondLockRelease()
+    public void ResearchLabRequiresAdministratorThenItsNativeAutomaticRelease()
     {
         Assert.Contains("bonus:vortex:future:security", Vortex(State((0x0A, 0)), 620));
         Assert.Contains("bonus:vortex:future:door", Vortex(State((0x0A, 0), (0x2A, 1)), 620));
         Assert.Contains("bonus:vortex:future:alarm", Vortex(State((0x0A, 0), (0x2A, 2)), 617));
         Assert.Contains("bonus:vortex:future:register", Vortex(State((0x0A, 0), (0x2A, 0x12)), 622));
         Assert.Contains("bonus:vortex:future:release", Vortex(State((0x0A, 0), (0x2A, 0x16)), 618));
-        Assert.Contains("bonus:vortex:future:grotto", Vortex(State((0x0A, 0), (0x2A, 0x17)), 620));
+        Assert.Contains("bonus:vortex:future:grotto", Vortex(State((0x0A, 0), (0x2A, 0x1A)), 618));
     }
 
     [Fact]

@@ -29,11 +29,11 @@ PowerShell packaging, GitHub releases and AMM author CLI.
    Extend `TemporalLabTargets`, `FieldTerrainGraph`, `FieldNavigationSource` and
    the router's region filter only where the native scripts prove it. Verify both
    modes reach the current door contact and actual exit; maintain call/guard gates.
-2. [ ] Add failing tests for current native security, rescue, registration, release
+2. [x] Add failing tests for current native security, rescue, registration, release
    and onward stages. Verify retained scripts including background continuation.
    Correct `BonusStoryObjectives` and useful lab room/control labels without
    puzzle answers. Retain optional side-room/chest connections and native Confirm.
-3. [ ] Add failing rapid belt-boundary/direction/Repeat tests. Scope debounce to
+3. [x] Add failing rapid belt-boundary/direction/Repeat tests. Scope debounce to
    the lab, retain current force immediately and keep native32-speed direction
    restrictions. Verify existing Factory/Desert/Death Peak/Cliffs feedback.
 4. [ ] Review full changes with Opus5.5/max, resolve supported findings, update
@@ -61,3 +61,11 @@ PowerShell packaging, GitHub releases and AMM author CLI.
   Ruling: original E2A0 side-room positive was corrected to a derived release
   fixture after native scripts proved a real barrier; no gameplay barrier removed.
   Native618 radius224 requires a standable door contact320 below actor16.
+- Task2:14/20 Story cases failed before the fix; focused145 cases passed after
+  the native sequence correction. Robot label/heading check failed before the
+  scoped appearance reader and then passed, including no off-camera heading.
+  Ruling: return to617 via its actual exit instead of parked618 marker13; native
+ 617 startup itself checks bit01, independent of entry, and begins the rescue.
+- Task3:2/3 new floor cases failed before debounce. All393 focused checks now
+  pass, including adjacent areas. Current floor stays immediate; only settled
+  lab speech is coalesced on the background channel. Native forces unchanged.

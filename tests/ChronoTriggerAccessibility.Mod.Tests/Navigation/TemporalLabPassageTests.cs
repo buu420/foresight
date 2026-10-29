@@ -174,8 +174,9 @@ public sealed class TemporalLabPassageTests
         var lead = field.LeadPlayer! with { FineX = x, TileX = x / 256, FractionX = x % 256, FineY = y, TileY = y / 256, FractionY = y % 256 };
         return field with { LeadPlayer = lead, Actors = field.Actors.Select(a => a.Index == lead.Index ? lead : a).ToArray() };
     }
-    internal static NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldStoryState story) =>
-        new FieldNavigationSource(new Empty(), _ => { }).Build(field, map, new(0, 0, map.Width * 256, map.Height * 256), [], story);
+    internal static NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldStoryState story, FieldViewport? viewport = null) =>
+        new FieldNavigationSource(new Empty(), _ => { }).Build(field, map,
+            viewport ?? new(0, 0, map.Width * 256, map.Height * 256), [], story);
     internal static (NavigationController Controller, NavigationResult Result) Start(NavigationFrame frame, string id, bool automatic)
     {
         var target = frame.Targets.Single(t => t.Id == id); var controller = new NavigationController();

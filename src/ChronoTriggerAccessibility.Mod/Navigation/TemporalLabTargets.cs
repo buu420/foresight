@@ -66,9 +66,27 @@ internal static class TemporalLabTargets
     // they are consequences of detection, not visible/navigable passages.
     public static bool CaptureRegion(int scene, GameNavigationCatalog.Region region) =>
         scene == 618 && region.Actor == 14 && region.Kind == "Warp" && region.Destination == 619;
-    public static string? ExitRestriction(int scene, int exit, FieldStoryState? story) =>
-        scene == 621 && exit == 1 && story?.Local(30) == 0
-            ? "The security chamber door is closed. Reach the door and press Confirm to open it." : null;
+    public static string? RobotLabel(int scene, FieldActorSnapshot actor, bool visible)
+    {
+        if (scene != 618 || actor.Index is < 8 or > 12 || actor.ClassTag != 5 || actor.VisualIndex != 284) return null;
+        var label = $"Robot {(char)('A' + actor.Index - 8)}";
+        // Atel0618 opcode23 reads this exact native facing byte. Describe only
+        // the currently drawn/on-camera pose, without predicting detection/safety.
+        var facing = FieldInteractionRange.NativeFacing(actor.Facing);
+        return visible && actor.IsDrawn && actor.FacingValid && facing != NavigationDirection.None
+            ? label + ", facing " + facing.ToString().ToLowerInvariant() : label;
+    }
+    public static string? ExitRestriction(int scene, int exit, FieldStoryState? story) => (scene, exit) switch
+    {
+        (617, 1) when story?.Extra(0x2A) == 0 => "The warp-maze entrance door is closed.",
+        (617, 2) when story?.Extra(0x2A) is { } flags && (flags & 2) != 0 && (flags & 8) == 0 =>
+            "The patrol-room entrance door is closed.",
+        (618, 1) when story?.Extra(0x2A) is { } flags && (flags & 8) == 0 && story.Local(121) == 0 =>
+            "A barrier blocks the side-room passage.",
+        (621, 1) when story?.Local(30) == 0 =>
+            "The security chamber door is closed. Reach the door and press Confirm to open it.",
+        _ => null,
+    };
     public static string? AreaName(int scene) => scene switch
     {
         617 => "Temporal Research Lab, conveyor room", 618 => "Temporal Research Lab, patrol room",

@@ -118,7 +118,7 @@ must not be used as victories.
 | Antiquity | Frozen Cliffs602..607,648; Marle required for the Grotto sequence | Scene666 Grotto approach;645 Alabaster Shade approach region |
 | Present volcano | E23:01 entrance platform switch; E23:02 ladder switch | Scene608 and613 switch regions |
 | Present Grotto | Dalton victory E21:20; Crono required afterward | Scene624 Dalton approach, then forward Grotto approach |
-| Future laboratory | E2A:01 first security release; rescue transition sets :02 and clears :01; alarm completion :10; administrator registration :04; second release restores :01 | Scene620 console8;618 contact marker13;617 startup;622 startup and console8;620 console8 again |
+| Future laboratory | E2A:01 first security release; rescue transition sets :02 and clears :01; alarm completion :10; administrator registration :04; automatic release sets :08 and clears :04 | Scene620 console8; return to617 startup;622 startup and console8;618 background release; available623 portal toward665 |
 | Future Grotto | Lucca required for the Grotto sequence | Scene665 Grotto approach;647 automatic encounter sequence |
 | Alabaster / Crimson / Steel Shade victories | E22:01 / :02 / :04 | Scene645 actor8 f6 at035B;647 actor8 f6 at0328;646 actor8 f6 at0333 |
 | All three cleared | Each victory checks E22=7, then assigns E0A=1 | Gaspar464 actor28 assigns E0A=2 |
