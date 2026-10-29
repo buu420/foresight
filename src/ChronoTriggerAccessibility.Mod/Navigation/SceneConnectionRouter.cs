@@ -164,6 +164,10 @@ public sealed class SceneConnectionRouter
         // packet offset0249 transfers to scene250. There is no player-controlled
         // exit inside scene126: this is look-ahead only, never a walking target.
         result.Add(new Link(126, 250, null, Cost: 2));
+        // Atel0659 ends its mandatory conveyor battles with E1 at0249 to660.
+        // Extraction stops at the first battle. This is look-ahead only; the
+        // current637 passage and660's guarded controls still need live targets.
+        result.Add(new Link(659, 660, null, Cost: 2));
         // Atel0224 actor11 finishes the mandatory elevator battles and DF at
         // packet05A5 enters418. Boarding still requires scene411's live actor10.
         result.Add(new Link(416, 418, null, Cost: 2));

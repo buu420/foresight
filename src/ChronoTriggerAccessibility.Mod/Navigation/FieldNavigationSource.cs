@@ -59,6 +59,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
     public NavigationFrame Build(FieldNavigationSnapshot field, FieldMapSnapshot map, FieldViewport viewport,
         IReadOnlyList<FieldTreasure> treasures, FieldStoryState? story = null, Func<int, int, bool>? treasureGrid = null)
     {
+        var capturedMap = map;
         map = BlackOmenTargets.Map(field, OceanPalaceTargets.Map(field, map));
         var identity = $"{field.Engine:X8}:{field.SceneId}";
         if (scene != identity)
@@ -366,6 +367,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var teleportPad = ZealFieldLabels.TeleportPad(field.SceneId, actor);
             var omenDoor = field.SceneIdCoherent && BlackOmenTargets.IsFinalDoor(field.SceneId, actor);
             var labConfirmDoor = field.SceneIdCoherent && TemporalLabTargets.ConfirmDoor(field.SceneId, actor);
+            var vortexDoor = VortexRoomTargets.Door(field.SceneId, actor);
+            var confirmDoor = labConfirmDoor || vortexDoor;
             var keepDoor = keepEntranceCopy is not null && actor.Index == 14;
             var genoMarker = GenoDomeTargets.Marker(field.SceneId, actor);
             var genoPodOpen = GenoDomeTargets.PodOpen(field.SceneId, actor, map, story);
@@ -379,7 +382,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
-            if (scripted.Length != 0) label ??= TemporalLabTargets.DoorLabel(field.SceneId, actor) ?? LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
+            if (scripted.Length != 0) label ??= (vortexDoor ? VortexRoomTargets.DoorLabel : null) ??
+                TemporalLabTargets.DoorLabel(field.SceneId, actor) ?? LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
                 TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
                 OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
                 QuestObjectLabels.Marker(field.SceneId, actor) ??
@@ -394,15 +398,17 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     scripted.FirstOrDefault(a => a.Kind == "Warp") is { } warp
                         ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery");
             if (label is null) continue;
+            if (scripted.Any(a => a.Kind == "Warp") && VortexRoomTargets.PassageLabel(field.SceneId) is { } vortexLabel)
+                label = vortexLabel;
             if (generic) genericIds.Add(landmarkId);
             var position = Position(actor.FineX, actor.FineY);
-            var touch = !labConfirmDoor && (knownTouch || genoDoorOpen || metadata is { Touch: true });
+            var touch = !confirmDoor && (knownTouch || genoDoorOpen || metadata is { Touch: true });
             var approaches = touch
                 ? TouchApproach(actor)
                 : ActorApproach(actor, position);
             if (sealedDoor) approaches = Anchors(actor).Where(a => SealedFieldTargets.DoorClosed(field.SceneId, a, story))
                 .SelectMany(a => ActorApproach(a, Position(a.FineX, a.FineY))).Distinct().ToArray();
-            var terrainContact = !labConfirmDoor && (field.SceneId, actor.Index) != (28, 1) &&
+            var terrainContact = !confirmDoor && (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
             if (terrainContact || omenDoor)
             {
@@ -431,9 +437,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 (genoPodOpen == false ? "The pod is closed." : null) ??
                 (omenDoor ? BlackOmenTargets.DoorRestriction(actor, story) : null);
             Add(landmarkId, label, !bike && teleportPad is null && scriptedExit ? NavigationCategory.Exits : NavigationCategory.Objects, position, approaches,
-                TileVisible(actor.TileX, actor.TileY), storyOnly: !labConfirmDoor && !omenDoor && genoMarker is null && (knownTouch || touch && scripted.Length == 0),
+                TileVisible(actor.TileX, actor.TileY), storyOnly: !confirmDoor && !omenDoor && genoMarker is null && (knownTouch || touch && scripted.Length == 0),
                 guideAvailable: guideActive && (omenDoor || genoMarker is not null || !touch || scripted.Length != 0),
-                instruction: labConfirmDoor ? "Press Confirm to open the security chamber door." :
+                instruction: vortexDoor ? VortexRoomTargets.DoorInstruction : labConfirmDoor ? "Press Confirm to open the security chamber door." :
                     restriction ?? GenoDomeObstacles.ControlInstruction(field.SceneId,actor,map,viewport,genoPodOpen,genoObstacles) ??
                     (genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." : null) ??
                     (omenDoor && story?.Local(10) == 1 ? "The northern door is open." :
@@ -445,7 +451,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 passageOpening: omenDoor && omenDoorOpening,
                 arrivalAnnouncement: genoDoorOpen ? "The door to the main room is open. Continue up through the doorway." :
                     omenDoor && story?.Local(10) == 1 ? "The northern door is open." : null,
-                arrivalInstruction: labConfirmDoor ? "Press Confirm to open the security chamber door." :
+                arrivalInstruction: vortexDoor ? VortexRoomTargets.DoorInstruction : labConfirmDoor ? "Press Confirm to open the security chamber door." :
                     genoDoorOpen ? "Continue up through the doorway." :
                     book is not null ? "Press Confirm to open or close the book." :
                     sealedDoor ? "Press Confirm to examine the sealed door." :
@@ -468,6 +474,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             standInsOf.Any(s => s.StandIn == t.Id && targets.Any(owner => owner.Id == s.Owner)));
         if (field.SceneIdCoherent)
         foreach (var group in FieldContentFacts.MarkerGroups(field.SceneId)
+                     .Concat(VortexRoomTargets.MarkerGroups(field))
                      // Atel0642's two side-by-side contacts run the same guarded
                      // warp. They are one passage, not two distinct doorways.
                      .Concat(field.SceneId == 642 ? new[] { new[] { 14, 15 } } : []))
@@ -545,7 +552,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
                          (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
-                         (!(FutureAreaLabels.IsPillar(field.SceneId, r) || BlackOmenTargets.IsPad(field.SceneId, r)) ||
+                         (!(FutureAreaLabels.IsPillar(field.SceneId, r) || BlackOmenTargets.IsPad(field.SceneId, r) ||
+                            field.SceneId == 633 && r.Kind == "Warp") ||
                           a.ClassTag == 7 && a.ScriptProcessingEnabled))).GroupBy(r => r.Id))
         {
             var region = group.First();
@@ -565,7 +573,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // player; the guard that the script sets when it is over removes it.
             var (regionLabel, regionCategory) = region.Kind switch
             {
-                "Warp" => (pillar ? FutureAreaLabels.PillarLabel(region) : GameNavigationCatalog.DestinationLabel(region.Destination),
+                "Warp" => (pillar ? FutureAreaLabels.PillarLabel(region) : VortexRoomTargets.PassageLabel(field.SceneId) ?? GameNavigationCatalog.DestinationLabel(region.Destination),
                     pillar ? NavigationCategory.Objects : NavigationCategory.Exits),
                 "Switch" => ("Floor trigger", NavigationCategory.Objects),
                 "Encounter" => ("Encounter", NavigationCategory.Enemies),
@@ -833,7 +841,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 MovingFloorGuidance = compensateFloor && floor is { Speed:16 } moving
                     ? (direction,goal)=>FieldFloorMovement.ManualDirection(player,direction,goal,moving,graph.CanTraverseFloorStep) : null,
                 ActiveTransitions = transitions.Where(t => t.Active).Select(t => t.Transition.Id).ToHashSet(),
-                RouteEvidence = RouteFailureEvidence.For(field, map, story, targets.AsReadOnly(), treasures),
+                RouteEvidence = RouteFailureEvidence.For(field, capturedMap, story, targets.AsReadOnly(), treasures),
                 RouteFailureExplanation = genoObstacles.Any(o=>!o.Open)
                     ? (from,target)=>GenoDomeObstacles.Explain(map,from,target,genoObstacles,collisions,touchGoals) : null,
             };

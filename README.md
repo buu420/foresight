@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.82 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.83 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.82 gives Temporal Research Lab's warp pads unique names and native landing-area labels. Both navigation modes announce and reach the next usable warp toward the selected objective. The security-door interaction comes before its exit, and room labels distinguish the lab sections. Restart guidance after each native room reload. See [changes and retest notes](docs/releases/v0.3.82.md).
+Version 0.3.83 repairs the reported randomized Dimensional Vortex passages: the full Ocean Palace staircase, the canyon doorway and the route through the conveyor rooms. Local passage labels do not reveal the next random room. Story Events reaches the conveyor exit door before its passage; press Confirm when instructed. Restart guidance after each native room transition. See [changes and retest notes](docs/releases/v0.3.83.md). Temporal Research Lab's distinct warp-pad labels and routes remain included.
 
 This release also includes the Lost Sanctum fixes from 0.3.81: local quest priorities, cave and fortress passages, Waystone and Nu/builder contacts, and spoken walking controls at tight Winding Passage turns. The unfinished bridge retains its native restriction. [Lost Sanctum details](docs/releases/v0.3.81.md).
 

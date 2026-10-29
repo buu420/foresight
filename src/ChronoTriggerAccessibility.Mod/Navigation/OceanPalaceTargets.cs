@@ -59,10 +59,11 @@ internal static class OceanPalaceTargets
     /// <summary>Map175 deliberately repeats its 64 collision rows over the
     /// 128-row great stair. The native movers take tile coordinates modulo
     /// the plane dimensions (173750); exit and script coordinates stay full
-    /// height. Expand the live bytes only within this verified room extent.</summary>
+    /// height. Vortex Map633 has byte-identical property planes and the same
+    /// extent, with Atel0633's exit watcher at row121. Expand only these rooms.</summary>
     public static FieldMapSnapshot Map(FieldNavigationSnapshot field, FieldMapSnapshot map)
     {
-        if (!field.SceneIdCoherent || field.SceneId != 409 || map.Width != 32 || map.Height != 64 ||
+        if (!field.SceneIdCoherent || field.SceneId is not (409 or 633) || map.Width != 32 || map.Height != 64 ||
             map.ExitWidth != 32 || map.ExitHeight != 128 || map.ExitCells.Length != 4096 ||
             map.CollisionShapes.Length != 2048 || map.TerrainFlags.Length != 2048 ||
             map.CollisionLayers.Length != 2048) return map;
