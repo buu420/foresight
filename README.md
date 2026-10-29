@@ -1,12 +1,14 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.83 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.84 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.83 repairs the reported randomized Dimensional Vortex passages: the full Ocean Palace staircase, the canyon doorway and the route through the conveyor rooms. Local passage labels do not reveal the next random room. Story Events reaches the conveyor exit door before its passage; press Confirm when instructed. Restart guidance after each native room transition. See [changes and retest notes](docs/releases/v0.3.83.md). Temporal Research Lab's distinct warp-pad labels and routes remain included.
+Version 0.3.84 adds distinct Frozen Cliffs cave targets and an opt-in slide assist. Select a cave and start automatic walking; it uses normal running and directional input, including Up to enter the cave. While running, hold Up to stop sliding during manual navigation. Story Events can guide you through a return cave when you have slid past the forward openings. All twelve native chests in the cliffs and adjoining passage have stable per-room labels and verified offline approaches. Chest opening still needs Confirm. Restart guidance after native room changes or battles. See [changes and retest notes](docs/releases/v0.3.84.md).
+
+The randomized Dimensional Vortex passage fixes from 0.3.83 remain included: the full Ocean Palace staircase, canyon doorway and conveyor rooms. Local passage labels do not reveal the next random room. Story Events reaches the conveyor exit door before its passage; press Confirm when instructed. [Vortex details](docs/releases/v0.3.83.md). Temporal Research Lab's distinct warp-pad labels and routes remain included.
 
 This release also includes the Lost Sanctum fixes from 0.3.81: local quest priorities, cave and fortress passages, Waystone and Nu/builder contacts, and spoken walking controls at tight Winding Passage turns. The unfinished bridge retains its native restriction. [Lost Sanctum details](docs/releases/v0.3.81.md).
 

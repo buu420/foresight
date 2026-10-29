@@ -310,7 +310,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     FieldInteractionRange.TreasureFacings(p.X, p.Y, chestTileX, chestTileY, treasureAt)
                         .Any(f => FieldFloorMovement.Opposes(f, floor.Value.Direction));
             }).Distinct().ToArray() : [];
-            Add($"chest:{chest.Index}", chest.IsChest ? "Treasure chest" : "Item pickup", NavigationCategory.Objects, position,
+            var chestLabel = field.SceneIdCoherent && chest.IsChest ? FrozenCliffsTargets.ChestLabel(field.SceneId, chest.Index) : null;
+            Add($"chest:{chest.Index}", chestLabel ?? (chest.IsChest ? "Treasure chest" : "Item pickup"), NavigationCategory.Objects, position,
                 chestGoals.Distinct().ToArray(), chest.IsChest && TileVisible(chest.FineX / 256, chest.FineY / 256),
                 guideAvailable: guideActive,
                 instruction: sandChest ? SunkenDesertNavigation.ChestInstruction : null,
@@ -757,6 +758,14 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 map, GameNavigationCatalog.ForScene(field.SceneId)), transitions)
             : scriptTerminals.Count == 0 ? graph : new ScriptPassageGraph(graph, scriptTerminals);
         if (guideActive) routeGraph = TemporalLabWarpGraph.Create(routeGraph, field, map, story, storyCandidates);
+        var cliffSlide = FrozenCliffsTargets.SlideAvailable(field, map, story);
+        if (cliffSlide)
+        {
+            var bodyMap = map with { TerrainFlags = map.TerrainFlags.Select(f => (byte)(f & ~12)).ToArray() };
+            routeGraph = new FrozenCliffsSlideGraph(routeGraph, map,
+                goals => new FieldNavigationGraph(bodyMap, collisions, touchGoals, goals, treasureGrid),
+                targets.Where(t => t.Id.StartsWith("script-region:9:", StringComparison.Ordinal)).ToArray());
+        }
         regions.Update(map);
         // A reachable native door, landing or drop can bridge a real floor gap.
         // Preserve its full staged proof. A marker in another disconnected room
@@ -827,7 +836,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         ReportInventory();
         var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
             ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
-        var compensateFloor = field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256 ||
+        var compensateFloor = cliffSlide || field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256 ||
             LostSanctumTargets.NarrowCave(field.SceneId));
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
@@ -838,6 +847,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     : areaName?.Invoke(field.SceneId) ?? GameNavigationCatalog.AreaName(field.SceneId)),
                 PlayerFacing = field.LeadPlayer is { FacingValid: true } lead
                     ? FieldInteractionRange.NativeFacing(lead.Facing) : NavigationDirection.None,
+                FieldMovementOwner = (field.ActorBase, field.LeadPlayerActorIndex),
+                ManualRecoveryHoldDirection = cliffSlide && floor is { Direction: NavigationDirection.South, Speed: 32 }
+                    ? NavigationDirection.North : NavigationDirection.None,
+                ManualRecoveryInstruction = cliffSlide && floor is { Direction: NavigationDirection.South, Speed: 32 }
+                    ? "Off route. Hold Up while running to stop sliding for new directions." : null,
                 MovingFloor = floor,
                 CompensateMovingFloor = compensateFloor,
                 CanTraverseFloorStep = compensateFloor ? graph.CanTraverseFloorStep : null,
@@ -935,6 +949,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
+            if (FrozenCliffsTargets.IsCave(field.SceneId, region))
+                return At(region.Left * 256 + 128, region.Top * 256 + 192).ToArray();
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
             if (field.SceneId is 578 or 599 or 600 or 643 && region.Kind == "Warp")
             {

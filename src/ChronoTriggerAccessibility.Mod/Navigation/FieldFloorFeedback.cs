@@ -12,12 +12,15 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
     private long lastSandSpeech = -1;
     private bool sandPending;
     private (int? Mode, int? Toggle)? sandRun;
+    private bool announcedSlide;
     public FieldFloorSnapshot? Current { get; private set; }
     public string? Status
     {
         get
         {
             if (Current is not { } floor) return null;
+            if (floor.Scene == 604 && floor.ForceX == 0 && floor.ForceY is 0 or 32)
+                return floor.ForceY == 0 ? "Off the downhill slide." : DescribeSlide(floor);
             if (floor.Scene == 244) return string.Join(" ", new[]
             {
                 floor.WindGusting != true && floor.WindBuilding == true ? "Wind changing." : Wind(floor.WindGusting),
@@ -27,7 +30,7 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
                 ? SunkenDesertNavigation.IsScene(floor.Scene) ? DescribeSand(floor, true) : Describe(floor) : null;
         }
     }
-    public void Reset() { Current = null; identity = null; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; }
+    public void Reset() { Current = null; identity = null; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; }
     /// <summary>Revoke current movement/status facts without repeating unchanged
     /// announcements after a navigation-menu or input pause.</summary>
     public void Suspend() => Current = null;
@@ -38,7 +41,19 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
         // the announcement cursor, while revoking movement and repeat facts.
         if (floor is not { } value) return;
         var context = (value.Engine, value.ActorBase, value.Scene, value.Actor);
-        if (identity != context) { identity = context; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; }
+        if (identity != context) { identity = context; announced = null; announcedWind = null; announcedBuilding = null; lastSandSpeech = -1; sandPending = false; sandRun = null; announcedSlide = false; }
+        if (value.Scene == 604 && value.ForceX == 0 && value.ForceY is 0 or 32)
+        {
+            // Narrow calm lips and rejected probes are not new slide sections.
+            // Keep this cue once per owner/scene; Repeat reports current facts.
+            if (value.ForceY == 32 && !announcedSlide)
+            {
+                announcedSlide = true;
+                diagnostic($"Frozen Cliffs slide: force=(0,32); runMode={value.RunMode}; runToggle={value.RunToggle}.");
+                (background ?? speak)(DescribeSlide(value));
+            }
+            return;
+        }
         if (SunkenDesertNavigation.IsScene(value.Scene))
         {
             var forceNow = (value.ForceX, value.ForceY);
@@ -106,6 +121,9 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
     }
 
     private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 256 or 437;
+    private static string DescribeSlide(FieldFloorSnapshot floor) =>
+        "Downhill slide. While running, hold Up to stop sliding. Select a cave and start automatic walking for slide assistance." +
+        (floor.RunMode is 0 or 2 && floor.RunToggle == 2 ? " Use Dash to select running first." : "");
     private static string DescribeSand(FieldFloorSnapshot floor, bool advice)
     {
         var direction = floor.ForceX < 0 ? "west" : floor.ForceX > 0 ? "east" : floor.ForceY < 0 ? "north" : "south";

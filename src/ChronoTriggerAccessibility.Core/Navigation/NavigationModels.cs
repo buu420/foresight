@@ -145,6 +145,12 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public string? AreaName { get; init; }
     /// <summary>The leader's live facing; None when it could not be read.</summary>
     public NavigationDirection PlayerFacing { get; init; }
+    /// <summary>Optional captured field actor identity for matching a fresh movement observation.</summary>
+    public (uint ActorBase, int Actor)? FieldMovementOwner { get; init; }
+    /// <summary>An audited stationary native input that permits manual replanning
+    /// on ground which keeps moving after the player releases the controls.</summary>
+    public NavigationDirection ManualRecoveryHoldDirection { get; init; }
+    public string? ManualRecoveryInstruction { get; init; }
     /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
     public NavigationFloor? MovingFloor { get; init; }
     /// <summary>Enable route steering against moving ground independently of

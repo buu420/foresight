@@ -358,8 +358,11 @@ public sealed class FieldContentCoverageTests
             var frame = new FieldNavigationSource(new NoMemory(), _ => { }).Build(field, visibleMap,
                 new(0, 0, scene.Width * 256, scene.Height * 256), found, visibleState);
             foreach (var treasure in found)
-                Assert.Contains(frame.Targets, t => t.Id == $"chest:{treasure.Index}" &&
-                    t.Label == (treasure.IsChest ? "Treasure chest" : "Item pickup"));
+            {
+                var target = Assert.Single(frame.Targets, t => t.Id == $"chest:{treasure.Index}");
+                if (treasure.IsChest) Assert.StartsWith("Treasure chest", target.Label, StringComparison.Ordinal);
+                else Assert.Equal("Item pickup", target.Label);
+            }
             offered.UnionWith(found.Select(t => t.Index));
             memory.OpenAll();
             Assert.True(FieldEnvironmentCapture.TryTreasures(memory, field, map, out found, includeGuidePickups: true));

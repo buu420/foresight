@@ -32,16 +32,20 @@ Use the selected target and existing auto-walk command as opt-in; do not start
 movement on map entry or select a treasure route automatically. Describe the
 required input in manual guidance. At cave entry, face/move North; never Confirm.
 Stop across scene changes/native encounters and let the player restart guidance.
-A cave above the current one-way descent must remain restricted unless a verified
-local passage reaches it. Story Events selects a currently reachable forward
-cave, rather than repeatedly sending the player to a return passage.
+A cave above the current one-way descent cannot receive a fabricated uphill
+route. After a failed direct search, a verified reachable return cave can stage
+the route back to602; Story Events then reaches603 and the fresh604 entry. The
+same current terrain must prove the requested cave from that upper entry. The
+return is explained, and native scene changes stop movement as usual.
 
 Chests: initial native records319..327 in602/603/605/606 and334..336 in648.
 Use the live unopened chest capture for existence and contents stay unannounced.
 Assign stable per-room letters from native record identity; opening one must not
 renumber the others. Verify native interaction reach and the relevant entrance
-pose for all12 chests, including disconnected side branches. Do not fabricate
-chests on604's slope or expose unseen chests in another map component.
+pose for all12 chests, including separate side branches. Do not fabricate chests
+on604's slope. Retain the existing conservative filter for unseen targets in
+other floor components. A native guide-grid chest on another one-way ledge may
+remain listed, but must not receive a fabricated local route or reward details.
 
 Prefer a scoped runtime interpretation of the facing guard to global catalog
 regeneration: changing37 facing-reading scripts would exceed this report. A

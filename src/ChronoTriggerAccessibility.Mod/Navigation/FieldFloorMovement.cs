@@ -17,6 +17,7 @@ public static class FieldFloorMovement
 
     public static FieldNavigationPad Adjust(NavigationFrame frame, NavigationResult result, FieldFloorSnapshot? native)
     {
+        if (FrozenCliffsMovement.IsSlide(frame.Scene)) return FrozenCliffsMovement.Adjust(frame, result, native);
         var pad = FieldNavigationRuntime.DirectionBits(result.Direction);
         if (LostSanctumMovement.ForcedRunStopReason(frame, result, native) is { } walkingReason)
             return new(0, walkingReason);

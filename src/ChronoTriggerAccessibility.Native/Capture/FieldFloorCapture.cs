@@ -67,9 +67,11 @@ public static class FieldFloorCapture
             if (rejected)
             {
                 x = unchecked((int)rawX); y = unchecked((int)rawY);
-                if (player.Scene is not (159 or 160 or 161 or 256) ||
-                    !(x == 0 && Math.Abs((long)y) is 0 or 8 or 16 or 32 ||
-                      y == 0 && Math.Abs((long)x) is 0 or 8 or 16 or 32)) return null;
+                var boundedCliff = player.Scene == 604 && x == 0 && y is 0 or 32;
+                var boundedConveyor = player.Scene is 159 or 160 or 161 or 256 &&
+                    (x == 0 && Math.Abs((long)y) is 0 or 8 or 16 or 32 ||
+                     y == 0 && Math.Abs((long)x) is 0 or 8 or 16 or 32);
+                if (!boundedCliff && !boundedConveyor) return null;
             }
             int? runMode = null, runToggle = null;
             bool? windGusting = null;

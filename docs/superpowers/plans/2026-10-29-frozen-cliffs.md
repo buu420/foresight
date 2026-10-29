@@ -17,15 +17,16 @@ Tech: .NET9/x86, native resource/Ghidra evidence and private offline x86 emulati
    closed; Story Events binds the forward605 cave; native North entry, both modes.
    Implement FrozenCliffsTargets.RegionAvailable(scene,region,story), owner and
    label/entry helpers; integrate FieldNavigationSource and current router guards.
-3. [ ] RED: native downhill motion and input-faithful manual/automatic cave routes
+3. [x] RED: native downhill motion and input-faithful manual/automatic cave routes
    from logged/derived poses, including overshot/upstream targets and run settings.
    Implement FrozenCliffsSlideGraph as a bounded directed INavigationGraph,
    retaining actor/terrain/script terminals. Add scoped FrozenCliffsMovement input
    adjustment; preserve other scenes and native locks. Test loss of control,
    focus, context, cancellation and read failures. Record any architecture ruling.
-4. [ ] RED: all12 live unopened chest targets have stable labels and native Confirm
-   reach from their relevant entrances, opened chests disappear, hidden/off-section
-   records remain concealed. Add only scoped labels/reach changes the evidence
+4. [x] RED: all12 live unopened chest targets have stable labels and native Confirm
+   reach from their relevant entrances; opened chests disappear. Preserve the
+   current component filter and reject local uphill paths to other ledges.
+   Add only scoped labels/reach changes the evidence
    requires. Include cliffs, caves, summit and adjoining Winding Passage checks.
 5. [ ] Verify original x86 movement and native heading/arrival constraints in
    private emulation; label derived resources and exclusions honestly. Fresh

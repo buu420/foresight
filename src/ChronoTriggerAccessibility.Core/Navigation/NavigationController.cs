@@ -27,6 +27,7 @@ public sealed class NavigationController
     private string? intermediateId;
     private string? intermediateLabel;
     private NavigationPoint? intermediateContact;
+    private NavigationDirection intermediateDirection;
     private NavigationTransition? transition;
     private long? transitionContactStarted;
     private long? nativeTransitionStarted;
@@ -375,11 +376,15 @@ public sealed class NavigationController
         transition = nextTransition;
         var nextIntermediate = search.IntermediateId ?? transition?.Id;
         if (search.Route is not null && nextIntermediate != intermediateId && search.IntermediateLabel is { } nextLabel)
+        {
             speech.Add($"Next passage: {nextLabel}.");
+            if (search.IntermediateInstruction is { } instruction) speech.Add(instruction);
+        }
         if (intermediateId != nextIntermediate) passageWaitStarted = null;
         intermediateId = nextIntermediate;
         intermediateLabel = search.IntermediateLabel;
         intermediateContact = search.IntermediateContact;
+        intermediateDirection = search.IntermediateDirection;
         plannedGoals = goals;
         nextPoint = 1;
         if (route is not null)
@@ -443,7 +448,9 @@ public sealed class NavigationController
         var continueTransition = CanContinueTransition(frame, now);
         if (frame.CanNavigate)
         {
-            if (!walking && (manualInput || (destination?.KeepInteractionReach != true || frame.MovingFloor is null) &&
+            var stationaryRecovery = waitingForManualStop && frame.ManualRecoveryHoldDirection != NavigationDirection.None &&
+                frame.PlayerFacing == frame.ManualRecoveryHoldDirection && frame.Player == observedPosition;
+            if (!walking && (manualInput && !stationaryRecovery || (destination?.KeepInteractionReach != true || frame.MovingFloor is null) &&
                 frame.Player != observedPosition || now < lastManualActivity))
                 lastManualActivity = now;
             observedPosition = frame.Player;
@@ -457,7 +464,8 @@ public sealed class NavigationController
             return;
         }
         if (intermediateLabel is not null && !frame.Targets.Any(t => t.Id == intermediateId &&
-            t.Label == intermediateLabel && t.GuideAvailable && t.GuidanceRestriction is null && t.ContactPosition == intermediateContact))
+            t.Label == intermediateLabel && t.GuideAvailable && t.GuidanceRestriction is null && t.ContactPosition == intermediateContact &&
+            (intermediateDirection == NavigationDirection.None || t.ContactDirection == intermediateDirection)))
         {
             speech.Add("Navigation stopped: the next passage is no longer available.");
             Stop();
@@ -590,13 +598,27 @@ public sealed class NavigationController
                 var contactLabel = frame.Targets.FirstOrDefault(t => t.Id == intermediateId)?.Label;
                 // A passage opens where the player is standing; a way out has to be
                 // walked through. Telling someone to wait at a door strands them.
-                speech.Add(intermediateContact is { } namedTouch && intermediateLabel is not null
+                speech.Add(intermediateDirection != NavigationDirection.None && intermediateLabel is not null
+                    ? $"Continue {DirectionName(intermediateDirection)} into {intermediateLabel}."
+                    : intermediateContact is { } namedTouch && intermediateLabel is not null
                     ? $"Continue {DirectionName(ContactBearing(frame.Player, namedTouch))} onto {intermediateLabel}."
                     : intermediateContact is { } touch
                     ? $"Continue {DirectionName(ContactBearing(frame.Player, touch))} until the passage opens."
                     : TakesAnExit
                     ? contactLabel is null ? "Take the exit here to continue." : $"Take {contactLabel} to continue."
                     : contactLabel is null ? "Waiting for the passage to open." : $"Waiting for {contactLabel} to open.");
+            }
+            // Facing-dependent native contacts change control/scene themselves.
+            // Fresh target authority was checked above. Re-searching the entire
+            // unreachable uphill goal while holding this contact stalls input.
+            if (intermediateDirection != NavigationDirection.None)
+            {
+                if (now < passageWaitStarted.Value || now - passageWaitStarted.Value >= 3000)
+                {
+                    speech.Add("Navigation stopped: the passage did not open.");
+                    Stop();
+                }
+                return;
             }
             if (now < nextPassageCheck) return;
             var waitingSince = passageWaitStarted.Value;
@@ -700,7 +722,7 @@ public sealed class NavigationController
             {
                 if (!waitingForManualStop)
                 {
-                    speech.Add("Off route. Stop moving for new directions.");
+                    speech.Add(frame.ManualRecoveryInstruction ?? "Off route. Stop moving for new directions.");
                     waitingForManualStop = true;
                 }
                 return;
@@ -803,6 +825,7 @@ public sealed class NavigationController
             intermediateId = null;
             intermediateLabel = null;
             intermediateContact = null;
+            intermediateDirection = NavigationDirection.None;
             passageWaitStarted = null;
             if (destination!.Id == completed.Id)
             {
@@ -1020,6 +1043,7 @@ public sealed class NavigationController
             walking && transitionContactStarted is not null ? transition!.Direction :
             walking && facingStarted is not null ? facingDirection :
             walking && contactStarted is not null ? contactDirection :
+            walking && passageWaitStarted is not null && intermediateDirection != NavigationDirection.None ? intermediateDirection :
             walking && passageWaitStarted is not null && intermediateContact is { } touch ? ContactBearing(player, touch) :
             walking && route is not null && nextPoint < route.Count ? Steering(player) : NavigationDirection.None, guiding, walking)
         {
@@ -1028,7 +1052,8 @@ public sealed class NavigationController
             InteractionFacing = walking && destination?.KeepInteractionReach == true && facingStarted is not null
                 ? facingDirection : NavigationDirection.None,
             NativeInteractionInput = walking && (facingStarted is not null || contactStarted is not null ||
-                transitionContactStarted is not null || passageWaitStarted is not null && intermediateContact is not null),
+                transitionContactStarted is not null || passageWaitStarted is not null &&
+                    (intermediateContact is not null || intermediateDirection != NavigationDirection.None)),
             ManualLeg = guiding && !walking && !nativePassageOpening && nativeTransitionStarted is null && transitionContactStarted is null &&
                 !waitingForManualStop && route is not null && nextPoint < route.Count
                 ? new(route[LegEnd(nextPoint)], GuidanceDirection(nextPoint), unitsPerTile, instructionRevision)
@@ -1215,6 +1240,7 @@ public sealed class NavigationController
         intermediateId = null;
         intermediateLabel = null;
         intermediateContact = null;
+        intermediateDirection = NavigationDirection.None;
         transition = null;
         transitionContactStarted = nativeTransitionStarted = null;
         transitionLanded = false;

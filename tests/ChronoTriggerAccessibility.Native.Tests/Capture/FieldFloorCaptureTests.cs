@@ -91,6 +91,25 @@ public sealed class FieldFloorCaptureTests
         Assert.Null(floor.RunToggle);
     }
 
+    [Theory]
+    [InlineData(0, 32)] [InlineData(13, 0)]
+    public void RejectedFrozenCliffProbeRetainsOnlyItsNativeSouthOrZeroForce(int flags, int y)
+    {
+        var memory = new FloorMemory(flags, 0, y);
+        memory.Write(0x12010, 604); memory.Write(0x132A0, 604);
+        var floor = Assert.IsType<FieldFloorSnapshot>(FieldFloorCapture.Capture(memory, 0x1000));
+        Assert.Equal(0, floor.ForceX); Assert.Equal(y, floor.ForceY); Assert.True(floor.TerrainSampleRejected);
+    }
+
+    [Theory]
+    [InlineData(16, 0)] [InlineData(0, -32)] [InlineData(0, 16)] [InlineData(0, 64)]
+    public void FrozenCliffsRejectsForeignOrImpossibleCommittedForces(int x, int y)
+    {
+        var memory = new FloorMemory(13, x, y);
+        memory.Write(0x12010, 604); memory.Write(0x132A0, 604);
+        Assert.Null(FieldFloorCapture.Capture(memory, 0x1000));
+    }
+
     private sealed class FloorMemory : IReadableMemory
     {
         private readonly byte[] bytes = new byte[0x30000];
