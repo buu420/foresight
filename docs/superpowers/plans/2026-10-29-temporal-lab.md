@@ -36,7 +36,7 @@ PowerShell packaging, GitHub releases and AMM author CLI.
 3. [x] Add failing rapid belt-boundary/direction/Repeat tests. Scope debounce to
    the lab, retain current force immediately and keep native32-speed direction
    restrictions. Verify existing Factory/Desert/Death Peak/Cliffs feedback.
-4. [ ] Review full changes with Opus5.5/max, resolve supported findings, update
+4. [x] Review full changes with Opus5.5/max, resolve supported findings, update
    docs/version/release contract pins. Run full suite and exact packaged x86 checks,
    native offline checks, package/deploy/preservation validation. Publish standalone,
    AMM and catalog; verify anonymous assets/index and closing preservation.
@@ -82,3 +82,7 @@ PowerShell packaging, GitHub releases and AMM author CLI.
 - Treasure audit:650 records338..342 remain unchanged; no treasure metadata or
   native Confirm rules changed. Existing whole-game treasure checks cover them.
   The misleading side-room/chest test title and release wording were corrected.
+- Completed0.3.85 publication: payload4626a6c, catalog9751bda,5548 tests,693 exact
+  packaged x86 checks,303 deployment checks,275 installed files matching and244
+  protected files unchanged. Public assets/index anonymously verified; no live
+  gameplay/controller/speech or recipient-PC proof claimed. Handoff retained.
