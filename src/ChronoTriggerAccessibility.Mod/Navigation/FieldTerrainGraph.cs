@@ -110,7 +110,11 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
         if (LostSanctumTargets.DoorExit(scene, actor) is not null || TemporalLabTargets.DoorExit(scene, actor) is not null)
-            yield return new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY + 256, layer);
+            // Scene618 uses native radius224. Its side door is a quarter tile
+            // into the closed row, so a standable north contact needs320 below
+            // the marker. The leading112 probe still reaches it before terrain.
+            yield return new(actor.FineX - actor.CollisionOffsetX * 16,
+                actor.FineY + ((scene, actor.Index) == (618, 16) ? 320 : 256), layer);
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
         if (FacingGuard(scene, actor.Index) is { Value: 1 })

@@ -544,6 +544,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
+                     !TemporalLabTargets.CaptureRegion(field.SceneId, r) &&
                      !(field.SceneId == 600 && r.Kind == "Encounter") &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      FrozenCliffsTargets.WatcherAvailable(field, r) &&

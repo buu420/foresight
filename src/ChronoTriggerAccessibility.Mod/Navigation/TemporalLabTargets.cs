@@ -53,16 +53,27 @@ internal static class TemporalLabTargets
     }
 
     public static bool ConfirmDoor(int scene, FieldActorSnapshot actor) => scene == 621 && actor.Index == 23 && actor.ClassTag == 7;
-    public static int? DoorExit(int scene, FieldActorSnapshot actor) => actor.ClassTag == 7 &&
-        (scene, actor.Index) is (617, 11) ? 1 : null;
-    public static string? DoorLabel(int scene, FieldActorSnapshot actor) => DoorExit(scene, actor) is null && !ConfirmDoor(scene, actor) ? null :
-        scene == 617 ? "Warp-maze entrance door" : "Security chamber door";
+    public static int? DoorExit(int scene, FieldActorSnapshot actor) => actor.ClassTag != 7 ? null :
+        (scene, actor.Index) switch { (617, 11) => 1, (617, 12) => 2, (618, 16) => 1, _ => null };
+    public static string? DoorLabel(int scene, FieldActorSnapshot actor) => actor.ClassTag != 7 ? null :
+        (scene, actor.Index) switch
+        {
+            (617, 11) => "Warp-maze entrance door", (617, 12) => "Patrol-room entrance door",
+            (618, 16) => "Side-room door", (621, 23) => "Security chamber door", _ => null,
+        };
+    // Atel0618 actor14 reads moving robot columns/facings before requesting a
+    // capture routine. The extracted rectangles omit that dynamic column guard;
+    // they are consequences of detection, not visible/navigable passages.
+    public static bool CaptureRegion(int scene, GameNavigationCatalog.Region region) =>
+        scene == 618 && region.Actor == 14 && region.Kind == "Warp" && region.Destination == 619;
     public static string? ExitRestriction(int scene, int exit, FieldStoryState? story) =>
         scene == 621 && exit == 1 && story?.Local(30) == 0
             ? "The security chamber door is closed. Reach the door and press Confirm to open it." : null;
     public static string? AreaName(int scene) => scene switch
     {
-        617 => "Temporal Research Lab, conveyor room", 621 => "Temporal Research Lab, warp maze",
-        622 => "Temporal Research Lab, security chamber", _ => null,
+        617 => "Temporal Research Lab, conveyor room", 618 => "Temporal Research Lab, patrol room",
+        619 => "Temporal Research Lab, holding room", 620 => "Temporal Research Lab, security control room",
+        621 => "Temporal Research Lab, warp maze", 622 => "Temporal Research Lab, security chamber",
+        623 => "Temporal Research Lab, side room", _ => null,
     };
 }
