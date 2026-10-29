@@ -21,10 +21,10 @@ required visible controls in both modes. Spec: ../specs/2026-10-28-vortex-passag
    Claude Opus5.5/max review. No product builds or memory writes by the reviewer.
    Resolve material findings, version0.3.83 and pinned manifest hashes; document
    actual evidence, installation/retest instructions and live limits.
-5. [ ] Build immutable standalone/AMM packages; verify exact x86 DLLs, installer,
+5. [x] Build immutable standalone/AMM packages; verify exact x86 DLLs, installer,
    archive closure and source/deployment identity. Integrate and deploy with
    backups, preserving saves, settings, narration and unrelated mods.
-6. [ ] Publish GitHub beta and AMM catalog with normal non-forced pushes. Verify
+6. [x] Publish GitHub beta and AMM catalog with normal non-forced pushes. Verify
    all asset digests and anonymous downloads, catalog phases, public index and
    historical records. Write handoff and final receipts. No tester-only stopping.
 
