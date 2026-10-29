@@ -107,8 +107,13 @@ public sealed class FieldContentCoverageTests
             var offered = false;
             foreach (var state in States(row.Scene, actor))
             {
-                var visibleState=row.Scene==179&&row.Actor==13
-                    ?state with{Locals=new Dictionary<int,int>(state.Locals){[11]=1}}:state;
+                var visibleState = (row.Scene, row.Actor) switch
+                {
+                    (179, 13) => state with { Locals = new Dictionary<int, int>(state.Locals) { [11] = 1 } },
+                    // Atel0660: actor9 is behind the door; Local6=1 uncovers it.
+                    (660, 9) => state with { Locals = new Dictionary<int, int>(state.Locals) { [6] = 1 } },
+                    _ => state,
+                };
                 var frame = Build(row.Scene, [actor], visibleState, Open(row.X, row.Y));
                 // A battle the encounter layer offers under Enemies is offered too.
                 if (frame.Targets.Any(t => t.Id == Id(actor, row.Scene) || t.Id == $"actor-encounter:{actor.Index}")) { offered = true; break; }

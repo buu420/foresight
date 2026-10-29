@@ -102,6 +102,9 @@ public sealed class VortexStoryNavigationTests
         if (scene is 659 or 660)
         {
             state = state with { Extended = new Dictionary<int, int> { [0x0A] = 0, [0x20] = 4, [0x22] = 0, [0x28] = 0 } };
+            // This synthetic floor is already open. Atel0660 Local6=1 is
+            // the native proof that actor9's passage has been uncovered.
+            if (scene == 660) state = state with { Locals = new Dictionary<int, int> { [6] = 1 } };
             //659's catalog destination is unresolved. This explicit synthetic
             //live override tests the runtime binding; it is not a claimed capture.
             if (scene == 659 && !missing)
