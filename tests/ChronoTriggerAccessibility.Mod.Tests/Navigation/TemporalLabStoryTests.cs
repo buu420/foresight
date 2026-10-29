@@ -1,6 +1,7 @@
 using ChronoTriggerAccessibility.Core.Navigation;
 using ChronoTriggerAccessibility.Mod.Navigation;
 using ChronoTriggerAccessibility.Native.Capture;
+using ChronoTriggerAccessibility.Native.Memory;
 using Xunit;
 
 namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
@@ -35,20 +36,83 @@ public sealed class TemporalLabStoryTests
     [InlineData(false)] [InlineData(true)]
     public void AfterTheFirstConsoleBothModesReturnThroughTheRealConveyorRoomExit(bool automatic)
     {
-        var sample = TemporalLabPassageTests.Sample("capture-2-1872");
-        var frame = TemporalLabPassageTests.Build(sample.Field, sample.Map, State(1));
+        var sample = TemporalLabPassageTests.FreshPatrol(1);
+        var frame = TemporalLabPassageTests.Build(sample.Field, sample.Map, sample.Story);
         var target = Assert.Single(frame.Targets, t => t.Id == "story:full:lavos");
         Assert.NotEmpty(target.ApproachPoints);
         Assert.Contains("conveyor room", target.Instruction, StringComparison.OrdinalIgnoreCase);
         Assert.True(TemporalLabPassageTests.Start(frame, target.Id, automatic).Result.Guiding);
+        var route = NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints);
+        Assert.Equal("landmark:13", route.IntermediateId);
+        Assert.NotNull(route.IntermediateContact);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ReturningFromCaptureCanReachTheFreshInnerDoor(bool automatic)
+    {
+        var s = TemporalLabPassageTests.FreshPatrol(0);
+        var frame = TemporalLabPassageTests.Build(s.Field, s.Map, s.Story);
+        var target = Assert.Single(frame.Targets, t => t.Id == "exit:0");
+        var route = NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints);
+        Assert.NotNull(route.Route); Assert.Equal("landmark:13", route.IntermediateId);
+        Assert.NotNull(route.IntermediateContact);
+        Assert.True(TemporalLabPassageTests.Start(frame, target.Id, automatic).Result.Guiding);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void TheInnerDoorContactContinuesAcrossItsNativeLayerThreeLip(bool automatic)
+    {
+        var s = TemporalLabPassageTests.FreshPatrol(1);
+        var before = TemporalLabPassageTests.Build(TemporalLabPassageTests.At(s.Field, 14464, 5343), s.Map, s.Story);
+        var (controller, first) = TemporalLabPassageTests.Start(before, "story:full:lavos", automatic);
+        Assert.True(first.Guiding);
+        // Original175E90 produces layer3 here while moving south toward the door.
+        var next = TemporalLabPassageTests.Build(TemporalLabPassageTests.At(s.Field, 14464, 5391),
+            s.Map with { PlayerLayer = 3 }, s.Story);
+        var result = controller.Update(next, 32, !automatic);
+        Assert.True(result.Guiding, string.Join(" | ", result.Speech));
+        Assert.DoesNotContain(result.Speech, x => x.StartsWith("No route", StringComparison.Ordinal));
+        if (automatic) Assert.Equal(NavigationDirection.South, result.Direction);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void FreshOpenedInnerDoorAllowsTheNativeLayerToSettleAndContinue(bool automatic)
+    {
+        var s = TemporalLabPassageTests.FreshPatrol(0);
+        var marker = s.Field.Actors.Single(a => a.Index == 13);
+        var copy = GameNavigationCatalog.ActorInfo(618, marker)!.Actions.First(a => a.Touch && a.Copy is { X: 55, Y: 18 }).Copy!;
+        var map = TemporalLabPassageTests.Open(s.Map, copy) with { PlayerLayer = 3 };
+        var field = TemporalLabPassageTests.At(s.Field, 14464, 5423);
+        field = field with { Actors = field.Actors.Select(a => a.Index == 13 ? a with
+            { TileX = 255, FineX = 65408, FractionX = 128, TileY = 255, FineY = 65535, FractionY = 255 } : a).ToArray() };
+        var frame = TemporalLabPassageTests.Build(field, map, s.Story with
+            { Locals = new Dictionary<int, int>(s.Story.Locals) { [120] = 1 } });
+        var target = Assert.Single(frame.Targets, t => t.Id == "exit:0");
+        Assert.NotNull(NavigationPathfinder.Search(frame.Graph, frame.Player, target.ApproachPoints).Route);
+        Assert.True(TemporalLabPassageTests.Start(frame, target.Id, automatic).Result.Guiding);
+    }
+
+    [Fact]
+    public void AnOpenedWarpMazeDoorDoesNotKeepAnObsoleteConfirmPrompt()
+    {
+        var s = TemporalLabWarpTests.Sample(621);
+        var door = s.Field.Actors.Single(a => a.Index == 23);
+        var copy = GameNavigationCatalog.ActorInfo(621, door)!.Actions.First(a => a.Copy is not null).Copy!;
+        var frame = TemporalLabPassageTests.Build(s.Field, TemporalLabPassageTests.Open(s.Map, copy),
+            s.Story with { Locals = new Dictionary<int, int>(s.Story.Locals) { [30] = 1 } });
+        Assert.DoesNotContain(frame.Targets, t => t.Id == "landmark:23");
+        Assert.Contains(frame.Targets, t => t.Id == "exit:1" && t.ApproachPoints.Count != 0);
     }
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
     public void AfterReleaseBothModesUseTheSideRoomInsteadOfAnInactiveConsole(bool automatic)
     {
-        var sample = TemporalLabPassageTests.Sample("capture-2-1872");
-        var frame = TemporalLabPassageTests.Build(sample.Field, TemporalLabPassageTests.Released(sample.Map), State(0x1A));
+        var sample = TemporalLabPassageTests.FreshReleased();
+        var frame = TemporalLabPassageTests.Build(sample.Field, sample.Map, sample.Story);
         var target = Assert.Single(frame.Targets, t => t.Id == "story:full:lavos");
         Assert.Contains("Grotto", target.Label, StringComparison.Ordinal);
         Assert.Contains("side room", target.Instruction, StringComparison.OrdinalIgnoreCase);
@@ -99,10 +163,22 @@ public sealed class TemporalLabStoryTests
         Assert.DoesNotContain(offscreen.Targets, t => t.Label.Contains("facing", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RememberedRobotDoesNotRepeatAHiddenHeadingWhenStoryCaptureIsUnavailable()
+    {
+        var s = TemporalLabPassageTests.Sample("capture-2-1872");
+        var source = new FieldNavigationSource(new Empty(), _ => { });
+        var seen = source.Build(s.Field, s.Map, new(0, 0, 16384, 16384), [], s.Story);
+        Assert.Contains(seen.Targets, t => t.Label.Contains("facing", StringComparison.Ordinal));
+        var hidden = source.Build(s.Field, s.Map, new(0, 0, 256, 256), [], null);
+        Assert.DoesNotContain(hidden.Targets, t => t.Label.Contains("facing", StringComparison.Ordinal));
+    }
+
     internal static FieldStoryState State(int flags)
     {
         var story = TemporalLabPassageTests.Sample("capture-2-1872").Story;
         return story with { Extended = new Dictionary<int, int>(story.Extended) { [0x2A] = flags },
             Locals = new Dictionary<int, int>(story.Locals) { [30] = 0, [121] = flags == 0x1A ? 1 : 0 } };
     }
+    private sealed class Empty : IReadableMemory { public bool TryRead(nuint address, Span<byte> bytes) => false; }
 }

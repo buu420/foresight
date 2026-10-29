@@ -70,7 +70,15 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
                     if (live.IsTerminal(contact) || !action.AcceptsPosition(contact.X, contact.Y, NavigationUnits.LocalStep / 8)) continue;
                     var approach = NavigationPathfinder.Search(live, start, [contact], maximumVisited);
                     if (approach.Route is null) continue;
-                    var continuation = NavigationPathfinder.Search(after, contact, goals, maximumVisited);
+                    var continuationStart = contact;
+                    // Atel0618's inner door has a real layer3 upper lip. Its
+                    // guarded E5 copies layer1 floor over that same cell. Only
+                    // the preview's continuation starts on that copied layer;
+                    // the live walking leg still has to reach the layer3 touch.
+                    if (scene.Id == 618 && actor.Index == 13 && contact.Layer == 3 &&
+                        new FieldNavigationGraph(preview).TryPosition(contact.X, contact.Y, 1, out var openedFoot) &&
+                        openedFoot == contact with { Layer = 1 }) continuationStart = openedFoot;
+                    var continuation = NavigationPathfinder.Search(after, continuationStart, goals, maximumVisited);
                     if (continuation.Route is not null)
                         return approach with
                         {
@@ -104,17 +112,22 @@ public sealed class FieldTerrainGraph(FieldMapSnapshot map, IReadOnlyList<FieldA
         // The stairs and lesson marker have separately audited native effects.
         // Other terrain triggers can also start cutscenes: preserve their old
         // wait rather than introduce a push into an unaudited interaction.
-        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) or (600, 21) or (617, 11) ||
+        (scene, actor) is (464, 24 or 25) or (465, 15 or 16) or (600, 21) or (617, 11) or (618, 13) ||
         actions.Any(a => a.Touch && a.Kind == "Terrain") && actions.Where(a => a.Touch).All(a => a.Kind == "Terrain");
 
     internal static IEnumerable<NavigationPoint> Contacts(FieldActorSnapshot actor, int layer, int scene = 0)
     {
-        if (LostSanctumTargets.DoorExit(scene, actor) is not null || TemporalLabTargets.DoorExit(scene, actor) is not null)
-            // Scene618 uses native radius224. Its side door is a quarter tile
+        if ((scene, actor.Index) == (618, 13))
+            // The fresh-entry inner door is approached from its real layer3
+            // upper half. The southward probe reaches the marker before the
+            // blocked lower half; continuing changes the floor natively.
+            yield return new(actor.FineX - actor.CollisionOffsetX * 16, actor.FineY - 192, 3);
+        if (LostSanctumTargets.DoorExit(scene, actor) is not null || TemporalLabTargets.TouchDoor(scene, actor))
+            // Scenes618/620 use native radius224. Their lower doors are a quarter tile
             // into the closed row, so a standable north contact needs320 below
             // the marker. The leading112 probe still reaches it before terrain.
             yield return new(actor.FineX - actor.CollisionOffsetX * 16,
-                actor.FineY + ((scene, actor.Index) == (618, 16) ? 320 : 256), layer);
+                actor.FineY + ((scene, actor.Index) is (618, 16) or (620, 9) ? 320 : 256), layer);
         var x = (actor.FineX + 32) / 64 * 64;
         var y = (actor.FineY + 32) / 64 * 64;
         if (FacingGuard(scene, actor.Index) is { Value: 1 })

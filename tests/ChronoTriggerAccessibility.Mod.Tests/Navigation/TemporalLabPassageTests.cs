@@ -62,12 +62,11 @@ public sealed class TemporalLabPassageTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
-    public void TheReleasedSideRoomReachesItsDoorAndKeepsTheNativeChestBranch(bool automatic)
+    public void TheReleasedSideRoomPassageReachesItsNativeDoor(bool automatic)
     {
-        var sample = Sample("capture-2-1872");
-        var map = Released(sample.Map);
-        var story = sample.Story with { Extended = new Dictionary<int, int>(sample.Story.Extended) { [0x2A] = 0x1A },
-            Locals = new Dictionary<int, int>(sample.Story.Locals) { [121] = 1 } };
+        var sample = FreshReleased();
+        var map = sample.Map;
+        var story = sample.Story;
         var frame = Build(sample.Field, map, story);
         var door = Assert.Single(frame.Targets, t => t.Id == "landmark:16");
         Assert.Contains("door", door.Label, StringComparison.OrdinalIgnoreCase);
@@ -185,7 +184,7 @@ public sealed class TemporalLabPassageTests
         Assert.Equal(id, controller.TargetId);
         return (controller, controller.Handle(automatic ? NavigationCommand.ToggleWalk : NavigationCommand.Guide, frame, 1));
     }
-    private static FieldMapSnapshot Open(FieldMapSnapshot map, GameNavigationCatalog.TileCopy copy)
+    internal static FieldMapSnapshot Open(FieldMapSnapshot map, GameNavigationCatalog.TileCopy copy)
     {
         Assert.Equal(251, copy.Flags);
         var opened = map with { CollisionShapes = map.CollisionShapes.ToArray(), CollisionLayers = map.CollisionLayers.ToArray(), TerrainFlags = map.TerrainFlags.ToArray() };
@@ -198,5 +197,27 @@ public sealed class TemporalLabPassageTests
         // Atel0618 startup028E/0296 and background0A66/0A6E. Derived native-copy
         // replay only; the unopened captured map remains unchanged.
         Open(Open(map, new(12, 37, 12, 40, 6, 25, 251)), new(0, 37, 0, 41, 50, 22, 251));
+    internal static (FieldNavigationSnapshot Field, FieldMapSnapshot Map, FieldStoryState Story) FreshPatrol(int flags)
+    {
+        var s = Sample("capture-2-1872");
+        // Derived fresh-entry state:0618 init0611 positions marker13; every
+        // scene entry clears L120. The capture's E4 save buffer retains the
+        // actual closed tiles, so reverse the previous native opening copy.
+        var closed = Open(s.Map, new(41, 40, 44, 43, 55, 18, 251));
+        var field = At(s.Field, 14592, 2431);
+        field = field with { Actors = field.Actors.Select(a => a.Index == 13 ? a with
+        { TileX = 56, FineX = 14464, FractionX = 128, TileY = 21, FineY = 5631, FractionY = 255,
+            ActivationBinding = 128, ScriptAddress = 0x614, CurrentScriptOpcode = 0 } : a).ToArray() };
+        return (field, closed, s.Story with { Extended = new Dictionary<int, int>(s.Story.Extended) { [42] = flags },
+            Locals = new Dictionary<int, int>(s.Story.Locals) { [120] = 0 } });
+    }
+    internal static (FieldNavigationSnapshot Field, FieldMapSnapshot Map, FieldStoryState Story) FreshReleased()
+    {
+        var s = FreshPatrol(0x1A);
+        // Atel0618 background0AE9 D9 places the restored party at56,24,
+        // south of the still-closed inner door. This is a derived script replay.
+        return (At(s.Field, 14464, 6399), Released(s.Map), s.Story with
+            { Locals = new Dictionary<int, int>(s.Story.Locals) { [121] = 1 } });
+    }
     private sealed class Empty : IReadableMemory { public bool TryRead(nuint address, Span<byte> bytes) => false; }
 }

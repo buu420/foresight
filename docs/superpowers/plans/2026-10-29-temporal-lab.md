@@ -69,3 +69,16 @@ PowerShell packaging, GitHub releases and AMM author CLI.
 - Task3:2/3 new floor cases failed before debounce. All393 focused checks now
   pass, including adjacent areas. Current floor stays immediate; only settled
   lab speech is coalesced on the background channel. Native forces unchanged.
+- Independent Opus5.5/max review found a fresh-entry door13 case and an obsolete
+  opened621 door prompt. Both were reproduced, corrected and reviewed again with
+  no remaining P1/P2. The fresh native layer3 lip now has a live layer3 contact;
+  only its exact copied-floor preview continues on layer1. No Core change.
+- Original x86 terrain replay:24 traces/11,156frames across both modes and gaits,
+  including fresh re-entry, release arrival and the next control room. Eight
+  original178980 contact scans pass; new near-camera states are explicitly derived.
+- Corrected the release fixture's actual south-side arrival and hidden remembered
+  robot-heading cache. Added the natively verified620 door9/console approach to
+  avoid the next progression blocker within the approved console-route scope.
+- Treasure audit:650 records338..342 remain unchanged; no treasure metadata or
+  native Confirm rules changed. Existing whole-game treasure checks cover them.
+  The misleading side-room/chest test title and release wording were corrected.

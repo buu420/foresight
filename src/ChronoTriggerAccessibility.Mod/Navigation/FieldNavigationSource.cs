@@ -385,8 +385,10 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             var metadata = GameNavigationCatalog.ActorInfo(field.SceneId, actor);
             var scripted = story is not null && metadata is { Marker: true } && actor.IsUsable && !actor.IsPartyMember && actor.ScriptCallsEnabled
                 ? metadata.Actions.Where(a => FieldTerrainGraph.ActionAvailable(field.SceneId, actor.Index, a, story)).ToArray() : [];
-            label ??= TemporalLabTargets.DoorLabel(field.SceneId, actor);
+            if (TemporalLabTargets.TouchDoor(field.SceneId, actor))
+                label ??= TemporalLabTargets.DoorLabel(field.SceneId, actor);
             if (scripted.Length != 0) label ??= (vortexDoor ? VortexRoomTargets.DoorLabel : null) ??
+                TemporalLabTargets.DoorLabel(field.SceneId, actor) ?? TemporalLabTargets.ControlLabel(field.SceneId, actor) ??
                 LostSanctumTargets.DoorLabel(field.SceneId, actor) ??
                 TyrannoLairLabels.ActorLabel(field.SceneId, actor.Index) ??
                 OceanPalaceTargets.MarkerLabel(field.SceneId, actor) ?? BlackbirdDuctTargets.MarkerLabel(field.SceneId, actor.Index) ??
@@ -412,7 +414,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 .SelectMany(a => ActorApproach(a, Position(a.FineX, a.FineY))).Distinct().ToArray();
             var terrainContact = !confirmDoor && (field.SceneId, actor.Index) != (28, 1) &&
                 scripted.Any(a => a.Touch && a.Kind == "Terrain" && a.Copy is not null);
-            var labDoor = TemporalLabTargets.DoorExit(field.SceneId, actor) is not null;
+            var labDoor = TemporalLabTargets.TouchDoor(field.SceneId, actor);
             var labContact = labDoor && scripted.Any(a => a.Touch);
             if (terrainContact || omenDoor || labDoor)
             {
@@ -1312,6 +1314,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             else if (discovered.TryGetValue(id, out var known)) output.Add(known with
             {
                 Visible = false, Discovered = true,
+                Label = TemporalLabTargets.RememberedLabel(field.SceneId, id) ?? known.Label,
                 ContactDirection = contactDirection,
                 ArrivalHold = arrivalHold, PassageOpening = passageOpening,
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,

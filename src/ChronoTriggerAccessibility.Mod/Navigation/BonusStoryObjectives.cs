@@ -146,7 +146,7 @@ public static class BonusStoryObjectives
         V("future:shade", "Confront the Crimson Shade in the Household Dreamscape", Arrival(647)),
         V("future:security", "Use the Temporal Research Lab security console", Actor(620, 8)),
         // Atel0617 actor0 starts the rescue on any arrival with E2A bit01.
-        // The ordinary618 exit0 reaches the same entry as its parked marker13.
+        // The ordinary618 exit0 and its door13 touch warp share the same entry.
         V("future:door", "Return to the laboratory conveyor room", Arrival(617), NavigationCategory.Exits),
         V("future:rescuers", "Meet the other party members at the laboratory entrance", Arrival(617), NavigationCategory.People),
         V("future:alarm", "Reach the east laboratory's security chamber", Arrival(622)),

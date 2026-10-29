@@ -54,13 +54,18 @@ internal static class TemporalLabTargets
 
     public static bool ConfirmDoor(int scene, FieldActorSnapshot actor) => scene == 621 && actor.Index == 23 && actor.ClassTag == 7;
     public static int? DoorExit(int scene, FieldActorSnapshot actor) => actor.ClassTag != 7 ? null :
-        (scene, actor.Index) switch { (617, 11) => 1, (617, 12) => 2, (618, 16) => 1, _ => null };
+        (scene, actor.Index) switch { (617, 11) => 1, (617, 12) => 2, (618, 13) => 0, (618, 16) => 1, _ => null };
+    public static bool TouchDoor(int scene, FieldActorSnapshot actor) => DoorExit(scene, actor) is not null ||
+        scene == 620 && actor.Index == 9 && actor.ClassTag == 7;
     public static string? DoorLabel(int scene, FieldActorSnapshot actor) => actor.ClassTag != 7 ? null :
         (scene, actor.Index) switch
         {
             (617, 11) => "Warp-maze entrance door", (617, 12) => "Patrol-room entrance door",
-            (618, 16) => "Side-room door", (621, 23) => "Security chamber door", _ => null,
+            (618, 13) => "Inner patrol-room door", (618, 16) => "Side-room door",
+            (620, 9) => "Control-room door", (621, 23) => "Security chamber door", _ => null,
         };
+    public static string? ControlLabel(int scene, FieldActorSnapshot actor) => actor.ClassTag == 7 && actor.Index == 8
+        ? scene switch { 620 => "Security console", 622 => "Laboratory console", _ => null } : null;
     // Atel0618 actor14 reads moving robot columns/facings before requesting a
     // capture routine. The extracted rectangles omit that dynamic column guard;
     // they are consequences of detection, not visible/navigable passages.
@@ -75,6 +80,13 @@ internal static class TemporalLabTargets
         var facing = FieldInteractionRange.NativeFacing(actor.Facing);
         return visible && actor.IsDrawn && actor.FacingValid && facing != NavigationDirection.None
             ? label + ", facing " + facing.ToString().ToLowerInvariant() : label;
+    }
+    public static string? RememberedLabel(int scene, string id)
+    {
+        if (scene == 618)
+            for (var slot = 8; slot <= 12; slot++)
+                if (id == $"actor:{slot}:5:284") return $"Robot {(char)('A' + slot - 8)}";
+        return null;
     }
     public static string? ExitRestriction(int scene, int exit, FieldStoryState? story) => (scene, exit) switch
     {

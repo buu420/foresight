@@ -56,6 +56,7 @@
     <EmbeddedResource Include="Navigation\lost-sanctum-live-0380.json" />
     <EmbeddedResource Include="Navigation\temporal-lab-navigation-0382.json" />
     <EmbeddedResource Include="Navigation\temporal-lab-captures-0385.json" />
+    <EmbeddedResource Include="Navigation\temporal-lab-initial-0385.json" />
     <EmbeddedResource Include="Navigation\vortex-passages-0382.json" />
     <EmbeddedResource Include="Navigation\frozen-cliffs-initial-0384.json" />
     <EmbeddedResource Include="Navigation\black-omen324-reconstructed-0372.json" />
