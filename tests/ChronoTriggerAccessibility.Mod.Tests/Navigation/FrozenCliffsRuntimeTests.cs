@@ -15,6 +15,14 @@ public sealed class FrozenCliffsRuntimeTests
     }
 
     [Fact]
+    public void ManualSlideGuidanceExplainsTheCapturedWalkingSettingWithoutSupplyingInput()
+    {
+        var h=new Harness();h.Floor=h.Floor!.Value with{RunToggle=2};h.Enable();h.Press('O');
+        Assert.Equal(0u,h.Press('I'));
+        Assert.Contains(h.Speech,s=>s.Contains("tap and release Dash",StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void AutomaticSlidingRequiresSelectionAndNeverPressesConfirm()
     {
         var h = new Harness(); h.Enable(); Assert.Equal(0u,h.Tick()); h.Press('O');

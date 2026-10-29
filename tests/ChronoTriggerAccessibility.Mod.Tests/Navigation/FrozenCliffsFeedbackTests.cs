@@ -34,7 +34,15 @@ public sealed class FrozenCliffsFeedbackTests
     {
         var spoken=new List<string>();var feedback=new FieldFloorFeedback(spoken.Add,_=>{});
         feedback.Observe(Floor(32) with{RunToggle=2});
-        Assert.Contains("select running",Assert.Single(spoken),StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tap and release Dash",Assert.Single(spoken),StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void HeldDashModeExplainsHowToRunDuringManualGuidance()
+    {
+        var feedback=new FieldFloorFeedback(_=>{},_=>{});
+        feedback.Observe(Floor(32) with{RunMode=1,RunToggle=2});
+        Assert.Contains("Hold Dash",feedback.Status);
     }
 
     [Fact]

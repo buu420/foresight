@@ -123,7 +123,7 @@ public sealed class FieldFloorFeedback(Action<string> speak, Action<string> diag
     private static bool IsConveyor(int scene) => scene is 231 or 232 or 233 or 256 or 437;
     private static string DescribeSlide(FieldFloorSnapshot floor) =>
         "Downhill slide. While running, hold Up to stop sliding. Select a cave and start automatic walking for slide assistance." +
-        (floor.RunMode is 0 or 2 && floor.RunToggle == 2 ? " Use Dash to select running first." : "");
+        " " + FrozenCliffsMovement.RunAdvice(floor);
     private static string DescribeSand(FieldFloorSnapshot floor, bool advice)
     {
         var direction = floor.ForceX < 0 ? "west" : floor.ForceX > 0 ? "east" : floor.ForceY < 0 ? "north" : "south";

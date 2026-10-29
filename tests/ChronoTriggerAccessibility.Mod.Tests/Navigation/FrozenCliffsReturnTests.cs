@@ -75,6 +75,31 @@ public sealed class FrozenCliffsReturnTests
         Assert.True(FrozenCliffsNavigationTests.Start(sample.Frame,story.Id,true).Guiding);
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ALoggedWallPoseCanReachTheReturnCave(bool automatic)
+    {
+        var frame=FrozenCliffsNavigationTests.Sample(604,pose:new(5771,12031,1)).Frame;
+        var story=frame.Targets.Single(t=>t.Id=="story:full:lavos");
+        var search=NavigationPathfinder.Search(frame.Graph,frame.Player,story.ApproachPoints);
+        Assert.NotNull(search.Route);Assert.Equal("Bottom cave F",search.IntermediateLabel);
+        Assert.True(FrozenCliffsNavigationTests.Start(frame,story.Id,automatic).Guiding);
+        Assert.True(FrozenCliffsNavigationTests.Start(frame,frame.Targets.Single(t=>t.Label=="Bottom cave F").Id,automatic).Guiding);
+    }
+
+    [Theory]
+    [InlineData(1408,8576)] [InlineData(4224,9088)]
+    public void MissingALowerCaveCanRequireAReturnEvenWhileStillAboveItsMouth(int x,int y)
+    {
+        var frame=FrozenCliffsNavigationTests.Sample(604,pose:new(x,y,1)).Frame;
+        var story=frame.Targets.Single(t=>t.Id=="story:full:lavos");
+        var search=NavigationPathfinder.Search(frame.Graph,frame.Player,story.ApproachPoints);
+        Assert.NotNull(search.Route);Assert.NotNull(search.IntermediateId);
+        Assert.Contains("from above",search.IntermediateInstruction);
+        Assert.DoesNotContain("cave is above",search.IntermediateInstruction);
+        Assert.True(FrozenCliffsNavigationTests.Start(frame,story.Id,true).Guiding);
+    }
+
     private static NavigationController Select(NavigationFrame frame,string id)
     {
         // Select by the destination's native navigation category.

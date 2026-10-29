@@ -151,6 +151,7 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     /// on ground which keeps moving after the player releases the controls.</summary>
     public NavigationDirection ManualRecoveryHoldDirection { get; init; }
     public string? ManualRecoveryInstruction { get; init; }
+    public string? ManualGuidanceInstruction { get; init; }
     /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
     public NavigationFloor? MovingFloor { get; init; }
     /// <summary>Enable route steering against moving ground independently of

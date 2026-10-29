@@ -77,6 +77,20 @@ public sealed class FrozenCliffsMovementTests
     }
 
     [Fact]
+    public void RepeatingManualRecoveryKeepsTheSlideInstruction()
+    {
+        var frame=FrozenCliffsNavigationTests.Sample(604).Frame;
+        var target=frame.Targets.Single(t=>t.Label=="Middle cave C");
+        var controller=FrozenCliffsNavigationTests.Select(frame,target.Id);
+        Assert.True(controller.Handle(NavigationCommand.Guide,frame,1).Guiding);
+        frame=frame with{Player=new(8231,4434,1),PlayerFacing=NavigationDirection.North};
+        controller.Update(frame,16,true);
+        var repeat=controller.Handle(NavigationCommand.Repeat,frame,32);
+        Assert.Contains(repeat.Speech,s=>s.Contains("Hold Up",StringComparison.Ordinal));
+        Assert.DoesNotContain(repeat.Speech,s=>s.Contains("Stop moving",StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void CaveApproachesLeaveRoomForAnActualNorthwardFinish()
     {
         var caves = FrozenCliffsNavigationTests.Caves(FrozenCliffsNavigationTests.Sample(604).Frame);

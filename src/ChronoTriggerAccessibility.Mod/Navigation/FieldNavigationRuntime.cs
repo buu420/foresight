@@ -309,6 +309,7 @@ public sealed class FieldNavigationRuntime(Func<nint, NavigationFrame?> capture,
                 }
                 if (current == NavigationMode.Field)
                 {
+                    frame = FrozenCliffsMovement.ManualFrame(frame, fieldFloor?.Invoke());
                     if (!controller.IsActive || controller.TargetId != DeathPeakClimbAssist.TargetId) climb.Reset();
                     frame = climb.Project(frame);
                 }

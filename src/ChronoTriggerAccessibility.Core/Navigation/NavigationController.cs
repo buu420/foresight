@@ -172,6 +172,7 @@ public sealed class NavigationController
                 speech.Add($"{(walking ? "Walking to" : "Guidance to")} {target.Label}." +
                     (target.FollowUntilInteraction ? " You can hold Confirm while chasing." :
                         walking && target.KeepInteractionReach ? " Automatic walking keeps you in reach. Press Confirm to open it." : ""));
+                if (!walking && frame.ManualGuidanceInstruction is { } advice) speech.Add(advice);
                 Follow(frame, nowMilliseconds, speech);
                 break;
             default:
@@ -311,7 +312,8 @@ public sealed class NavigationController
         }
         if (waitingForManualStop)
         {
-            speech.Add($"{target.Label}, {index + 1} of {targets.Count}. Stop moving for new directions.");
+            speech.Add($"{target.Label}, {index + 1} of {targets.Count}. " +
+                (frame.ManualRecoveryInstruction ?? "Stop moving for new directions."));
             return;
         }
         if (target.IsStoryNote)

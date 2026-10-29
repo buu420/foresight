@@ -33,7 +33,7 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
     {
         var stage = inner is IStagedNavigationGraph staged ? staged.FindStage(start, selected, maximumVisited) : new(null, false);
         if (stage.Route is not null || stage.LimitReached || !allowReturn || selected.Count == 0 ||
-            selected.Any(p => !caves.Any(c => c.ApproachPoints.Contains(p))) || start.Y <= selected.Max(p => p.Y)) return stage;
+            selected.Any(p => !caves.Any(c => c.ApproachPoints.Contains(p)))) return stage;
         // Atel0603's eastern exit enters 0604 at (16,1), facing down.
         // A return is offered only for these native cave goals, after a direct
         // route has failed and the same current terrain proves the goal from above.
@@ -49,7 +49,7 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
                 {
                     IntermediateId = cave.Id, IntermediateLabel = cave.Label,
                     IntermediateDirection = cave.ContactDirection,
-                    IntermediateInstruction = "The selected cave is above you. Use this return cave to return to the entrance, then follow Story Events back to the top.",
+                    IntermediateInstruction = "Approach the selected cave from above. Use this return cave to return to the entrance, then follow Story Events back to the top.",
                 };
         }
         return new(null, false);
@@ -77,12 +77,27 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
     private bool Advance(NavigationPoint from, NavigationDirection input, out NavigationPoint next, out bool crossed)
     {
         next = from; crossed = false;
+        var wallContact = false;
         var steps = 0;
         for (; steps < 4; steps++)
         {
             var force = Floor(next); crossed |= force != 0;
             var (dx, dy) = Delta(input, force);
-            if ((dx, dy) == (0, 0) || !ClearStep(next, dx, dy, out var moved)) break;
+            if ((dx, dy) == (0, 0)) break;
+            if (!ClearStep(next, dx, dy, out var moved))
+            {
+                // 175E90 can reject the southern axis while retaining ordinary
+                // sideways input at a solid wall. Diagonal-wall nudges and actor
+                // rejections do not establish this proof.
+                if (force != 32 || dx == 0 || dy <= 0) break;
+                if ((SolidBlock(next.X + dx - 112, next.Y + dy, next.Layer) ||
+                     SolidBlock(next.X + dx + 112, next.Y + dy, next.Layer)) && ClearStep(next, dx, 0, out moved)) { }
+                // 178C50 shape1E sets vertical movement to16 on entry. At
+                // this narrow chute the native axes can clear in sequence.
+                else if (Climb(next.X + dx, next.Y + dy) && AxisStep(next, dx, 16, out moved)) { }
+                else break;
+                wallContact = true;
+            }
             next = moved;
             if (goals is not null)
                 foreach (var goal in goals)
@@ -101,6 +116,8 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
             if (Floor(from) == 32) y = Math.Max(from.Y, y);
             if (ClearStep(next, x - next.X, y - next.Y, out var rounded) && rounded.Layer == next.Layer &&
                 Floor(rounded) == Floor(next) && !inner.IsTerminal(rounded)) next = rounded;
+            else if (wallContact && ClearStep(next, x - next.X, 0, out rounded) && rounded.Layer == next.Layer &&
+                Floor(rounded) == Floor(next) && !inner.IsTerminal(rounded)) next = rounded;
         }
         return true;
     }
@@ -110,7 +127,21 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
         next = from;
         if (dx == 0 && dy == 0) return true;
         if (!body.CanTraverseFloorStep(from, dx, dy)) return false;
+        return Envelope(from, dx, dy) && body.TryPosition(from.X + dx, from.Y + dy, from.Layer, out next);
+    }
+
+    private bool AxisStep(NavigationPoint from, int dx, int dy, out NavigationPoint next)
+    {
+        next = from;
+        var horizontal = new NavigationPoint(from.X + dx, from.Y, from.Layer);
+        return body.CanTraverseFloorStep(from, dx, dy) && Envelope(from, dx, 0) && Envelope(horizontal, 0, dy) &&
+            body.TryPosition(from.X + dx, from.Y + dy, from.Layer, out next);
+    }
+
+    private bool Envelope(NavigationPoint from, int dx, int dy)
+    {
         var distance = Math.Max(Math.Abs(dx), Math.Abs(dy));
+        if (distance == 0) return true;
         for (var amount = Math.Min(8, distance); ; amount = Math.Min(distance, amount + 8))
         {
             var x = from.X + dx * amount / distance; var y = from.Y + dy * amount / distance;
@@ -120,8 +151,13 @@ internal sealed class FrozenCliffsSlideGraph(INavigationGraph inner, FieldMapSna
                 if (!body.TryPosition(x + ox, y + oy, from.Layer, out _)) return false;
             if (amount == distance) break;
         }
-        return body.TryPosition(from.X + dx, from.Y + dy, from.Layer, out next);
+        return true;
     }
+
+    private bool Climb(int x, int y) => x >= 0 && y >= 0 && x / 256 < map.Width && y / 256 < map.Height &&
+        map.CollisionShapes[y / 256 * map.Width + x / 256] >> 2 == 0x1E;
+    private bool SolidBlock(int x, int y, int layer) => x >= 0 && y >= 0 && x / 256 < map.Width && y / 256 < map.Height &&
+        map.CollisionShapes[y / 256 * map.Width + x / 256] >> 2 is 0 or 1 && !body.TryPosition(x, y, layer, out _);
 
     private int Floor(NavigationPoint point)
     {
