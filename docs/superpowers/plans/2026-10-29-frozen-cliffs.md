@@ -28,14 +28,14 @@ Tech: .NET9/x86, native resource/Ghidra evidence and private offline x86 emulati
    current component filter and reject local uphill paths to other ledges.
    Add only scoped labels/reach changes the evidence
    requires. Include cliffs, caves, summit and adjoining Winding Passage checks.
-5. [ ] Verify original x86 movement and native heading/arrival constraints in
+5. [x] Verify original x86 movement and native heading/arrival constraints in
    private emulation; label derived resources and exclusions honestly. Fresh
    bounded Opus5.5/max whole-branch review, resolve material findings, full tests.
    Version0.3.84, pinned manifest hashes, README and release/retest notes.
-6. [ ] Commit immutable payload, package standalone and AMM, verify exact x86 DLLs,
+6. [x] Commit immutable payload, package standalone and AMM, verify exact x86 DLLs,
    installer and archive closure. Integrate/deploy with backups; preserve saves,
    settings, narration, other mods and public catalog history.
-7. [ ] Publish beta/source/catalog without forced pushes; verify anonymous assets,
+7. [x] Publish beta/source/catalog without forced pushes; verify anonymous assets,
    catalog phases, source/tag/payload identity and protected files. Write handoff
    and final closure receipt. No tester-only stop; no crash collector.
 
@@ -43,3 +43,8 @@ Review focus: facing is not a persistent lock; steep slopes cannot be climbed by
 walking; moving-floor probes may disagree with cached force; no foreign actor or
 scene inherits automation; all12 chests and their separate branches stay covered.
 No unperformed live gameplay/controller/audible-speech proof is implied.
+
+Completed: public beta v0.3.84, immutable payload570e5a98b33813ce83cece154b85838b765a7402.
+5498 tests,643 exact-payload x86 checks,303 deployment checks;275 installed
+files match and229 protected files unchanged. Native84 traces/30976frames.
+Both ZIPs and catalog anonymously verified; see the2026-10-29 handoff.
