@@ -163,10 +163,23 @@ public sealed class VortexPassageTests
             TerrainFlags = Apply(sample.Map.TerrainFlags), CollisionLayers = Apply(sample.Map.CollisionLayers) };
         var state = sample.Story with { Locals = new Dictionary<int, int>(sample.Story.Locals) { [6] = 1 } };
         var frame = Build(sample.Field, open, state);
+        Assert.DoesNotContain(frame.Targets, t => t.Id == "landmark:1");
+        Assert.Contains(frame.Targets, t => t.Id == "landmark:9");
         var story = frame.Targets.Single(t => t.Id == "story:full:lavos");
         Assert.DoesNotContain("Open", story.Label);
         Assert.False(story.IsStoryNote);
         Assert.True(Start(frame, story.Id, automatic).Guiding);
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(-1)] [InlineData(6)]
+    public void AClosedOrUnprovenConveyorDoorDoesNotExposeTheConcealedPassage(int local)
+    {
+        var sample = Sample("660");
+        var locals = new Dictionary<int, int>(sample.Story.Locals);
+        if (local < 0) locals.Remove(6); else locals[6] = local;
+        var frame = Build(sample.Field, sample.Map, sample.Story with { Locals = locals });
+        Assert.DoesNotContain(frame.Targets, t => t.Id == "landmark:9");
     }
 
     public static IEnumerable<object[]> PalaceWalkingCases => new[] { "2161", "2178", "2207", "2218", "2239" }

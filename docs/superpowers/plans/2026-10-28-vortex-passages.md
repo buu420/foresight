@@ -17,7 +17,7 @@ required visible controls in both modes. Spec: ../specs/2026-10-28-vortex-passag
    OceanPalaceTargets; the659->660 look-ahead link in SceneConnectionRouter;
    VortexRoomTargets for current passage labels, verified634 doorway grouping and
    any required660 opening target. Do not expose future rooms or automate Confirm.
-4. [ ] Verify focused RED/GREEN, full source tests and a bounded independent
+4. [x] Verify focused RED/GREEN, full source tests and a bounded independent
    Claude Opus5.5/max review. No product builds or memory writes by the reviewer.
    Resolve material findings, version0.3.83 and pinned manifest hashes; document
    actual evidence, installation/retest instructions and live limits.

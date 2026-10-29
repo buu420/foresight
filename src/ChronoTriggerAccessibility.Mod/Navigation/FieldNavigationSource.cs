@@ -351,6 +351,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             // the map. Their class 7 intentionally has no sprite. Never promote other
             // hidden actors, and use their live coordinates rather than guide positions.
             if (!InsideMap(actor) || savePointActors.Contains(actor.Index)) continue;
+            if (VortexRoomTargets.ConcealedPassage(field.SceneId, actor, story)) continue;
             if (KeepFieldTargets.ConcealedActor(field.SceneId, actor.Index)) continue;
             if (OzzieFortScenery.ConcealedMarker(field.SceneId,actor)) continue;
             if (BlackbirdDuctTargets.ConcealedLandmark(field.SceneId, actor.Index, map)) continue;
@@ -396,10 +397,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 label = FieldContentFacts.Service(field.SceneId, actor.Index) ??
                     (scripted.Any(a => a.Kind == "Item") ? "Item pickup" :
                     scripted.FirstOrDefault(a => a.Kind == "Warp") is { } warp
-                        ? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery");
+                        ? VortexRoomTargets.PassageLabel(field.SceneId) ?? GameNavigationCatalog.DestinationLabel(warp.Destination) : "Interactable scenery");
             if (label is null) continue;
-            if (scripted.Any(a => a.Kind == "Warp") && VortexRoomTargets.PassageLabel(field.SceneId) is { } vortexLabel)
-                label = vortexLabel;
             if (generic) genericIds.Add(landmarkId);
             var position = Position(actor.FineX, actor.FineY);
             var touch = !confirmDoor && (knownTouch || genoDoorOpen || metadata is { Touch: true });
