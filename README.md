@@ -1,12 +1,12 @@
 # Foresight — Chrono Trigger Accessibility Beta
 
-**Foresight 0.3.85 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
+**Foresight 0.3.86 is a beta** of a screen-reader accessibility mod for the Windows Steam edition of Chrono Trigger. It provides menu and dialogue speech, battle information, footsteps, spoken route guidance, automatic walking with keyboard or controller navigation, bike-race feedback, and descriptions of supported visible story actions.
 
 Story and optional-destination data span the game, but this is **not a completed end-to-end accessibility playthrough**. Some routes, menus, encounters and minigames still need testing or further work. Please report missing information and failed routes as bugs.
 
 [Published beta downloads](https://github.com/buu420/foresight/releases) · [Report a problem](https://github.com/buu420/foresight/issues)
 
-Version 0.3.85 repairs Temporal Research Lab doorway contacts and actual exit arrival, removes robot-detection zones that appeared as exits, and follows the native security and release sequence in Story Events. Visible robots have distinct labels and current facing directions. Conveyor boundary noise no longer repeats the same warning. Native barriers, patrols, chest opening and Confirm remain under game control. See [changes and retest notes](docs/releases/v0.3.85.md).
+Version 0.3.86 repairs the narrow present-day Dimensional Vortex passage and the Castle Dreamscape approach. Story Events follows the native opening trigger before continuing through the opened passage; both manual guidance and automatic walking use the real routes. Current-room labels avoid disclosing the next randomized room or a concealed boss identity. Native locks, battles, chest opening and Confirm remain under game control. See [changes and retest notes](docs/releases/v0.3.86.md).
 
 Version 0.3.84 adds distinct Frozen Cliffs cave targets and an opt-in slide assist. Select a cave and start automatic walking; it uses normal running and directional input, including Up to enter the cave. While running, hold Up to stop sliding during manual navigation. Story Events can guide you through a return cave when you have slid past the forward openings. All twelve native chests in the cliffs and adjoining passage have stable per-room labels and verified offline approaches. Chest opening still needs Confirm. Restart guidance after native room changes or battles. See [changes and retest notes](docs/releases/v0.3.84.md).
 

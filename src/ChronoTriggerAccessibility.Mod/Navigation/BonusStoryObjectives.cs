@@ -141,7 +141,8 @@ public static class BonusStoryObjectives
             "Bring Marle in the active party."),
         V("future:grotto", "Follow Lucca into the Twilight Grotto", Region(665, 28, 7, 28, 7), NavigationCategory.Exits,
             "Bring Lucca in the active party."),
-        V("antiquity:shade", "Approach the Alabaster Shade in the Castle Dreamscape", Region(645, 35, 51, 46, 51)),
+        V("antiquity:passage", "Follow the passage through Castle Dreamscape", Region(645, 41, 57, 43, 57), NavigationCategory.Exits),
+        V("antiquity:shade", "Continue through Castle Dreamscape", Region(645, 35, 51, 46, 51)),
         V("present:shade", "Confront the Steel Shade in the Leene Square Dreamscape", Arrival(646)),
         V("future:shade", "Confront the Crimson Shade in the Household Dreamscape", Arrival(647)),
         V("future:security", "Use the Temporal Research Lab security console", Actor(620, 8)),
@@ -362,7 +363,8 @@ public static class BonusStoryObjectives
         else if (scene is >= 625 and <= 644 or >= 596 and <= 600 or 659 or 660) AddV("shifting-path");
         else if (scene is 601 or 663 or 664)
             AddV(scene == 601 ? "present:cave" : scene == 663 ? "future:cave" : "antiquity:cave");
-        else if (scene == 645 && (clears & 1) == 0) AddV("antiquity:shade");
+        else if (scene == 645 && (clears & 1) == 0 && s.Local(20) is 0 or 1)
+            AddV(s.Local(20) == 0 ? "antiquity:passage" : "antiquity:shade");
         else if (scene == 646 && (clears & 4) == 0) AddV("present:shade");
         else if (scene == 647 && (clears & 2) == 0) AddV("future:shade");
         else if (scene is >= 602 and <= 607 or 648 or 666 && (clears & 1) == 0) AddV("antiquity:grotto");

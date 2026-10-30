@@ -199,3 +199,21 @@ meaning of Eclipse stage4. They also require every declared actor and spatial
 target identity to exist in the embedded native catalog and check the audited
 forest, Goldhammer, and lab-action predicates. Live end-to-end playthroughs of
 these bonus quest lines have not been performed by this research task.
+
+### Castle Dreamscape opening passage (0.3.86)
+
+Atel0645 actor8 starts actor0fn3. Actor0's loop at file offsets017F–021F
+tests row57, X41–43 and Local20==0, sets Local20, then copies native tiles
+with `E5 03 20 05 22 29 36 3B` at019B. Story Events reaches that opening
+row before the encounter region at X35–46, row51. Once the native copy is
+visible in captured terrain, the same Story Events selection continues onward.
+The mod never applies that copy to game memory. Actor0's processing and live
+script window gate both spatial targets; the hidden actor8 sprite is not
+presented as an NPC. The instruction avoids its concealed battle identity.
+
+Atel0638 actor0 refreshes Local6/7; actor26 tests X<5, Y==3 for the randomized
+forward passage. The half-tile floor at row3 requires fine approach sampling
+so body collision does not aim at the neighboring wall. Both script loops must
+be processing. Labels identify the current passage without naming an unseen
+randomized destination. Native treasure ranges638/645=[334,334) and
+666=[343,343) are empty. These checks do not create chest stand-ins.

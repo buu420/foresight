@@ -554,6 +554,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                      !(field.SceneId == 600 && r.Kind == "Encounter") &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      FrozenCliffsTargets.WatcherAvailable(field, r) &&
+                     VortexRoomTargets.WatcherAvailable(field, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (BlackOmenTargets.IsPad(field.SceneId, r) ||
                       (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : FrozenCliffsTargets.RegionAvailable(field.SceneId, r, story))) &&
@@ -597,9 +598,11 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (omenPad) (regionLabel, regionCategory) =
                 ("Teleport pad to " + GameNavigationCatalog.AreaName(region.Destination), NavigationCategory.Objects);
             if (cliffCave) regionLabel = FrozenCliffsTargets.CaveLabel(field.SceneId, region)!;
+            var castlePassage = VortexRoomTargets.DreamscapePassage(field.SceneId, region);
+            if (castlePassage) (regionLabel, regionCategory) = ("Castle passage", NavigationCategory.Exits);
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
-                storyOnly: region.Kind is not ("Warp" or "Encounter") ||
+                storyOnly: !castlePassage && region.Kind is not ("Warp" or "Encounter") ||
                     OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
                 instruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : padRestriction ?? (grate ? BlackbirdDuctTargets.GrateInstruction : null),
                 guidanceRestriction: padRestriction,
@@ -959,7 +962,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (FrozenCliffsTargets.IsCave(field.SceneId, region))
                 return At(region.Left * 256 + 128, region.Top * 256 + 192).ToArray();
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
-            if (field.SceneId is 578 or 599 or 600 or 643 && region.Kind == "Warp")
+            if (field.SceneId is 578 or 599 or 600 or 638 or 643 && region.Kind == "Warp")
             {
                 // These native half-tile doorways have no standing room at a
                 // tile centre. Search the same fine lattice as map exits, keeping
