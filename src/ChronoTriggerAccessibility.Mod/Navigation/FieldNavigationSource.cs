@@ -856,7 +856,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
             ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
         var compensateFloor = cliffSlide || field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256 ||
-            LostSanctumTargets.NarrowCave(field.SceneId) || PresentVortexTargets.NarrowPassages(field.SceneId));
+            LostSanctumTargets.NarrowCave(field.SceneId));
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
@@ -872,6 +872,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ManualRecoveryInstruction = cliffSlide && floor is { Direction: NavigationDirection.South, Speed: 32 }
                     ? "Off route. Hold Up while running to stop sliding for new directions." : null,
                 MovingFloor = floor,
+                StalledCornerTolerance = field.SceneIdCoherent && field.SceneId == 614 ? 32 : 0,
                 CompensateMovingFloor = compensateFloor,
                 CanTraverseFloorStep = compensateFloor ? graph.CanTraverseFloorStep : null,
                 MovingFloorGuidance = compensateFloor && floor is { Speed:16 } moving

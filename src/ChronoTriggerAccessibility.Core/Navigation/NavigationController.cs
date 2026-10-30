@@ -9,6 +9,7 @@ public sealed class NavigationController
     private IReadOnlyList<NavigationPoint>? route;
     private IReadOnlyList<NavigationDirection>? inputDirections;
     private int nextPoint;
+    private int shortTurnStart = -1, shortTurnEnd = -1, shortTurnTolerance;
     private bool guiding;
     private bool walking;
     private NavigationHold? holding;
@@ -238,6 +239,7 @@ public sealed class NavigationController
         ArgumentNullException.ThrowIfNull(frame);
         if (frame.UnitsPerTile is < 1 or > 65536) throw new ArgumentOutOfRangeException(nameof(frame));
         unitsPerTile = frame.UnitsPerTile;
+        shortTurnTolerance = Math.Min(shortTurnTolerance, Math.Max(0, frame.StalledCornerTolerance));
         guidanceFloor = frame.MovingFloor;
         compensateMovingFloor = frame.CompensateMovingFloor;
         movingFloorGuidance = frame.MovingFloorGuidance;
@@ -341,6 +343,7 @@ public sealed class NavigationController
 
     private bool Plan(NavigationFrame frame, List<string> speech)
     {
+        shortTurnStart = shortTurnEnd = -1;
         contactStarted = null;
         contactDirection = NavigationDirection.None;
         facingStarted = null;
@@ -701,7 +704,6 @@ public sealed class NavigationController
         }
         // Progress along a leg can pass multiple small graph waypoints. Only a
         // departure from the actual route or changed terrain requires a new plan.
-        var previous = route[Math.Max(0, nextPoint - 1)];
         // A held Dash covers 32 units a frame, but the graph proves legs at the 16-unit
         // walking step, so a dash can run beside a proven line into a wall. Replan once
         // per tile from the real position; a stall that persists still stops below.
@@ -715,6 +717,14 @@ public sealed class NavigationController
         var stalled = (walking || manualInput && frame.PlayerFacing == LegDirection(nextPoint)) &&
             now >= lastProgress && now - lastProgress >= 250 && !Progressed(frame.Player) &&
             stallTiles.Add((frame.Player.X / unitsPerTile, frame.Player.Y / unitsPerTile, frame.Player.Layer));
+        if (stalled && AdvanceStalledCorner(frame))
+        {
+            onRoute = true;
+            stalled = false;
+            lastPosition = frame.Player;
+            lastProgress = now;
+        }
+        var previous = route[Math.Max(0, nextPoint - 1)];
         if (!onRoute || stalled ||
             !frame.Graph.Neighbours(previous).Contains(route[nextPoint]))
         {
@@ -1064,6 +1074,31 @@ public sealed class NavigationController
                     { ExpectedSteps = GuidanceDirection(nextPoint) != LegDirection(nextPoint) ? null : manualLegBeats } : null
         };
 
+    private bool AdvanceStalledCorner(NavigationFrame frame)
+    {
+        var tolerance = Math.Min(frame.StalledCornerTolerance, Math.Max(1, unitsPerTile / 8));
+        if (tolerance <= 0 || nextPoint >= route!.Count) return false;
+        var turn = LegEnd(nextPoint);
+        if (turn + 1 >= route.Count || frame.Graph.IsTerminal(route[turn]) ||
+            route[turn].Layer != frame.Player.Layer || route[turn + 1].Layer != frame.Player.Layer ||
+            Math.Abs((long)frame.Player.X - route[turn].X) > tolerance ||
+            Math.Abs((long)frame.Player.Y - route[turn].Y) > tolerance) return false;
+        var before = LegDirection(turn); var after = LegDirection(turn + 1);
+        bool Horizontal(NavigationDirection d) => d is NavigationDirection.East or NavigationDirection.West;
+        bool Vertical(NavigationDirection d) => d is NavigationDirection.North or NavigationDirection.South;
+        if (!(Horizontal(before) && Vertical(after) || Vertical(before) && Horizontal(after)) ||
+            !frame.Graph.Neighbours(frame.Player).Any(p => p.Layer == frame.Player.Layer &&
+                frame.Graph.InputDirection(frame.Player, p) == after)) return false;
+        // Native Run can stop up to31 units short of a proven walking turn.
+        // Only after an observed stall, try the graph-proven next leg from the
+        // real foot position. Destination/terminal/Confirm reach is unchanged.
+        nextPoint = turn + 1;
+        shortTurnStart = nextPoint;
+        shortTurnEnd = LegEnd(nextPoint);
+        shortTurnTolerance = tolerance;
+        return true;
+    }
+
     private bool AdvanceAlongRoute(NavigationPoint player)
     {
         var found = false;
@@ -1195,6 +1230,13 @@ public sealed class NavigationController
         }
         var direction = LegDirection(nextPoint);
         var from = route[nextPoint - 1];
+        // Keep the accepted leg within the same bounded corridor. A lateral
+        // correction would otherwise aim back at the refused shortfall after
+        // every native frame. A new leg/replan restores ordinary steering.
+        if (nextPoint >= shortTurnStart && nextPoint <= shortTurnEnd &&
+            (direction is NavigationDirection.North or NavigationDirection.South
+                ? Math.Abs((long)player.X - from.X) : Math.Abs((long)player.Y - from.Y)) <= shortTurnTolerance)
+            return direction;
         // A native slide already owns its perpendicular displacement. Correcting
         // toward the endpoint's other axis would fight the game's wall slide.
         if (inputDirections?.Count == route.Count - 1 && from.X != target.X && from.Y != target.Y)
@@ -1230,6 +1272,7 @@ public sealed class NavigationController
 
     private void Stop()
     {
+        shortTurnStart = shortTurnEnd = -1;
         guiding = walking = false;
         interactionProgressGoal = null;
         holding = null;

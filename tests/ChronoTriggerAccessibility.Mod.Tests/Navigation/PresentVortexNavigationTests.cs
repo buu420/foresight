@@ -118,10 +118,7 @@ public sealed class PresentVortexNavigationTests
         ("610-entry","exit:1",61,23,61,23),("614-entry","exit:1",23,63,26,63),
         ("615-entry","script-region:8:608:13:2:14:2",13,2,14,2),
         ("608-switch-ledge",FirstSwitch,22,14,22,14),("613-switch",LadderSwitch,7,8,7,8)}
-        // The captured614 corner needs the native walking control at Run speed;
-        // PresentVortexWalkingFeedbackTests exercises the actual input runtime
-        // and the player's response to its cue for all native Run settings.
-        .SelectMany(c=>new[]{false,true}.SelectMany(a=>(c.Item1=="capture-2900"?new[]{16}:new[]{16,32})
+        .SelectMany(c=>new[]{false,true}.SelectMany(a=>new[]{16,32}
             .Select(speed=>new object[]{c.Item1,c.Item2,c.Item3,c.Item4,c.Item5,c.Item6,a,speed})));
 
     [Theory]
@@ -160,6 +157,49 @@ public sealed class PresentVortexNavigationTests
     {
         var frame=Build(Sample("614-entry"));
         Assert.DoesNotContain(frame.Targets,t=>t.Id=="chest:330" && t.GuideAvailable);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ARefusedRunCornerUsesTheNextLegOnlyWhenTheRoomOptsIn(bool automatic)
+    {
+        var frame=Build(Sample("capture-2900")) with{StalledCornerTolerance=0};
+        var (controller,result)=Start(frame,"exit:1",automatic);
+        for(var tick=1;tick<=110 && result.Guiding;tick++)
+            result=controller.Update(frame,tick*16,!automatic);
+        if(automatic){Assert.False(result.AutoWalking);Assert.Equal(NavigationDirection.None,result.Direction);}
+        else Assert.Equal(NavigationDirection.West,result.ManualLeg?.Direction);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ControlLossCancelsTheRecoveredTurnAndNeverResumesIt(bool automatic)
+    {
+        var frame=Build(Sample("capture-2900"));var (controller,result)=Start(frame,"exit:1",automatic);
+        for(var tick=1;tick<=20;tick++)result=controller.Update(frame,tick*16,!automatic);
+        Assert.Equal(NavigationDirection.North,automatic?result.Direction:result.ManualLeg?.Direction);
+        result=controller.Update(frame with{CanNavigate=false},400);
+        Assert.False(result.Guiding);Assert.Equal(NavigationDirection.None,result.Direction);
+        result=controller.Update(frame,420);
+        Assert.False(result.Guiding);Assert.Equal(NavigationDirection.None,result.Direction);
+    }
+
+    [Fact]
+    public void WaitingForManualInputDoesNotSkipTheSpokenTurn()
+    {
+        var frame=Build(Sample("capture-2900"));var (controller,_)=Start(frame,"exit:1",false);
+        var result=controller.Update(frame,10000,false);
+        Assert.Equal(NavigationDirection.West,result.ManualLeg?.Direction);
+        Assert.Equal(NavigationDirection.None,result.Direction);
+    }
+
+    [Fact]
+    public void TheCornerPolicyIsLimitedToTheCoherentAuditedRoom()
+    {
+        foreach(var key in new[]{"608-left","610-entry","611-ladder","613-switch","615-entry"})
+            Assert.Equal(0,Build(Sample(key)).StalledCornerTolerance);
+        var s=Sample("capture-2900");Assert.InRange(Build(s).StalledCornerTolerance,1,32);
+        Assert.Equal(0,Build(s with{Field=s.Field with{SceneIdCoherent=false}}).StalledCornerTolerance);
     }
 
     internal sealed record Input(FieldNavigationSnapshot Field,FieldMapSnapshot Map,FieldStoryState State,

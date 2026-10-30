@@ -156,6 +156,9 @@ public sealed record NavigationFrame(string Scene, bool CanNavigate, NavigationP
     public string? ManualGuidanceInstruction { get; init; }
     /// <summary>Native moving terrain under the leader's foot, in field units per tick.</summary>
     public NavigationFloor? MovingFloor { get; init; }
+    /// <summary>Opt-in maximum shortfall at an ordinary route turn after a
+    /// refused step. Never changes destination, interaction or terminal reach.</summary>
+    public int StalledCornerTolerance { get; init; }
     /// <summary>Enable route steering against moving ground independently of
     /// stationary interaction reach. Ordinary exits retain ordinary arrival.</summary>
     public bool CompensateMovingFloor { get; init; }

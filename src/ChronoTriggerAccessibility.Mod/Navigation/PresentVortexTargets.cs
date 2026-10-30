@@ -10,10 +10,6 @@ internal static class PresentVortexTargets
     public const string FirstSwitch = "script-switch:8:Extra:35:1:True:22:14:22:14";
     public const string LadderSwitch = "script-switch:8:Extra:35:2:True:7:8:7:8";
     public const string Instruction = "Press Confirm to examine the switch.";
-    // The captured614 corner admits a16-unit step but refuses the same
-    // cardinal32-unit Run step in original175E90. Reuse native gait guidance.
-    public static bool NarrowPassages(int scene) => scene == 614;
-    public static bool NarrowPassages(string scene) => scene.EndsWith(":614", StringComparison.Ordinal);
     private static (int X, int Y, int Mask, int Start, int End)? Control(int scene) => scene switch
     {
         608 => (22, 14, 1, 0x17A, 0x1FA),

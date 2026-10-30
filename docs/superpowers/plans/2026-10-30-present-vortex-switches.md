@@ -86,17 +86,25 @@ native switch goals; produce a `FullStoryObjective` for the actual next local le
 - Native24 writes Local3, while the script checks Local0. All four facings are
   accepted; no synthetic facing requirement or Confirm is introduced.
 - Initial control/routing regressions:20 failed/7 passed before the fix;27 passed
-  after it. The captured614 corner fails at Run32 in both the transcribed oracle
-  and original175E90. Existing native gait support now covers614. Six runtime
-  cases fail before that change; all10 feedback cases pass afterward.
-- Final focused suite:83 pass, including later-switch Story routes, both modes,
+  after it. A preliminary614 gait adjustment passed its checks but review proved
+  that native Run can follow the corridor. That candidate and its walking-speed
+  advice were removed before deployment/publication.
+- Final focused suite:81 pass, including later-switch Story routes, both modes,
   all six native chest records, unknown/removed watcher and spent-switch cases.
   The fixture has five exact captures and12 explicitly static-derived states.
 - Sixty-eight original-x86 terrain traces pass in private Unicorn memory, with
-  native treasure grids. Manual response to walking cues is modeled. Actor
-  scripts, encounters, Confirm and room transfers are not executed.
-- Full pre-review suite:5699 pass; six later-switch cases subsequently pass in
-  the focused suite. Final full-suite and exact-payload checks remain below.
+  native treasure grids and unmodified walking/running speed. Actor scripts,
+  encounters, Confirm and room transfers are not executed.
+- The exact614 Run32 capture fails in both modes before the steering repair.
+  A narrowly enabled32-unit shortfall policy now changes to the graph-proven
+  next leg only after an observed stall at a same-layer ordinary corner. It does
+  not widen terminal or interaction arrival. Bounded next-leg steering avoids
+  correcting back into the refused corner. Plan/control-loss/Stop reset authority.
+- The first steering prototype still corrected back after one frame; the native
+  trace exposed a later stall at9097,14293. Bounded leg handling resolves it.
+  Tests also cover no opt-in, manual waiting, control loss and scene coherence.
+- Earlier pre-review full suites pass5699 then5705 tests for the private gait
+  candidate. The final steering build requires its own full/exact-payload checks.
 - One overlapping build attempt met the active testhost's DLL lock; it changed
   no implementation. Sequential retry passes. Initial private chest-replay
   receipts incorrectly demanded a spoken Confirm/32-unit point box; corrected
