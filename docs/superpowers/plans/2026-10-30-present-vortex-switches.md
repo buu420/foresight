@@ -59,11 +59,11 @@ native switch goals; produce a `FullStoryObjective` for the actual next local le
 
 ### Task3: Review, validation and0.3.87 release
 
-- [ ] Read-only Opus5.5 max review; verify and resolve findings.
-- [ ] Full solution, package/AMM, exact packaged x86 and original native movement checks.
-- [ ] Build/version/package, protect files, deploy and compare every installed payload byte.
-- [ ] Publish GitHub beta and AMM catalog, anonymously verify assets/index, preserve history.
-- [ ] Record a dated handoff, closure receipt and live-test limits.
+- [x] Read-only Opus5.5 max review; verify and resolve findings.
+- [x] Full solution, package/AMM, exact packaged x86 and original native movement checks.
+- [x] Build/version/package, protect files, deploy and compare every installed payload byte.
+- [x] Publish GitHub beta and AMM catalog, anonymously verify assets/index, preserve history.
+- [x] Record a dated handoff, closure receipt and live-test limits.
 
 ## Execution Ledger
 
@@ -122,3 +122,13 @@ native switch goals; produce a `FullStoryObjective` for the actual next local le
   receipts incorrectly demanded a spoken Confirm/32-unit point box; corrected
   receipts use native treasure reach/facings and arrival. No chest change was
   made to satisfy that receipt error.
+
+## Release closure
+
+Public0.3.87 uses payload559f3c2 and candidate3, with5713 full tests,858 exact
+packaged x86 checks and68 original-speed native traces passing.303 deployment
+checks,275 installed file comparisons and244 protected hashes pass. Both public
+ZIPs and the AMM catalog are anonymously verified; source and catalog history
+are preserved. Native and independent Opus5.5 max reviews have no open blocker.
+Live gameplay/controller/speech and recipient-PC testing remain pending. See
+`artifacts/handoffs/2026-10-30-vortex-switches-0387.md` for provenance and limits.
