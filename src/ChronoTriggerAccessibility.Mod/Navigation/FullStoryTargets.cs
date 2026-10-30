@@ -48,7 +48,9 @@ public sealed class FullStoryTargets
             // sequence. Its native spatial predicate supplies the next approach.
             if (candidates.Length == 0 && local.Any(g => g.Actors.Length == 0 && g.Targets.Length == 0))
                 candidates = ProgressTargets(scene, state, available);
-            var routed = false;
+            // A section-aware current-room passage still routes toward the
+            // objective; it does not make the distant switch an object here.
+            var routed = !ReferenceEquals(objective, roomObjective);
             if (candidates.Length == 0)
             {
                 var onward = goals.Where(g => g.Scene != scene).Select(g => g.Scene);

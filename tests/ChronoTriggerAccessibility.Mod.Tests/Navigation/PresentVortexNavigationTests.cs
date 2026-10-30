@@ -82,6 +82,34 @@ public sealed class PresentVortexNavigationTests
     }
 
     [Theory]
+    [InlineData("capture-1842")] [InlineData("608-left")] [InlineData("608-near-left")]
+    [InlineData("610-entry")] [InlineData("614-entry")] [InlineData("615-entry")]
+    public void ARouteTowardTheSwitchDoesNotPretendTheSwitchIsInThisRoom(string key)
+    {
+        var frame=Build(Sample(key));
+        Assert.All(frame.Targets.Where(t=>t.Id.StartsWith("story:",StringComparison.Ordinal)),
+            t=>Assert.Equal(NavigationCategory.StoryEvents,t.Category));
+        Assert.Single(frame.Targets,t=>t.Id.StartsWith("story:",StringComparison.Ordinal));
+        Assert.Contains("Next passage:",frame.Targets.Single(t=>t.Id==Story).Instruction);
+    }
+
+    [Theory]
+    [InlineData("608-switch-ledge",FirstSwitch,false)] [InlineData("608-switch-ledge",FirstSwitch,true)]
+    [InlineData("613-switch",LadderSwitch,false)] [InlineData("613-switch",LadderSwitch,true)]
+    public void AFreeFacingSwitchDoesNotAskForAFacingWhenItCannotBeRead(string key,string id,bool automatic)
+    {
+        var frame=Build(Sample(key));var target=frame.Targets.Single(t=>t.Id==id);
+        var goal=NavigationPathfinder.Search(frame.Graph,frame.Player,target.ApproachPoints).Route![^1];
+        frame=frame with{Player=goal,PlayerFacing=NavigationDirection.None};
+        var (controller,result)=Start(frame,id,automatic);
+        var lines=result.Speech.Concat(controller.Update(frame,100).Speech).ToArray();
+        Assert.False(result.AutoWalking);
+        Assert.Contains(lines,line=>line.Contains("Confirm",StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(lines,line=>line.Contains("face north",StringComparison.OrdinalIgnoreCase)||
+            line.Contains("facing could not be read",StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
     [InlineData("missing")] [InlineData("disabled")] [InlineData("class")] [InlineData("removed")] [InlineData("pc")]
     public void SwitchObjectsRequireTheirRealNativeWatcher(string variant)
     {

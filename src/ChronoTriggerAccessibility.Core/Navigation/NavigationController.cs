@@ -333,7 +333,8 @@ public sealed class NavigationController
         // Within Confirm's reach the step count misleads (the reach spans nearly two steps);
         // what still matters is which way to face.
         var reach = target.AnyConfirmFacings(frame.Player);
-        var location = reach.Count != 0 ? reach.Contains(frame.PlayerFacing) ? "within reach, facing it" :
+        var location = AcceptsAnyFacing(reach) ? "within reach" :
+            reach.Count != 0 ? reach.Contains(frame.PlayerFacing) ? "within reach, facing it" :
                 $"within reach, face {DirectionName(reach[0])} to use Confirm" :
             frame.Player.Layer != target.Position.Layer ? "on another level" :
             direction == NavigationDirection.None ? "here" : $"{DirectionName(direction)}, {distance:0} {(distance == 1 ? "step" : "steps")} away";
@@ -967,7 +968,7 @@ public sealed class NavigationController
             Stop();
             return;
         }
-        if (frame.PlayerFacing != NavigationDirection.None && reach.Contains(frame.PlayerFacing))
+        if (AcceptsAnyFacing(reach) || frame.PlayerFacing != NavigationDirection.None && reach.Contains(frame.PlayerFacing))
         {
             if (FollowingInteraction)
             {
@@ -1073,6 +1074,10 @@ public sealed class NavigationController
                 ? new(route[LegEnd(nextPoint)], GuidanceDirection(nextPoint), unitsPerTile, instructionRevision)
                     { ExpectedSteps = GuidanceDirection(nextPoint) != LegDirection(nextPoint) ? null : manualLegBeats } : null
         };
+
+    private static bool AcceptsAnyFacing(IReadOnlyList<NavigationDirection> facings) =>
+        facings.Contains(NavigationDirection.North) && facings.Contains(NavigationDirection.South) &&
+        facings.Contains(NavigationDirection.West) && facings.Contains(NavigationDirection.East);
 
     private bool AdvanceStalledCorner(NavigationFrame frame)
     {

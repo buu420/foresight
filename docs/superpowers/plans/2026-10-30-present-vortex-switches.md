@@ -105,6 +105,18 @@ native switch goals; produce a `FullStoryObjective` for the actual next local le
   Tests also cover no opt-in, manual waiting, control loss and scene coherence.
 - Earlier pre-review full suites pass5699 then5705 tests for the private gait
   candidate. The final steering build requires its own full/exact-payload checks.
+- Independent review of73b80b1 found that the section-aware passage could leak
+  a bonus switch copy into Objects. Six fixture regressions verify the failure.
+  Treating the PresentVortexRoutes substitution as routing fixes category,
+  deduplication and the Next passage cue. Four additional regressions cover
+  unreadable facing at the switches: accepting all four native cardinal facings
+  no longer invents a direction requirement. All10 fail before and pass after.
+- Final focused suite now91. The bounded one-recovery-per-tile stop is retained:
+  removing the stall marker alone could allow repeated corner promotions. No
+  audited original-speed trace demonstrates a second refused leg in that tile.
+- Candidate2 passes5703 full,848 exact x86 and68 native checks, and was deployed
+  only locally. It is superseded before publication; its Downloads and asset
+  files are preserved privately. Final candidate3 requires fresh identity checks.
 - One overlapping build attempt met the active testhost's DLL lock; it changed
   no implementation. Sequential retry passes. Initial private chest-replay
   receipts incorrectly demanded a spoken Confirm/32-unit point box; corrected
