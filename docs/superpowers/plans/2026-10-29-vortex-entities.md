@@ -52,9 +52,9 @@
 
 - [x] Run original x86 terrain checks for the repaired routes, separating movement proof from script execution. Both are spatial triggers; no contact/Confirm control is required.
 - [x] Obtain read-only Opus5.5 max whole-change review and resolve findings.
-- [ ] Run full solution tests, package/AMM tests and exact packaged x86 checks.
-- [ ] Package, deploy with protected-file verification, publish GitHub prerelease and AMM catalog; anonymously verify assets/index.
-- [ ] Commit closure/handoff and report release link plus live-test limits.
+- [x] Run full solution tests, package/AMM tests and exact packaged x86 checks.
+- [x] Package, deploy with protected-file verification, publish GitHub prerelease and AMM catalog; anonymously verify assets/index.
+- [x] Record closure/handoff; the final response reports the public release and live-test limits.
 
 ## Execution Ledger
 
@@ -67,3 +67,5 @@
 - 64 original-x86 terrain runs pass,38755 frames, including both guidance modes across the derived delayed opening. Native scripts, combat and room transfers were not replayed. Final package-matching native DLL hashes will be recorded after the payload commit.
 - Full suite first found one stale ModManifestTests SHA pin after the0.3.86 manifest update; both package/manifest pins now use A74073CF47A4D8957119B04F0FCBA056203933FF53BF4A8042E6C765579951FF. Fresh full run passes5611 checks (Core245,Native1523,Mod3833,Prism10); package4 and AMM6 checks also pass.
 - After the review fixes and atomic-capture cases, the final full run passes5622 checks (Core245,Native1523,Mod3844,Prism10). The payload remains0.3.86; candidate1 was never deployed or published and is retained only as private evidence. Candidate2 is the release candidate.
+- Released0.3.86 at immutable payload/tag b138ed5082b1e147c4fbba67d4fad686546ab2d2. Final767 exact-payload x86 checks and64 original-native traces pass; recorded Core/Mod hashes match the package. Standalone275/AMM277 entries match byte-for-byte. Canonical-hook AMM wrapper is amm-candidate-3.
+- Local deployment303 checks passes; all275 payload files match and244 protected files remain unchanged. GitHub3 assets and anonymous downloads verified; catalog45adf3a877e1276c3aa8aa19f8f3290afd53ad68 completed all3 publication phases with unrelated games/history preserved. No collector included. Live gameplay, controller, speech and recipient-PC checks remain pending.
