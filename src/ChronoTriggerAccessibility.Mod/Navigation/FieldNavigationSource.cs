@@ -551,10 +551,12 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         if (guideActive && GameNavigationCatalog.ForScene(field.SceneId) is { } sceneInfo)
         foreach (var group in sceneInfo.Regions.Where(r => !DeathPeakTargets.KnockbackRegion(field.SceneId, r) &&
                      !TemporalLabTargets.CaptureRegion(field.SceneId, r) &&
+                     !PresentVortexTargets.IsEffect(field.SceneId, r) &&
                      !(field.SceneId == 600 && r.Kind == "Encounter") &&
                      !KeepFieldTargets.ConcealedRegion(field.SceneId, r) &&
                      FrozenCliffsTargets.WatcherAvailable(field, r) &&
                      VortexRoomTargets.WatcherAvailable(field, r) &&
+                     PresentVortexTargets.WatcherAvailable(field, r, story) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (BlackOmenTargets.IsPad(field.SceneId, r) ||
                       (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : VortexRoomTargets.RegionAvailable(field.SceneId, r, map, story))) &&
@@ -599,19 +601,23 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ("Teleport pad to " + GameNavigationCatalog.AreaName(region.Destination), NavigationCategory.Objects);
             if (cliffCave) regionLabel = FrozenCliffsTargets.CaveLabel(field.SceneId, region)!;
             var castlePassage = VortexRoomTargets.DreamscapePassage(field.SceneId, region);
+            var presentSwitch = PresentVortexTargets.IsSwitch(field.SceneId, region);
             var castleOpen = castlePassage && VortexRoomTargets.DreamscapeOpened(field.SceneId, map, story);
             if (castlePassage) (regionLabel, regionCategory) = (castleOpen ? "Open castle passage" : "Castle passage", NavigationCategory.Exits);
+            if (presentSwitch) (regionLabel, regionCategory) = ("Switch", NavigationCategory.Objects);
             Add(region.Id, regionLabel, regionCategory,
-                points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
-                storyOnly: !castlePassage && region.Kind is not ("Warp" or "Encounter") ||
+                presentSwitch ? Position(region.Left * 256 + 128, (region.Top - 2) * 256 + 128) : points[0], points,
+                presentSwitch ? TileVisible(region.Left, region.Top - 2) : points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
+                storyOnly: !(castlePassage || presentSwitch) && region.Kind is not ("Warp" or "Encounter") ||
                     OceanPalaceStoryTargets.CinematicRegion(field.SceneId, region), guideAvailable: true,
                 instruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : padRestriction ?? (grate ? BlackbirdDuctTargets.GrateInstruction : null),
                 guidanceRestriction: padRestriction,
-                arrivalInstruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : omenPad ? "Step onto the pad to teleport." :
+                arrivalInstruction: presentSwitch ? PresentVortexTargets.Instruction : cliffCave ? FrozenCliffsTargets.CaveInstruction : omenPad ? "Step onto the pad to teleport." :
                     pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null,
                 contactDirection: cliffCave ? NavigationDirection.North : NavigationDirection.None,
                 passageOpening: castlePassage && VortexRoomTargets.DreamscapeOpening(field.SceneId, map, story),
-                openingCompleteAnnouncement: castleOpen ? "The castle passage is open." : null);
+                openingCompleteAnnouncement: castleOpen ? "The castle passage is open." : null,
+                confirm: presentSwitch ? new ConfirmRule(p => PresentVortexTargets.ConfirmFacings(region, p), null) : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -850,7 +856,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         var floor = player.X >= 0 && player.Y >= 0 && player.X / 256 < map.Width && player.Y / 256 < map.Height
             ? FieldFloorMovement.FromFlags(map.TerrainFlags[player.Y / 256 * map.Width + player.X / 256]) : null;
         var compensateFloor = cliffSlide || field.SceneIdCoherent && (SunkenDesertNavigation.IsScene(field.SceneId) || field.SceneId == 256 ||
-            LostSanctumTargets.NarrowCave(field.SceneId));
+            LostSanctumTargets.NarrowCave(field.SceneId) || PresentVortexTargets.NarrowPassages(field.SceneId));
         return new(identity, field.SceneIdCoherent && field.ControlFlag != 0 && field.InputMode == 0 &&
             field.LeadPlayer is { IsUsable: true, IsDrawn: true } && !map.TransitionPending,
             player, targets.AsReadOnly(), routeGraph, NavigationUnits.LocalStep)
@@ -967,7 +973,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             if (FrozenCliffsTargets.IsCave(field.SceneId, region))
                 return At(region.Left * 256 + 128, region.Top * 256 + 192).ToArray();
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
-            if (field.SceneId is 578 or 599 or 600 or 638 or 643 && region.Kind == "Warp")
+            if (field.SceneId is 578 or 599 or 600 or 608 or 609 or 612 or 615 or 638 or 643 && region.Kind == "Warp")
             {
                 // These native half-tile doorways have no standing room at a
                 // tile centre. Search the same fine lattice as map exits, keeping

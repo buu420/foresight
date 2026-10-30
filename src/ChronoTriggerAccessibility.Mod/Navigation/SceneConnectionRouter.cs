@@ -147,6 +147,7 @@ public sealed class SceneConnectionRouter
                         null, actor.Id, 2, a.Destination)));
             // A shaft grate only shows the room below and returns to the same grate.
             result.AddRange(scene.Regions.Where(r => r.Kind == "Warp" && !TemporalLabTargets.CaptureRegion(scene.Id, r) &&
+                    !PresentVortexTargets.IsEffect(scene.Id, r) &&
                     !KeepFieldTargets.ConcealedRegion(scene.Id, r) &&
                     !BlackbirdDuctTargets.IsGrate(scene.Id, r) && Exists(r.Destination) && r.Available(state, local: false))
                 .Select(r => new Link(scene.Id, r.Destination, r.Id, Cost: 2)));

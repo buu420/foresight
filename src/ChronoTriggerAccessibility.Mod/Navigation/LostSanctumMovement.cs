@@ -29,7 +29,7 @@ internal static class LostSanctumMovement
     private static bool Setting(NavigationFrame frame, FieldFloorSnapshot? native, out int mode, out int toggle)
     {
         mode = toggle = -1;
-        if (!LostSanctumTargets.NarrowCave(frame.Scene) ||
+        if (!(LostSanctumTargets.NarrowCave(frame.Scene) || PresentVortexTargets.NarrowPassages(frame.Scene)) ||
             native is not { RunMode: >= 0 and <= 2, RunToggle: >= 0 and <= 2, ForceX: 0, ForceY: 0 } floor ||
             frame.Scene != $"{floor.Engine:X8}:{floor.Scene}") return false;
         mode = floor.RunMode.Value;

@@ -132,7 +132,7 @@ public static class BonusStoryObjectives
         V("present:cave", "Take the forward Gate from the Nameless Cave", Actor(601, 10), NavigationCategory.Exits),
         V("antiquity:cave", "Take the forward Gate from the Nameless Cave", Actor(664, 10), NavigationCategory.Exits),
         V("future:cave", "Take the forward Gate from the Nameless Cave", Actor(663, 10), NavigationCategory.Exits),
-        V("present:switch", "Press the volcano entrance switch", Switch(608, 0x23, 1)),
+        V("present:switch", "Press the Volcano switch", Switch(608, 0x23, 1)),
         V("present:ladder", "Press the crater surveillance ladder switch", Switch(613, 0x23, 2)),
         V("present:dalton", "Confront Dalton in the Twilight Grotto", Region(624, 0, 27, 255, 27), NavigationCategory.People),
         V("present:grotto", "Follow Crono into the Twilight Grotto", Region(624, 28, 7, 28, 7), NavigationCategory.Exits,
