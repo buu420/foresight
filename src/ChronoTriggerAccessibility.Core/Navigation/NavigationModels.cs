@@ -77,6 +77,8 @@ public sealed record NavigationTarget(string Id, string Label, NavigationCategor
     /// <summary>The destination's audited native opening script is currently running.
     /// Wait without movement for a fresh completed capture, with a bounded timeout.</summary>
     public bool PassageOpening { get; init; }
+    /// <summary>Optional cue when an observed native opening completes.</summary>
+    public string? OpeningCompleteAnnouncement { get; init; }
     public string? ArrivalInstruction { get; init; }
     /// <summary>Complete arrival speech when an immediate action must precede the destination name.</summary>
     public string? ArrivalAnnouncement { get; init; }

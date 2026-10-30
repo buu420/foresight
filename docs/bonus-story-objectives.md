@@ -207,6 +207,12 @@ tests row57, X41–43 and Local20==0, sets Local20, then copies native tiles
 with `E5 03 20 05 22 29 36 3B` at019B. Story Events reaches that opening
 row before the encounter region at X35–46, row51. Once the native copy is
 visible in captured terrain, the same Story Events selection continues onward.
+Local20 is set before E8 and E5 yield. During that gap the same passage target
+sets `PassageOpening`; the existing controller wait stops movement until all
+three live destination planes match the native source block, or times out after
+three seconds. Only the observed completed copy moves the target's goals to
+row51 and produces the optional opening-complete cue. The opened route remains
+in Exits; its bonus objective does not duplicate the primary Story Events row.
 The mod never applies that copy to game memory. Actor0's processing and live
 script window gate both spatial targets; the hidden actor8 sprite is not
 presented as an NPC. The instruction avoids its concealed battle identity.

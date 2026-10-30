@@ -557,7 +557,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                      VortexRoomTargets.WatcherAvailable(field, r) &&
                      KeepFieldTargets.RegionLightVisible(field, r) && !OceanPalaceTargets.SpentRegion(field, r) &&
                      (BlackOmenTargets.IsPad(field.SceneId, r) ||
-                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : FrozenCliffsTargets.RegionAvailable(field.SceneId, r, story))) &&
+                      (FutureAreaLabels.IsPillar(field.SceneId, r) ? FutureAreaLabels.PillarVisible(r, story) : VortexRoomTargets.RegionAvailable(field.SceneId, r, map, story))) &&
                      (r.Kind != "Progress" || r.Value > story!.Point) &&
                      field.Actors.Any(a => a.Index == r.Actor && a.IsUsable && !a.IsPartyMember &&
                          (a.ClassTag & FieldNavigationCapture.ClassTagRemovedBit) == 0 &&
@@ -599,7 +599,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 ("Teleport pad to " + GameNavigationCatalog.AreaName(region.Destination), NavigationCategory.Objects);
             if (cliffCave) regionLabel = FrozenCliffsTargets.CaveLabel(field.SceneId, region)!;
             var castlePassage = VortexRoomTargets.DreamscapePassage(field.SceneId, region);
-            if (castlePassage) (regionLabel, regionCategory) = ("Castle passage", NavigationCategory.Exits);
+            var castleOpen = castlePassage && VortexRoomTargets.DreamscapeOpened(field.SceneId, map, story);
+            if (castlePassage) (regionLabel, regionCategory) = (castleOpen ? "Open castle passage" : "Castle passage", NavigationCategory.Exits);
             Add(region.Id, regionLabel, regionCategory,
                 points[0], points, points.Any(p => TileVisible(p.X / 256, p.Y / 256)),
                 storyOnly: !castlePassage && region.Kind is not ("Warp" or "Encounter") ||
@@ -608,7 +609,9 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 guidanceRestriction: padRestriction,
                 arrivalInstruction: cliffCave ? FrozenCliffsTargets.CaveInstruction : omenPad ? "Step onto the pad to teleport." :
                     pillar ? FutureAreaLabels.PillarInstruction(story!) : grate ? BlackbirdDuctTargets.GrateArrival : null,
-                contactDirection: cliffCave ? NavigationDirection.North : NavigationDirection.None);
+                contactDirection: cliffCave ? NavigationDirection.North : NavigationDirection.None,
+                passageOpening: castlePassage && VortexRoomTargets.DreamscapeOpening(field.SceneId, map, story),
+                openingCompleteAnnouncement: castleOpen ? "The castle passage is open." : null);
         }
         var exitGroups = new Dictionary<int, List<NavigationPoint>>();
         var exitCellCount = 0;
@@ -959,6 +962,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
         }
         NavigationPoint[] RegionPoints(GameNavigationCatalog.Region region)
         {
+            if (VortexRoomTargets.DreamscapePassage(field.SceneId, region) && VortexRoomTargets.DreamscapeOpened(field.SceneId, map, story))
+                region = GameNavigationCatalog.ForScene(645)!.Regions.First(r => VortexRoomTargets.DreamscapeEncounter(645, r));
             if (FrozenCliffsTargets.IsCave(field.SceneId, region))
                 return At(region.Left * 256 + 128, region.Top * 256 + 192).ToArray();
             var points = BlackOmenTargets.PadPoints(field.SceneId, region, graph, map.PlayerLayer).ToList();
@@ -1275,7 +1280,8 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
             string? guidanceRestriction = null, int? actorSlot = null,
             (int Minimum, int Maximum)? arrivalXRange = null, string? arrivalAnnouncement = null,
             NavigationHold? arrivalHold = null, bool passageOpening = false, bool keepInteractionReach = false,
-            IReadOnlyList<NavigationPoint>? preferredApproaches = null, NavigationDirection contactDirection = NavigationDirection.None)
+            IReadOnlyList<NavigationPoint>? preferredApproaches = null, NavigationDirection contactDirection = NavigationDirection.None,
+            string? openingCompleteAnnouncement = null)
         {
             activeIds.Add(id);
             if (storyCandidate) storyCandidates.Add(new(id, label, category, position, approaches, visible,
@@ -1285,7 +1291,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ContactDirection = contactDirection,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
-                    ArrivalHold = arrivalHold, PassageOpening = passageOpening,
+                    ArrivalHold = arrivalHold, PassageOpening = passageOpening, OpeningCompleteAnnouncement = openingCompleteAnnouncement,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1302,7 +1308,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                     ContactDirection = contactDirection,
                     ArrivalXRange = arrivalXRange,
                     ArrivalAnnouncement = arrivalAnnouncement,
-                    ArrivalHold = arrivalHold, PassageOpening = passageOpening,
+                    ArrivalHold = arrivalHold, PassageOpening = passageOpening, OpeningCompleteAnnouncement = openingCompleteAnnouncement,
                     GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                     ContactPosition = contactPosition, ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                     FollowUntilInteraction = followUntilInteraction,
@@ -1319,7 +1325,7 @@ public sealed class FieldNavigationSource(IReadableMemory memory, Action<string>
                 Visible = false, Discovered = true,
                 Label = TemporalLabTargets.RememberedLabel(field.SceneId, id) ?? known.Label,
                 ContactDirection = contactDirection,
-                ArrivalHold = arrivalHold, PassageOpening = passageOpening,
+                ArrivalHold = arrivalHold, PassageOpening = passageOpening, OpeningCompleteAnnouncement = openingCompleteAnnouncement,
                 GuidanceRestriction = guidanceRestriction, ActorSlot = actorSlot,
                 ConfirmFacings = confirm?.Ready, ConfirmPending = confirm?.Pending,
                 FollowUntilInteraction = followUntilInteraction,

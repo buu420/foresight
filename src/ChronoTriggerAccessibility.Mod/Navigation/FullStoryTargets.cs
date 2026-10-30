@@ -73,7 +73,9 @@ public sealed class FullStoryTargets
             // The primary row already carries this vortex route. Keep distinct
             // local People/Objects/Exits entries, but not an identical second
             // Story Events passage after routing the optional copy.
-            if (routed && (chapter.Id.StartsWith("bonus:vortex:", StringComparison.Ordinal) ||
+            // Castle Dreamscape also shares one stable local passage target
+            // across its yielded opening, rather than a second Exits row.
+            if ((routed || scene == 645) && (chapter.Id.StartsWith("bonus:vortex:", StringComparison.Ordinal) ||
                     chapter.Id.StartsWith("bonus:sanctum:", StringComparison.Ordinal)) &&
                 result.Any(t => t.Id == "story:full:lavos" && t.Label == bound.Label &&
                     t.ApproachPoints.SequenceEqual(bound.ApproachPoints))) continue;

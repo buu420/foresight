@@ -499,6 +499,8 @@ public sealed class NavigationController
             }
             return;
         }
+        if (currentTarget.OpeningCompleteAnnouncement is { Length: > 0 } opened &&
+            (wasOpening || opened != destination?.OpeningCompleteAnnouncement)) speech.Add(opened);
         // Rejected standing points belong to the actor's previous position, not to a
         // moving chase for its whole lifetime.
         if (currentTarget.FollowUntilInteraction && currentTarget.Position != destination?.Position)

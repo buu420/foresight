@@ -47,7 +47,7 @@ public sealed class VortexEntityNavigationTests
             variant=="disabled"?a with{ScriptProcessingEnabled=false}:variant=="pc"?a with{ScriptAddress=0x0168}:
             a with{ClassTag=4}).ToArray();
         var frame=Build(s.Field with{Actors=actors},s.Map,s.Story);
-        Assert.DoesNotContain(frame.Targets,t=>t.Id==CastlePassage || t.Id.StartsWith("script-encounter:8:",StringComparison.Ordinal));
+        Assert.DoesNotContain(frame.Targets,t=>t.Id==CastlePassage);
     }
 
     [Theory]
@@ -64,7 +64,7 @@ public sealed class VortexEntityNavigationTests
             FineY=frame.Player.Y,TileY=frame.Player.Y/256,FractionY=frame.Player.Y%256};
         var field=s.Field with{LeadPlayer=actor,Actors=s.Field.Actors.Select(a=>a.Index==actor.Index?actor:a).ToArray()};
         var continued=Build(field,open,story);
-        Assert.DoesNotContain(continued.Targets,t=>t.Id==CastlePassage);
+        Assert.NotEmpty(continued.Targets.Single(t=>t.Id==CastlePassage).ApproachPoints);
         Assert.False(continued.Targets.Single(t=>t.Id==StoryId).IsStoryNote);
         Walk(continued,open,StoryId,automatic,speed,p=>p.Y/256==51 && p.X/256 is >=35 and <=46);
     }
@@ -77,19 +77,36 @@ public sealed class VortexEntityNavigationTests
     }
 
     [Theory]
-    [InlineData(false,16)] [InlineData(false,32)] [InlineData(true,16)] [InlineData(true,32)]
-    public void TheSameStorySelectionContinuesAfterTheNativeCastleCopy(bool automatic,int speed)
+    [InlineData(false,16,false)] [InlineData(false,32,false)] [InlineData(true,16,false)] [InlineData(true,32,false)]
+    [InlineData(false,16,true)] [InlineData(false,32,true)] [InlineData(true,16,true)] [InlineData(true,32,true)]
+    public void TheSameSelectionContinuesAfterTheQueuedCastleCopy(bool automatic,int speed,bool storyTarget)
+        => ContinueCastle(automatic,speed,storyTarget,2);
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void ACopyAlreadyFinishedInTheNextCaptureStillAnnouncesOnce(bool automatic)
+        => ContinueCastle(automatic,16,true,0);
+
+    private static void ContinueCastle(bool automatic,int speed,bool storyTarget,int delayFrames)
     {
         var s=Sample("645");var field=s.Field;var map=s.Map;var story=s.Story;
         var source=new FieldNavigationSource(new Empty(),_=>{});
         NavigationFrame Current()=>source.Build(field,map,new(0,0,map.Width*256,map.Height*256),[],story);
         var frame=Current();
-        var (controller,result)=Start(frame,StoryId,automatic);var opened=false;var reached=false;
+        var (controller,result)=Start(frame,storyTarget?StoryId:CastlePassage,automatic);var opened=false;var reached=false;int? queuedAt=null;
+        var speech=new List<string>();
         for(var tick=1;tick<6000 && result.Guiding && !reached;tick++){
             var direction=automatic?result.Direction:result.ManualLeg?.Direction??NavigationDirection.None;
             var player=NativeWalkingReplay.Move(map,frame.Player,direction,speed);
-            if(!opened && player.Y/256==57 && player.X/256 is >=41 and <=43){
-                map=OpenCastle(map);story=story with{Locals=new Dictionary<int,int>(story.Locals){[20]=1}};opened=true;
+            if(queuedAt is null && player.Y/256==57 && player.X/256 is >=41 and <=43){
+                queuedAt=tick;story=story with{Locals=new Dictionary<int,int>(story.Locals){[20]=1}};
+                field=field with{Actors=field.Actors.Select(a=>a.Index==0?a with{ScriptAddress=0x198,CurrentScriptOpcode=0xE8}:a).ToArray()};
+            }
+            if(queuedAt is not null){
+                // Native75 precedes yielded E8/E5. Cover two pending frames,
+                // and a mod capture that sees both changes already complete.
+                if(!opened && tick>=queuedAt+delayFrames){map=OpenCastle(map);opened=true;
+                    field=field with{Actors=field.Actors.Select(a=>a.Index==0?a with{ScriptAddress=0x17E,CurrentScriptOpcode=0x22}:a).ToArray()};}
                 var actor=field.LeadPlayer! with{FineX=player.X,TileX=player.X/256,FractionX=player.X%256,
                     FineY=player.Y,TileY=player.Y/256,FractionY=player.Y%256};
                 field=field with{LeadPlayer=actor,Actors=field.Actors.Select(a=>a.Index==actor.Index?actor:a).ToArray()};
@@ -98,8 +115,40 @@ public sealed class VortexEntityNavigationTests
             frame=frame with{Player=player,PlayerFacing=direction};
             reached=opened && player.Y/256==51 && player.X/256 is >=35 and <=46;
             result=controller.Update(frame,tick*16,!automatic && direction!=NavigationDirection.None);
+            speech.AddRange(result.Speech);
         }
         Assert.True(opened);Assert.True(reached,$"Stopped at{frame.Player}");
+        Assert.Single(speech,line=>line.Contains("castle passage is open",StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData(false,false)] [InlineData(false,true)] [InlineData(true,false)] [InlineData(true,true)]
+    public void AQueuedCastleOpeningWaitsAndTimesOutWithoutInventingFloor(bool automatic,bool storyTarget)
+    {
+        var s=Sample("645");var frame=Build(s.Field,s.Map,s.Story);
+        var (controller,result)=Start(frame,storyTarget?StoryId:CastlePassage,automatic);Assert.True(result.Guiding);
+        var story=s.Story with{Locals=new Dictionary<int,int>(s.Story.Locals){[20]=1}};
+        var field=s.Field with{Actors=s.Field.Actors.Select(a=>a.Index==0?a with{ScriptAddress=0x198,CurrentScriptOpcode=0xE8}:a).ToArray()};
+        var pending=Build(field,s.Map,story) with{Player=new(10880,14704,1)};
+        result=controller.Update(pending,16);Assert.True(result.Guiding);Assert.Equal(NavigationDirection.None,result.Direction);
+        Assert.Null(result.ManualLeg);
+        result=controller.Update(pending,48);Assert.True(result.Guiding);
+        result=controller.Update(pending,3020);Assert.False(result.Guiding);Assert.False(result.AutoWalking);
+        Assert.Contains(result.Speech,line=>line.Contains("passage did not open",StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0x04,s.Map.CollisionShapes[56*s.Map.Width+42]);
+    }
+
+    [Fact]
+    public void TheOpenedCastleRouteStaysInExitsWithoutDuplicateBonusObjectsOrHiddenEnemies()
+    {
+        var s=Sample("645");var map=OpenCastle(s.Map);
+        var frame=Build(s.Field,map,s.Story with{Locals=new Dictionary<int,int>(s.Story.Locals){[20]=1}}) with{Player=new(10880,14704,1)};
+        var gate=Assert.Single(frame.Targets,t=>t.Category==NavigationCategory.Exits);
+        Assert.Equal(CastlePassage,gate.Id);Assert.False(gate.PassageOpening);
+        Assert.All(gate.ApproachPoints,p=>{Assert.Equal(51,p.Y/256);Assert.InRange(p.X/256,35,46);});
+        Assert.Contains("open",gate.Label,StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(frame.Targets,t=>t.Category is NavigationCategory.Objects or NavigationCategory.Enemies);
+        Assert.Single(frame.Targets,t=>t.Category==NavigationCategory.StoryEvents);
     }
 
     private static NavigationFrame Walk(NavigationFrame frame,FieldMapSnapshot map,string id,bool automatic,int speed,Func<NavigationPoint,bool> reached)
