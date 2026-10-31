@@ -200,7 +200,7 @@ public sealed partial class ExtrasHookSetTests
     }
 
     [Fact]
-    public void MovieDecideStatesTheVideoIsNotDescribedAndTheSameNodeResumesAfterPlayback()
+    public void MovieDecideRetainsReturnGuidanceWithoutFalselyDenyingNarration()
     {
         var harness = CreateHarness();
         var controls = Controls(MoviesSpec.Rows + 1);
@@ -227,7 +227,7 @@ public sealed partial class ExtrasHookSetTests
         harness.MoviesCallback(0, 2);
 
         Assert.Equal(
-            [new MenuUnsupported("Movie 3", ExtrasHookSet.NoVideoDescription, ExtrasHookSet.MoviesReturn)],
+            [new MenuActivated("Movie 3. " + ExtrasHookSet.MoviesReturn)],
             harness.Dispatcher.Events);
 
         harness.MoviesDispatch();

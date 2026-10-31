@@ -53,7 +53,6 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
 
     /// <summary>What the mod can say about content the game shows without text. The menu that
     /// opens it is fully read; the pictures and videos themselves are not described.</summary>
-    public const string NoVideoDescription = "No video description is available.";
     public const string MoviesReturn = "The Movies list returns when the movie ends.";
     public const string NoImageDescription = "No image description is available.";
     public const string IllustrationReturn = "Confirm or Cancel returns to the illustration list.";
@@ -1883,7 +1882,7 @@ public sealed class ExtrasHookSet : IHookActivationObserver, ISharedNativeHookOb
                 return FinalizeCallbackFocus(scope);
             }
             return scope.Action < MovieCount
-                ? new MenuUnsupported(control.Focus.Label, NoVideoDescription, MoviesReturn)
+                ? new MenuActivated(control.Focus.Label + ". " + MoviesReturn)
                 : new MenuActivated(control.Focus.Label);
         }
         if (scope.EventType == 2 && TryGetControlAtPosition(context, MovieCount + 1, out var back))

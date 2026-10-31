@@ -3,7 +3,24 @@ using ChronoTriggerAccessibility.Native.Memory;
 
 namespace ChronoTriggerAccessibility.Native.Capture;
 
-public sealed record BattleTargetsSnapshot(bool IsTargeting, IReadOnlyList<int> Slots);
+public sealed record BattleTargetsSnapshot(bool IsTargeting, IReadOnlyList<int> Slots)
+{
+    /// <summary>
+    /// The battlers offered for this selection: 44B770 resets the eleven cells at canvas 1A140 to
+    /// FF and 44B9C0 or a sibling builder fills them with present, eligible slots, which the
+    /// cursor (44B100/44B160) walks. Read only under the same proven targeting gates as
+    /// <see cref="Slots"/>; null when unreadable, malformed or changed between its two reads.
+    /// The committed slots stand either way.
+    /// </summary>
+    public IReadOnlyList<int>? CandidateSlots { get; init; }
+
+    /// <summary>
+    /// The enemy whose monster.txt line 44B390 can copy into the battle message label: only its
+    /// single-target branch, only a slot above 2, and only while the panel mode at canvas 19E90
+    /// (battle data 42F0) is the base command panel, which is an Attack. Null otherwise.
+    /// </summary>
+    public int? NameLabelSlot { get; init; }
+}
 
 /// <summary>Display-side target arrows and applied status effects. See battle-feedback-native-audit.md.</summary>
 public sealed class BattlePresentationCapture(IReadableMemory memory)
@@ -36,13 +53,39 @@ public sealed class BattlePresentationCapture(IReadableMemory memory)
             if (slot > 10 || slots.Contains((int)slot)) return null;
             slots.Add((int)slot);
         }
+        // The candidate cells and panel mode only add evidence. Both are read twice inside the
+        // gates rechecked below, and an unreadable or moving value withdraws just that evidence.
+        Span<byte> offered = stackalloc byte[44];
+        Span<byte> offeredAgain = stackalloc byte[44];
+        var hasOffered = memory.TryRead(canvas + 0x1A140, offered) &&
+            memory.TryRead(canvas + 0x1A140, offeredAgain) && offered.SequenceEqual(offeredAgain);
+        var hasMode = Word(canvas + 0x19E90, out var mode) && Word(canvas + 0x19E90, out var modeAgain) &&
+            mode == modeAgain;
         Span<byte> again = stackalloc byte[44];
         if (!Owner(image, menu, out var same) || same != canvas ||
             !Word(canvas + 0x19EEC, out var p2) || phase != p2 ||
             !Word(canvas + 0x19E78, out var a2) || actor != a2 ||
             !Word(canvas + 0x19F08, out var g2) || gate != g2 ||
             !memory.TryRead(canvas + 0x1ACD4, again) || !selected.SequenceEqual(again)) return null;
-        return new(true, slots.AsReadOnly());
+        return new(true, slots.AsReadOnly())
+        {
+            CandidateSlots = hasOffered ? Candidates(offered) : null,
+            NameLabelSlot = single && hasMode && mode == 0 && slots.Count == 1 && slots[0] > 2 ? slots[0] : null,
+        };
+    }
+
+    /// <summary>Present cells, in cursor order. A repeated or out-of-range slot is not a list 44B9C0 builds.</summary>
+    private static IReadOnlyList<int>? Candidates(ReadOnlySpan<byte> cells)
+    {
+        var slots = new List<int>(11);
+        for (var i = 0; i < 11; i++)
+        {
+            var slot = BinaryPrimitives.ReadUInt32LittleEndian(cells.Slice(i * 4, 4));
+            if ((slot & 0x80) != 0) continue;
+            if (slot > 10 || slots.Contains((int)slot)) return null;
+            slots.Add((int)slot);
+        }
+        return slots.AsReadOnly();
     }
 
     public string? ReadStatus(nuint image, nuint menu, int slot)

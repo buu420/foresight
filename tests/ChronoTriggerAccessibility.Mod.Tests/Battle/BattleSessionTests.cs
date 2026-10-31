@@ -11,6 +11,7 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Battle;
 public sealed class BattleSessionTests
 {
     private const uint Image = 0x400000, Canvas = 0x100000, Menu = 0x200000;
+    private const uint Label = 0x500000, Protocol = 0x510000, Getter = 0x520000;
 
     [Fact]
     public void NativeMemoryToKeyboardAndSpeechUsesTheSelectedMemberAndTheDisplayedHit()
@@ -72,18 +73,162 @@ public sealed class BattleSessionTests
     public void EnemyIdentityStaysWithItsNativeSlotWhenAnIdenticalEnemyIsRemoved()
     {
         var m = World(); var events = new List<AccessibilityEvent>();
-        m.U32(0x300100 + 0x32 * 4, 0x303000); m.U32(0x303000, 0x304000); m.U32(0x303004, 0x304030);
-        m.String(0x304018, "Blue Imp");
+        Monsters(m, 2, (1, "Blue Imp"));
         m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 5 * 4, 1);
-        m.U32(Canvas + 0x19EEC, 1); m.Bytes[Menu + 0x538] = 1;
-        for (uint i = 0; i < 11; i++) m.U32(Canvas + 0x1ACD4 + i * 4, 255);
-        m.U32(Canvas + 0x1ACD4, 5);
-        var runtime = new BattleRuntime(events.Add, new BattleKeyboard(_ => false, () => true), () => true, _ => { });
-        var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
+        Aim(m, [5], 3, 5); // 44B9C0 offered both identical enemies for this selection
+        var runtime = Runtime(events); var session = Session(m, runtime);
         session.Tick(Menu);
         Assert.Equal("Target. Blue Imp C.", Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
-        m.U32(Canvas + 0x1A018 + 3 * 4, uint.MaxValue); session.Tick(Menu);
+        m.U32(Canvas + 0x1A018 + 3 * 4, uint.MaxValue); Aim(m, [5], 5); session.Tick(Menu);
         Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null);
+        runtime.Handle(BattleCommand.Repeat);
+        Assert.Equal("Target. Blue Imp C.", Assert.Single(events.OfType<BattleInspectionRequested>()).Text);
+        Hit(m, session, 5, "9");
+        Assert.Equal("Blue Imp C takes 9 damage.", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+    }
+
+    [Fact]
+    public void AUniqueEnemyIsNotLetteredWhenAnUnusedSlotKeepsTheSameName()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 2, (1, "Blue Imp"));
+        // Slot 3 keeps a stale index for the same monster, but the game offers only slot 5.
+        m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 5 * 4, 1);
+        Aim(m, [5], 5);
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp.", Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
+        Hit(m, session, 5, "7");
+        Assert.Equal("Blue Imp takes 7 damage.", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+    }
+
+    [Fact]
+    public void AProvenLetterStaysWithItsSlotForLaterHitsAfterTheOtherEnemyFalls()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 2, (1, "Blue Imp"));
+        m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 5 * 4, 1);
+        Aim(m, [3], 3, 5);
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp A.", LastFocus(events));
+        // Blue Imp A falls. The next selection offers only C, which keeps the letter it was given.
+        m.U32(Canvas + 0x1A018 + 3 * 4, uint.MaxValue); Aim(m, [5], 5); session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp C.", LastFocus(events));
+        Hit(m, session, 5, "8");
+        Assert.Equal("Blue Imp C takes 8 damage.", LastFeedback(events));
+    }
+
+    [Fact]
+    public void ALetterEndsWhenItsSlotShowsAnotherNameOrANewBattleBegins()
+    {
+        const uint next = 0x210000; // a later battle's menu
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 3, (1, "Blue Imp"), (2, "Nu"));
+        m.U32(next, Image + 0x39D884); m.Bytes[next + 0x538] = 1;
+        m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 5 * 4, 1);
+        Aim(m, [5], 3, 5);
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp C.", LastFocus(events));
+        Aim(m, [5], 5);
+        m.U32(Canvas + 0x1A018 + 5 * 4, 2); session.Tick(Menu); Hit(m, session, 5, "6");
+        Assert.Equal("Target. Nu.", LastFocus(events));
+        Assert.Equal("Nu takes 6 damage.", LastFeedback(events));
+        // The same name returning to the slot is not proof of a duplicate on its own.
+        m.U32(Canvas + 0x1A018 + 5 * 4, 1); session.Tick(Menu); Hit(m, session, 5, "5");
+        Assert.Equal("Target. Blue Imp.", LastFocus(events));
+        Assert.Equal("Blue Imp takes 5 damage.", LastFeedback(events));
+        Aim(m, [5], 3, 5); session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp C.", LastFocus(events));
+        // A new battle owner starts without letters; slot 3's name is stale there.
+        Aim(m, [5], 5); session.Tick(next);
+        Assert.Equal("Target. Blue Imp.", LastFocus(events));
+        Aim(m, [5], 3, 5); session.Tick(next); session.Close(next);
+        Aim(m, [5], 5); session.Tick(next);
+        Assert.Equal("Target. Blue Imp.", LastFocus(events));
+    }
+
+    [Theory]
+    [InlineData("repeated")]
+    [InlineData("out-of-range")]
+    [InlineData("changing")]
+    public void WithoutStableCandidateEvidenceOnlyTheCommittedGroupProvesADuplicate(string kind)
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 2, (1, "Blue Imp"));
+        m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 5 * 4, 1);
+        void Corrupt()
+        {
+            if (kind == "repeated") m.U32(Canvas + 0x1A140 + 8, 5);
+            if (kind == "out-of-range") m.U32(Canvas + 0x1A140 + 8, 11);
+        }
+        if (kind == "changing")
+            m.BeforeRead = a => { if (a == Canvas + 0x1A140) m.U32(Canvas + 0x1A140, m.Word(Canvas + 0x1A140) == 3 ? 0x80u : 3u); };
+        Aim(m, [5], 3, 5); Corrupt();
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu);
+        Assert.Equal("Target. Blue Imp.", LastFocus(events));
+        // An all-enemies or area selection commits both, which proves them by itself.
+        Aim(m, [3, 5], 3, 5); Corrupt(); session.Tick(Menu);
+        Assert.Equal("Targets. Blue Imp A. Blue Imp C.", LastFocus(events));
+    }
+
+    [Fact]
+    public void ABonusMonsterIsNamedAndItsNativeAttackLabelIsNotSpokenAgain()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 0x17C, (0x11A, "Red Ghaj"));
+        m.U32(Canvas + 0x1A018 + 3 * 4, 0x11A);
+        Aim(m, [3], 3);
+        Show(m, "Red Ghaj"); // 44B390 -> 46ED80 -> 19940 type 0x0D, as in the 2026-10-30 log
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu); session.Message(Menu);
+        Assert.Equal("Target. Red Ghaj.", Assert.Single(events.OfType<BattleFocusChanged>(), e => e.Text is not null).Text);
+        Assert.Empty(events.OfType<BattleFeedbackPresented>());
+        // The label can outlast the selection; it is still the presentation already accounted for.
+        m.U32(Canvas + 0x19EEC, 0); session.Tick(Menu);
+        Assert.Empty(events.OfType<BattleFeedbackPresented>());
+        Show(m, "Flame strengthened!"); session.Tick(Menu);
+        Assert.Equal("Flame strengthened!", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+        // Outside the native Attack label the same text is ordinary battle text and is spoken.
+        Show(m, null); session.Tick(Menu); Show(m, "Red Ghaj"); session.Tick(Menu);
+        Assert.Equal("Red Ghaj", LastFeedback(events));
+    }
+
+    [Fact]
+    public void TheMessageHookSilencesOnlyTheExactNativeNameLabel()
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 2, (1, "Blue Imp"));
+        m.U32(Canvas + 0x1A018 + 4 * 4, 1);
+        Aim(m, [4], 4);
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu); // the label is not shown yet, so only the hook sees it
+        Show(m, "Blue Imp"); session.Message(Menu); session.Tick(Menu);
+        Assert.Empty(events.OfType<BattleFeedbackPresented>());
+        // 46ECD0's revealed-HP form (battle.txt line 0x30) is new information.
+        Show(m, "Blue Imp    120/300"); session.Message(Menu);
+        Assert.Equal("Blue Imp    120/300", Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
+    }
+
+    [Theory]
+    [InlineData("tech")]
+    [InlineData("group")]
+    [InlineData("ally")]
+    public void MatchingTextOutsideTheNativeAttackNameLabelIsStillSpoken(string kind)
+    {
+        var m = World(); var events = new List<AccessibilityEvent>();
+        Monsters(m, 2, (1, "Blue Imp"));
+        m.U32(Canvas + 0x1A018 + 3 * 4, 1); m.U32(Canvas + 0x1A018 + 4 * 4, 1);
+        var label = "Blue Imp";
+        if (kind == "tech") { m.U32(Canvas + 0x19E90, 1); m.U32(Menu + 0x6A8, 1); Aim(m, [3], 3, 4); }
+        else if (kind == "group") Aim(m, [3, 4], 3, 4);
+        else { Aim(m, [1], 0, 1); label = "Marle"; }
+        Show(m, label);
+        var runtime = Runtime(events); var session = Session(m, runtime);
+        session.Tick(Menu); session.Message(Menu);
+        Assert.Equal(label, Assert.Single(events.OfType<BattleFeedbackPresented>()).Text);
     }
 
     [Fact]
@@ -141,18 +286,78 @@ public sealed class BattleSessionTests
         return m;
     }
 
+    /// <summary>monster.txt as TextManager bank 0x32, with this many lines and these names.</summary>
+    private static void Monsters(Memory m, int lines, params (int Index, string Name)[] names)
+    {
+        m.U32(0x300100 + 0x32 * 4, 0x303000); m.U32(0x303000, 0x304000); m.U32(0x303004, 0x304000 + (uint)lines * 24);
+        foreach (var (index, name) in names) m.String(0x304000 + (uint)index * 24, name);
+    }
+
+    /// <summary>
+    /// A target selection: the phase gate, a drawn arrow, the committed cells and the candidate
+    /// cells that 44B770 resets to FF before 44B9C0 fills them.
+    /// </summary>
+    private static void Aim(Memory m, uint[] committed, params uint[] candidates)
+    {
+        m.U32(Canvas + 0x19EEC, 1); m.Bytes[Menu + 0x538] = 1;
+        for (uint i = 0; i < 11; i++)
+        {
+            m.U32(Canvas + 0x1ACD4 + i * 4, i < committed.Length ? committed[i] : 255);
+            m.U32(Canvas + 0x1A140 + i * 4, i < candidates.Length ? candidates[i] : 255);
+        }
+    }
+
+    /// <summary>The battle message label at menu + 0x234, showing this text, or hidden.</summary>
+    private static void Show(Memory m, string? text)
+    {
+        m.U32(Menu + 0x234, Label); m.U32(Label + 0x278, Protocol); m.U32(Protocol + 8, Getter);
+        m.Bytes[Getter] = 0x8D; m.Bytes[Getter + 1] = 0x41; m.Bytes[Getter + 2] = 0x28; m.Bytes[Getter + 3] = 0xC3;
+        m.Bytes[Label + 0x1AD] = (byte)(text is null ? 0 : 1);
+        if (text is not null) m.String(Label + 0x2A0, text);
+    }
+
+    /// <summary>One white damage popup (kind 3, result row 0) drawn once over this slot.</summary>
+    private static void Hit(Memory m, BattleSession session, int slot, string number)
+    {
+        m.U32(Canvas + 0x140AC + (uint)slot * 16, 3);
+        m.String(Menu + 0x34 + (uint)slot * 24, number); m.Bytes[Menu + 0x1B5 + (uint)slot] = 1;
+        session.Number(Menu, slot); session.Render(Menu);
+        m.Bytes[Menu + 0x1B5 + (uint)slot] = 0;
+    }
+
+    private static BattleRuntime Runtime(List<AccessibilityEvent> events) =>
+        new(events.Add, new BattleKeyboard(_ => false, () => true), () => true, _ => { });
+
+    private static BattleSession Session(Memory m, BattleRuntime runtime)
+    {
+        var session = new BattleSession(m, runtime, _ => { }); session.BindImageBase(Image);
+        return session;
+    }
+
+    private static string? LastFocus(List<AccessibilityEvent> events) =>
+        events.OfType<BattleFocusChanged>().Last(e => e.Text is not null).Text;
+
+    private static string LastFeedback(List<AccessibilityEvent> events) =>
+        events.OfType<BattleFeedbackPresented>().Last().Text;
+
     private sealed class Memory : IReadableMemory
     {
+        private uint heap = 0x600000;
         public byte[] Bytes { get; } = new byte[0x900000];
+        public Action<nuint>? BeforeRead { get; set; }
         public void U32(uint address, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(Bytes.AsSpan((int)address), value);
         public void U16(uint address, ushort value) => BinaryPrimitives.WriteUInt16LittleEndian(Bytes.AsSpan((int)address), value);
+        public uint Word(uint address) => BinaryPrimitives.ReadUInt32LittleEndian(Bytes.AsSpan((int)address));
         public void String(uint address, string value)
         {
-            var data = Encoding.UTF8.GetBytes(value); Assert.True(data.Length <= 15);
-            data.CopyTo(Bytes, (int)address); U32(address + 16, (uint)data.Length); U32(address + 20, 15);
+            var data = Encoding.UTF8.GetBytes(value);
+            if (data.Length <= 15) { data.CopyTo(Bytes, (int)address); U32(address + 20, 15); }
+            else { data.CopyTo(Bytes, (int)heap); U32(address, heap); U32(address + 20, (uint)data.Length); heap += 0x1000; }
+            U32(address + 16, (uint)data.Length);
         }
         public bool TryRead(nuint address, Span<byte> destination)
         {
+            BeforeRead?.Invoke(address);
             if (address == 0 || (ulong)address + (uint)destination.Length > (ulong)Bytes.Length) return false;
             Bytes.AsSpan((int)address, destination.Length).CopyTo(destination); return true;
         }

@@ -124,10 +124,21 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
     /// <summary>Playable character ids, which index the customised name table.</summary>
     public const int CharacterIdLimit = 7;
     /// <summary>
-    /// Name indices at or above this are markers rather than monsters: 0x430606 dispatches
-    /// 0xFC/0xFD/0xFE separately and 0x44B47C uses 0xFF as its "no name" argument.
+    /// Enemy name indices are monster ids. 0x4303E0 sets up 0xFC-0xFE (the three Shades) and the
+    /// ids above 0x103 (through its remap table at 0x398DA8) as real enemies, and 0x4193B0 type
+    /// 0x0D reads monster.txt at the raw id with no cutoff of its own. The supported monster.txt
+    /// has 0x17C lines in all nine shipped languages, one loaded entry per line (0x5B8E20):
+    /// 0xFB and 0x103 are blank, 0xFF-0x102 and 0x131-0x17B are placeholders ("Dummy",
+    /// "Factice", unused katakana names), and 0x104-0x130 are the bonus monsters, every one with
+    /// MonsterNameData flag 0. Ids below 0xFC are read as they always were; the Shade and bonus
+    /// ranges are trusted only on that verified layout, and placeholders are excluded by index
+    /// rather than by recognising their text.
     /// </summary>
-    public const int FirstReservedNameIndex = 0xFC;
+    public const int FirstShadeIndex = 0xFC;
+    public const int LastShadeIndex = 0xFE;
+    public const int FirstBonusMonsterIndex = 0x104;
+    public const int LastBonusMonsterIndex = 0x130;
+    public const int VerifiedMonsterLineCount = 0x17C;
     /// <summary>Battler slots: 0..2 party, 3..10 enemies.</summary>
     public const int BattlerLimit = 11;
     public const int FirstEnemyBattler = 3;
@@ -306,7 +317,8 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
     /// slots use the same name index the native popup path uses. It is deliberately <em>not</em> a
     /// roster: nothing here proves which enemy slots are occupied, so an unused slot may carry a
     /// stale name and the map must never be read out as a list. This capture preserves native
-    /// names; the presentation layer adds stable slot identities to actual targets and hits.
+    /// names; the session letters an enemy only when the game's own target candidates prove a
+    /// second current enemy with the same name.
     /// </summary>
     private Dictionary<int, string> ReadBattlerNames(nuint imageBase, nuint canvas)
     {
@@ -322,13 +334,12 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
 
         for (var battler = FirstEnemyBattler; battler < BattlerLimit; battler++)
         {
-            if (!Int32(canvas + EnemyNameIndexOffset + (nuint)(battler * 4), out var index) ||
-                index is < 0 or >= FirstReservedNameIndex)
+            if (!Int32(canvas + EnemyNameIndexOffset + (nuint)(battler * 4), out var index))
             {
                 continue;
             }
 
-            var name = Text(imageBase, MonsterBank, index);
+            var name = MonsterName(imageBase, index);
             if (name is not null)
             {
                 names[battler] = name;
@@ -337,6 +348,15 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
 
         return names;
     }
+
+    /// <summary>An enemy's monster.txt line, within the verified id ranges (see <see cref="FirstShadeIndex"/>).</summary>
+    private string? MonsterName(nuint imageBase, int index) => index switch
+    {
+        >= 0 and < FirstShadeIndex => Text(imageBase, MonsterBank, index),
+        (>= FirstShadeIndex and <= LastShadeIndex) or (>= FirstBonusMonsterIndex and <= LastBonusMonsterIndex) =>
+            Text(imageBase, MonsterBank, index, VerifiedMonsterLineCount),
+        _ => null,
+    };
 
     private (string? Identity, string? Text) ReadFocus(
         nuint imageBase, in BattleState state, IReadOnlyDictionary<int, string> names)
@@ -667,11 +687,13 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
     /// <summary>
     /// Resolves one loaded message. The default path walks the TextManager the game already
     /// populated, exactly as the native resolver at 0x1B9060 indexes it: a vector of bank
-    /// pointers, each a vector of 24-byte MSVC strings.
+    /// pointers, each a vector of 24-byte MSVC strings. A non-zero <paramref name="requiredLines"/>
+    /// requires the loaded bank to have exactly that many lines; only the loaded bank can prove
+    /// that, so an injected localizer is not consulted for such a read.
     /// </summary>
-    private string? Text(nuint imageBase, int bank, int index)
+    private string? Text(nuint imageBase, int bank, int index, int requiredLines = 0)
     {
-        if (localizedText is not null)
+        if (localizedText is not null && requiredLines == 0)
         {
             var injected = localizedText(bank, index);
             if (!string.IsNullOrWhiteSpace(injected))
@@ -684,7 +706,7 @@ public sealed class BattleCapture(IReadableMemory memory, Func<int, int, string?
             !Vector(manager, 4, MaximumBankCount, out var banks, out var bankCount) || bank >= bankCount ||
             !Pointer(banks + (nuint)(bank * 4), out var file) ||
             !Vector(file, MsvcStringReader.LayoutSize, MaximumLineCount, out var lines, out var lineCount) ||
-            index >= lineCount ||
+            index >= lineCount || (requiredLines != 0 && lineCount != requiredLines) ||
             !strings.TryRead(lines + (nuint)(index * MsvcStringReader.LayoutSize), out var text, out _) ||
             string.IsNullOrWhiteSpace(text))
         {

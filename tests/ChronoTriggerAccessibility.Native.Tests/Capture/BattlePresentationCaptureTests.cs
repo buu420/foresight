@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using ChronoTriggerAccessibility.Native.Capture;
 using ChronoTriggerAccessibility.Native.Tests.Support;
 using Xunit;
@@ -36,6 +37,85 @@ public sealed class BattlePresentationCaptureTests
         Assert.Equal([3,4,6], c.ReadTargets(Image, Menu)!.Slots);
         m.Word(Canvas + 0x1ACD8, 255);
         Assert.Equal([3], c.ReadTargets(Image, Menu)!.Slots);
+    }
+
+    [Fact]
+    public void ReportsTheFreshCandidateListTheCursorWalksBesideTheCommittedTarget()
+    {
+        // 44B770 resets the eleven cells to FF and 44B9C0 fills them with present, eligible
+        // battlers; 44B100/44B160 skip any cell whose low byte is negative.
+        var m = Memory().Word(Canvas + 0x1ACD4, 5).Add(Canvas + 0x1A140, Cells(5, 3, 0x80, 0x1FF, 9));
+        var targets = new BattlePresentationCapture(m).ReadTargets(Image, Menu)!;
+        Assert.Equal([5], targets.Slots);
+        Assert.Equal([5, 3, 9], targets.CandidateSlots!);
+    }
+
+    [Theory]
+    [InlineData(0x19EECu, 0u)] // not selecting a target
+    [InlineData(0x19F08u, 0x80u)] // 44B770 found nothing selectable
+    [InlineData(0x19E78u, 0xFFu)] // no acting party member
+    public void CandidatesAreOnlyReportedUnderTheProvenTargetingGates(uint offset, uint value)
+    {
+        var m = Memory().Word(Canvas + 0x1ACD4, 5).Add(Canvas + 0x1A140, Cells(5, 3)).Word(Canvas + offset, value);
+        Assert.Null(new BattlePresentationCapture(m).ReadTargets(Image, Menu)!.CandidateSlots);
+    }
+
+    [Fact]
+    public void CandidatesAreNotReportedWhileNoTargetArrowIsDrawn()
+    {
+        var m = Memory().Word(Canvas + 0x1ACD4, 5).Add(Canvas + 0x1A140, Cells(5, 3)).Byte(Menu + 0x538, 0);
+        Assert.Null(new BattlePresentationCapture(m).ReadTargets(Image, Menu)!.CandidateSlots);
+    }
+
+    [Theory]
+    [InlineData("unreadable")]
+    [InlineData("out-of-range")]
+    [InlineData("repeated")]
+    [InlineData("changing")]
+    public void UnprovenCandidatesAreIgnoredWhileTheCommittedTargetIsKept(string kind)
+    {
+        var m = Memory().Word(Canvas + 0x1ACD4, 5);
+        if (kind == "out-of-range") m.Add(Canvas + 0x1A140, Cells(5, 11));
+        if (kind == "repeated") m.Add(Canvas + 0x1A140, Cells(5, 3, 5));
+        if (kind == "changing")
+        {
+            m.Add(Canvas + 0x1A140, Cells(5, 3));
+            var reads = 0;
+            m.BeforeRead = a => { if (a == Canvas + 0x1A140 && ++reads == 2) m.Word(a + 4, 0xFF); };
+        }
+        var targets = new BattlePresentationCapture(m).ReadTargets(Image, Menu)!;
+        Assert.Equal([5], targets.Slots);
+        Assert.Null(targets.CandidateSlots);
+    }
+
+    [Fact]
+    public void OnlyASingleEnemyTargetDuringAnAttackCanCarryTheNativeNameLabel()
+    {
+        // 44B390 writes the name label from its single-target branch, for slots above 2, when
+        // the panel mode (battle data 42F0, canvas 19E90) is the base command panel.
+        var m = Memory().Word(Canvas + 0x1ACD4, 5).Word(Canvas + 0x19E90, 0);
+        var c = new BattlePresentationCapture(m);
+        Assert.Equal(5, c.ReadTargets(Image, Menu)!.NameLabelSlot);
+        m.Word(Canvas + 0x19E90, 1);
+        Assert.Null(c.ReadTargets(Image, Menu)!.NameLabelSlot);
+        m.Word(Canvas + 0x19E90, 0).Word(Canvas + 0x1ACD8, 6);
+        Assert.Null(c.ReadTargets(Image, Menu)!.NameLabelSlot);
+        m.Word(Canvas + 0x1ACD8, 0xFF).Word(Canvas + 0x1ACD4, 1);
+        Assert.Null(c.ReadTargets(Image, Menu)!.NameLabelSlot);
+    }
+
+    [Fact]
+    public void AnUnreadableOrChangingPanelModeProvesNoNameLabelButKeepsTheTarget()
+    {
+        var m = Memory().Word(Canvas + 0x1ACD4, 5);
+        var c = new BattlePresentationCapture(m);
+        Assert.Null(c.ReadTargets(Image, Menu)!.NameLabelSlot);
+        m.Word(Canvas + 0x19E90, 0);
+        var reads = 0;
+        m.BeforeRead = a => { if (a == Canvas + 0x19E90 && ++reads == 2) m.Word(a, 1); };
+        var targets = c.ReadTargets(Image, Menu)!;
+        Assert.Equal([5], targets.Slots);
+        Assert.Null(targets.NameLabelSlot);
     }
 
     [Fact]
@@ -87,5 +167,14 @@ public sealed class BattlePresentationCaptureTests
         var reads = 0;
         m.BeforeRead = a => { if (a == Image + 0x41B4C4 && ++reads == 2) m.Word(a, 0); };
         Assert.Null(c.ReadStatus(Image, Menu, 0));
+    }
+
+    /// <summary>Eleven candidate cells, with the FF 44B770 leaves in every cell not given.</summary>
+    private static byte[] Cells(params uint[] values)
+    {
+        var cells = new byte[44];
+        for (var i = 0; i < 11; i++)
+            BinaryPrimitives.WriteUInt32LittleEndian(cells.AsSpan(i * 4), i < values.Length ? values[i] : 0xFF);
+        return cells;
     }
 }

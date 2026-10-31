@@ -49,6 +49,7 @@ public sealed class PresentVortexNavigationTests
 
     public static IEnumerable<object[]> FirstRouteCases=>new[]{
         ("capture-1842","script-region:8:610:11:6:12:7"),
+        ("capture-0388-681","script-region:8:610:11:6:12:7"),("capture-0388-1785","script-region:8:610:11:6:12:7"),
         ("608-left","script-region:8:610:11:6:12:7"),("608-near-left","script-region:8:610:11:6:12:7"),
         ("610-entry","exit:1"),("614-entry","exit:1"),("615-entry","script-region:8:608:13:2:14:2"),
         ("608-switch-ledge",FirstSwitch)}.SelectMany(p=>new[]{new object[]{p.Item1,p.Item2,false},new object[]{p.Item1,p.Item2,true}});
@@ -141,6 +142,7 @@ public sealed class PresentVortexNavigationTests
 
     public static IEnumerable<object[]> WalkingCases=>new[]{
         ("capture-1842","script-region:8:610:11:6:12:7",11,6,12,7),
+        ("capture-0388-681","script-region:8:610:11:6:12:7",11,6,12,7),("capture-0388-1785","script-region:8:610:11:6:12:7",11,6,12,7),
         ("capture-2900","exit:1",23,63,26,63),
         ("608-left","script-region:8:610:11:6:12:7",11,6,12,7),
         ("610-entry","exit:1",61,23,61,23),("614-entry","exit:1",23,63,26,63),

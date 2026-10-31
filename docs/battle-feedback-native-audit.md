@@ -123,3 +123,7 @@ Version 0.3.17 was built from commit `72803f41fd7596ef0d061277a5e3e8713e8845df` 
 - Installed Mod DLL SHA256: `9268D0EEE683832ECF5D5047F9E65F8554BE5D6157965BB7B1CF828737159B23`.
 - Installed manifest SHA256: `CE8A15AECDA59894EC841CAE64FD2936DE0707832BF0401BDC5BE64FAD09E743`.
 - Real battle execution remains unverified; no game input was sent during this release.
+
+## 0.3.88 correction: enemy names, letters and the target-name label
+
+Monster ids `0xFC`-`0xFE` and `0x104`-`0x130` are real enemies with public names, so they are now named. Letters mark only enemies the game's current target candidates prove share a name. For a single enemy Attack target, the label `0x44B390` writes is not spoken again when it is exactly the name the target focus already gave. The revealed-HP form and every other message are still spoken. The evidence and rules are in [battle-interface-native-audit.md §18](battle-interface-native-audit.md#18-correction-0388-monster-ids-current-candidates-and-the-attack-name-label).

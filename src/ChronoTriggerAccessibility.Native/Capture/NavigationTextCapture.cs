@@ -48,6 +48,7 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
     {
         try
         {
+            if (scene >= 512) return BonusFieldName(imageBase, scene);
             if (scene is <= 0 or >= 496 || !Word(imageBase + 0x41C3D8u, out var manager)) return null;
             if (fieldManager != manager || fieldBank < 0)
             {
@@ -68,6 +69,48 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
         catch { return null; }
     }
 
+    // 0B1D10 uses the unpacked MapMsgDataTable and loaded map.txt bank for
+    // bonus maps. The debug-map bank used above ends at scene 495.
+    private string? BonusFieldName(nuint image, int scene)
+    {
+        if (scene > 668 || !Word(image + 0x41B4C4u, out var canvas) ||
+            !Word(canvas + 0x120C0u, out var current) || current != (nuint)scene ||
+            !Word(canvas + 0xFE28u, out var table) || !Word(canvas + 0xFE2Cu, out var count) ||
+            count > 669 || (nuint)scene >= count ||
+            !Word(table + (nuint)(scene * 4), out var record) || !Word(record + 4, out var number) || number == 255 ||
+            !Word(image + 0x41C3D8u, out var manager)) return null;
+        // A reused base-area name (currently bonus scene634) still follows the
+        // native discovery bit. Read the localized unknown row, never reveal it.
+        var discoveryMask = number switch { 30 => 1, 45 => 0x20, 51 => 2, 77 => 8, 85 => 0x10, 93 => 4, _ => 0 };
+        byte discovery = 0;
+        if (discoveryMask != 0 && !Byte(canvas + 0x688Cu, out discovery)) return null;
+        var index = discoveryMask != 0 && (discovery & discoveryMask) == 0 ? 93 : checked((int)number - 1);
+        var text = Message(manager, 0x22, index);
+        // Native keys are named (e.g. MSG_FIELD_MENU_36), not the numeric
+        // one-based row number stored in MapMsgDataTable.
+        var comma = text?.IndexOf(',') ?? -1;
+        if (text is null || !text.StartsWith("MSG_FIELD_", StringComparison.Ordinal) || comma <= 10 ||
+            text[..comma].Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_')) return null;
+        text = text[(comma + 1)..].Replace("\\", string.Empty, StringComparison.Ordinal);
+        foreach (var (token, character) in new[] { ("<NAME_CRO>", 0), ("<NAME_LUC>", 2), ("<NAME_MAG>", 6) })
+        {
+            if (!text.Contains(token, StringComparison.Ordinal)) continue;
+            var name = CharacterName(image, character);
+            if (name is null) return null;
+            text = text.Replace(token, name, StringComparison.Ordinal);
+        }
+        if (string.IsNullOrWhiteSpace(text) || text.Contains('<') || text.Contains('>') ||
+            !Word(image + 0x41B4C4u, out var owner2) || canvas != owner2 ||
+            !Word(canvas + 0x120C0u, out var scene2) || current != scene2 ||
+            !Word(canvas + 0xFE28u, out var table2) || table != table2 ||
+            !Word(canvas + 0xFE2Cu, out var count2) || count != count2 ||
+            !Word(table + (nuint)(scene * 4), out var record2) || record != record2 ||
+            !Word(record + 4, out var number2) || number != number2 ||
+            !Word(image + 0x41C3D8u, out var manager2) || manager != manager2 ||
+            (discoveryMask != 0 && (!Byte(canvas + 0x688Cu, out var discovery2) || discovery != discovery2))) return null;
+        return text.Trim();
+    }
+
     // 1B9060 indexes a vector of pointers to vectors of 24-byte MSVC strings.
     private string? Message(nuint manager, int bank, int index)
     {
@@ -76,6 +119,7 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
             !Vector(file, 24, 16384, out var lines, out var lineCount) || index >= lineCount ||
             !new MsvcStringReader(memory).TryRead(lines + (nuint)(index * 24), out var text, out _) ||
             !Vector(manager, 4, 256, out var banksAgain, out var bankCountAgain) || banks != banksAgain || bankCount != bankCountAgain ||
+            !Word(banks + (nuint)(bank * 4), out var fileAgain) || file != fileAgain ||
             !Vector(file, 24, 16384, out var linesAgain, out var lineCountAgain) || lines != linesAgain || lineCount != lineCountAgain)
             return null;
         return text;
@@ -94,5 +138,12 @@ public sealed class NavigationTextCapture(IReadableMemory memory)
         value = 0; Span<byte> bytes = stackalloc byte[4];
         if (address == 0 || (ulong)address + 3 > uint.MaxValue || !memory.TryRead(address, bytes)) return false;
         value = BinaryPrimitives.ReadUInt32LittleEndian(bytes); return value != 0;
+    }
+
+    private bool Byte(nuint address, out byte value)
+    {
+        value = 0; Span<byte> bytes = stackalloc byte[1];
+        if (address == 0 || (ulong)address > uint.MaxValue || !memory.TryRead(address, bytes)) return false;
+        value = bytes[0]; return true;
     }
 }

@@ -410,19 +410,69 @@ public sealed class BattleCaptureTests
         Assert.Equal("Nu", names[7]);
     }
 
-    [Fact]
-    public void ReservedNameIndicesAreNotTurnedIntoMonsterNames()
+    [Theory]
+    [InlineData(0xFC, "Steel Shade")]
+    [InlineData(0xFE, "Crimson Shade")]
+    [InlineData(0x104, "Exile")]
+    [InlineData(0x11A, "Red Ghaj")]
+    [InlineData(0x130, "Magus Statue")]
+    public void ShadeAndBonusMonsterIndicesUseTheNameTheGameDraws(int index, string name)
     {
+        // 0x4303E0 sets these ids up as real enemies and 0x4193B0 type 0x0D reads monster.txt at
+        // the raw id. The 2026-10-30 log announced "Enemy A" for Red Ghaj, id 0x11A.
         var world = World();
-        world.Int32(Canvas + 0x1A018 + 3 * 4, 0xFF); // the native "no name" marker
-        world.Int32(Canvas + 0x1A018 + 4 * 4, 0xFC);
-        world.Message(0x32, 0xFF, "not a monster");
-        world.Message(0x32, 0xFC, "not a monster either");
+        world.Message(0x32, index, name);
+        world.Lines(0x32, 0x17C); // the supported monster.txt in every shipped language
+        world.Int32(Canvas + 0x1A018 + 4 * 4, index);
 
         var names = new BattleCapture(world).Capture(ImageBase, ClassicMenu)!.BattlerNames;
 
-        Assert.False(names.ContainsKey(3));
+        Assert.Equal(name, names.GetValueOrDefault(4));
+    }
+
+    [Theory]
+    [InlineData(0xFF, "Dummy")]
+    [InlineData(0x102, "Factice")]
+    [InlineData(0x103, "")]
+    [InlineData(0x131, "アナトミー")]
+    [InlineData(0x17B, "Dummy")]
+    [InlineData(0x17C, "Dummy")]
+    public void PlaceholderMonsterIndicesStayUnnamedWhateverTheirText(int index, string text)
+    {
+        // The placeholders read "Dummy" in English, "Factice" in French and unused katakana names
+        // in Japanese, so only their index can identify them. 0x17C is past the bank.
+        var world = World();
+        world.Message(0x32, index, text);
+        world.Lines(0x32, 0x17C);
+        world.Int32(Canvas + 0x1A018 + 5 * 4, index);
+
+        var names = new BattleCapture(world).Capture(ImageBase, ClassicMenu)!.BattlerNames;
+
+        Assert.False(names.ContainsKey(5));
+    }
+
+    [Theory]
+    [InlineData(0x17B)]
+    [InlineData(0x17D)]
+    [InlineData(0x200)]
+    public void TheShadeAndBonusRangesNeedTheVerifiedMonsterBankLength(int lines)
+    {
+        var world = World();
+        world.Message(0x32, 0x0C, "Blue Imp");
+        world.Message(0x32, 0xFC, "Steel Shade");
+        world.Message(0x32, 0x105, "Slate Imp");
+        world.Lines(0x32, lines);
+        world.Int32(Canvas + 0x1A018 + 3 * 4, 0x0C);
+        world.Int32(Canvas + 0x1A018 + 4 * 4, 0xFC);
+        world.Int32(Canvas + 0x1A018 + 5 * 4, 0x105);
+
+        var names = new BattleCapture(world).Capture(ImageBase, ClassicMenu)!.BattlerNames;
+
+        // A layout that is not the verified one keeps the long-standing names but cannot prove
+        // where its Shades, bonus monsters and placeholders are.
+        Assert.Equal("Blue Imp", names[3]);
         Assert.False(names.ContainsKey(4));
+        Assert.False(names.ContainsKey(5));
     }
 
     [Fact]
@@ -678,6 +728,15 @@ public sealed class BattleCaptureTests
             }
 
             Write(Read(file) + (nuint)(index * 24), MsvcString(text));
+        }
+
+        /// <summary>Sets how many lines the loaded bank vector holds, as 0x5B8E20 sizes it from its file.</summary>
+        public void Lines(int bank, int count)
+        {
+            Assert.InRange(count, 0, 0x200);
+            if (!banks.ContainsKey(bank)) Message(bank, 0, string.Empty);
+            var file = banks[bank];
+            Pointer(file + 4, Read(file) + (nuint)(count * 24));
         }
 
         public bool TryRead(nuint address, Span<byte> destination)

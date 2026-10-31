@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "visualEvidence": "Local sequential timestamped frames0050..36s(1s),0080..69s(3s),60..104s(1s),104..127s(1s),127..153s(1s), full-resolution83.5s and gap/doorway sheets. Descript could not render footage and is not visual evidence. Review corrections remove unseen third rider and doorway woman, uncertain eye/smile, retime subjects until visible, add visible crowned man/kneeling/armored watcher. No named identity inferred for the watcher.",
+  "voice": "Existing approved Fish voice; private reference and key excluded.",
+  "movies": [
+    {
+      "movie": "005",
+      "duration_seconds": 38.0713,
+      "cues": [
+        {
+          "id": "movie-005-1",
+          "start": 4.1,
+          "end": 7.25,
+          "text": "Three winged reptiles wait on a sunset cliff."
+        },
+        {
+          "id": "movie-005-2",
+          "start": 7.3,
+          "end": 9.5,
+          "text": "The blonde woman climbs aboard."
+        },
+        {
+          "id": "movie-005-3",
+          "start": 9.7,
+          "end": 12,
+          "text": "The boy mounts another."
+        },
+        {
+          "id": "movie-005-4",
+          "start": 12.3,
+          "end": 16.6,
+          "text": "She strokes its crest."
+        },
+        {
+          "id": "movie-005-5",
+          "start": 17.3,
+          "end": 22,
+          "text": "The reptile spreads its wings and launches from the cliff."
+        },
+        {
+          "id": "movie-005-6",
+          "start": 22.2,
+          "end": 26.5,
+          "text": "They glide above a winding canyon."
+        },
+        {
+          "id": "movie-005-7",
+          "start": 27,
+          "end": 30.7,
+          "text": "The boy grips his mount's crest."
+        },
+        {
+          "id": "movie-005-8",
+          "start": 31,
+          "end": 35.5,
+          "text": "Three winged reptiles soar toward the spires."
+        }
+      ]
+    },
+    {
+      "movie": "008",
+      "duration_seconds": 159.893,
+      "cues": [
+        {
+          "id": "movie-008-1",
+          "start": 9,
+          "end": 14,
+          "text": "Townspeople gather along a street."
+        },
+        {
+          "id": "movie-008-2",
+          "start": 17.5,
+          "end": 23.5,
+          "text": "Inside, a crowd lines a red carpet. A bride and groom emerge."
+        },
+        {
+          "id": "movie-008-3",
+          "start": 24,
+          "end": 31.5,
+          "text": "The red-haired groom and blonde bride walk arm in arm, smiling at the crowd."
+        },
+        {
+          "id": "movie-008-4",
+          "start": 38.5,
+          "end": 44.7,
+          "text": "By a fire, the blonde woman in furs holds out her hand."
+        },
+        {
+          "id": "movie-008-5",
+          "start": 47,
+          "end": 51,
+          "text": "The young man presents a red-stoned ring."
+        },
+        {
+          "id": "movie-008-6",
+          "start": 51.2,
+          "end": 54.4,
+          "text": "She raises both fists and cheers."
+        },
+        {
+          "id": "movie-008-7",
+          "start": 55.5,
+          "end": 61.8,
+          "text": "In a red and gold hall, guards raise crossed swords."
+        },
+        {
+          "id": "movie-008-17",
+          "start": 64.6,
+          "end": 68.0,
+          "text": "A white-bearded, crowned man holds a sword."
+        },
+        {
+          "id": "movie-008-18",
+          "start": 68.3,
+          "end": 72.2,
+          "text": "The swordsman kneels, then stands."
+        },
+        {
+          "id": "movie-008-8",
+          "start": 73.3,
+          "end": 78.2,
+          "text": "The green-haired swordsman walks between the guards."
+        },
+        {
+          "id": "movie-008-19",
+          "start": 82.2,
+          "end": 85.9,
+          "text": "An armored man watches from behind a pillar."
+        },
+        {
+          "id": "movie-008-9",
+          "start": 86.0,
+          "end": 90.4,
+          "text": "He passes through the stone archway and walks toward the setting sun."
+        },
+        {
+          "id": "movie-008-10",
+          "start": 92.0,
+          "end": 95.4,
+          "text": "The bride closes her eyes as the couple kiss."
+        },
+        {
+          "id": "movie-008-11",
+          "start": 99.0,
+          "end": 103.4,
+          "text": "The bride rests her head on the groom's shoulder."
+        },
+        {
+          "id": "movie-008-12",
+          "start": 108.0,
+          "end": 112.0,
+          "text": "The crowd waves at the couple in the doorway."
+        },
+        {
+          "id": "movie-008-13",
+          "start": 118,
+          "end": 125.5,
+          "text": "The couple smile. Flowers, white doves and balloons rise into the sky."
+        },
+        {
+          "id": "movie-008-14",
+          "start": 134.7,
+          "end": 140.0,
+          "text": "In a forest, a bespectacled girl and a small robot run forward."
+        },
+        {
+          "id": "movie-008-15",
+          "start": 141.0,
+          "end": 147.6,
+          "text": "Green light shines over a baby in the grass. A blue pendant rests on its chest."
+        },
+        {
+          "id": "movie-008-16",
+          "start": 147.7,
+          "end": 153.5,
+          "text": "The girl smiles and lifts the bundled baby into her arms."
+        }
+      ]
+    }
+  ]
+}

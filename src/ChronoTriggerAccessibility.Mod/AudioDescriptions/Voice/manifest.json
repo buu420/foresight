@@ -1242,6 +1242,15 @@
       "samples": 1248446
     },
     {
+      "movie": "005.dat",
+      "decodedSha256": "8c78387e529cdbe1fb5bfc65374a4ecfc2a6891b0986d984c2a598549d996f5a",
+      "resource": "movie-narration-005.wav",
+      "sha256": "f2192df320f312f7f16e0439a2eb2700e4ad43ebc806b8e664fca29480796594",
+      "bytes": 1827466,
+      "sampleRate": 24000,
+      "samples": 913711
+    },
+    {
       "movie": "006.dat",
       "decodedSha256": "95f627afe3da97d9924cd96349329f1c0f488adef1d2bab4d5f36a0481782509",
       "resource": "movie-narration-006.wav",
@@ -1267,6 +1276,15 @@
       "bytes": 2596234,
       "sampleRate": 24000,
       "samples": 1298095
+    },
+    {
+      "movie": "008.dat",
+      "decodedSha256": "4dad7b7e5ee63b776e88a3f862abbce20ccf08b0d8267b321bb8b5becc8a054d",
+      "resource": "movie-narration-008.wav",
+      "sha256": "20dafc6a572eb543b2759f4495c529adcb9448b81043735f554283180504654d",
+      "bytes": 7674908,
+      "sampleRate": 24000,
+      "samples": 3837432
     }
   ]
 }

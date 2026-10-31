@@ -26,6 +26,14 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
 
     public bool IsActive { get { lock (gate) return currentOwner != 0; } }
 
+    // A native message hook can precede the next HUD observation. Only a focus
+    // already published in the foreground can replace that visible message.
+    internal bool HasPresentedFocus(nuint owner, string identity)
+    {
+        lock (gate) return owner != 0 && currentOwner == owner && wasForeground && foreground() &&
+            lastFocus.Identity == identity && !string.IsNullOrWhiteSpace(lastFocus.Text);
+    }
+
     public void Observe(nuint owner, BattleFrame? frame)
     {
         if (owner == 0) return;
@@ -156,7 +164,9 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
         }
     }
 
-    public void Message(nuint owner, string? text)
+    // A message the session proved repeats speech already given (speak: false) still becomes the
+    // displayed one, so later frames of that same presentation stay silent until it is replaced.
+    public void Message(nuint owner, string? text, bool speak = true)
     {
         lock (gate)
         {
@@ -164,7 +174,7 @@ public sealed class BattleRuntime(Action<AccessibilityEvent> publish, BattleKeyb
             text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             if (text == lastMessage) return;
             lastMessage = text;
-            if (foreground() && text is not null) { EnsureAnnounced(); Feedback(text); }
+            if (speak && foreground() && text is not null) { EnsureAnnounced(); Feedback(text); }
         }
     }
 

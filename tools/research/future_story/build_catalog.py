@@ -33,8 +33,8 @@ def build(game):
         info = scene_info(scene)
         # Preserve map connections even for unused scenes with missing scripts.
         name_index = struct.unpack_from('<H', name_table, 6 + scene * 4)[0]
-        displayed_name = map_names[name_index-1] if 0 < name_index <= len(map_names) else None
-        entry = dict(Id=scene, Name=clean_name(info['name']) or clean_name(displayed_name),
+        displayed_name = map_names[name_index-1] if 0 < name_index <= len(map_names) and name_index != 255 else None
+        entry = dict(Id=scene, Name=clean_name(info['name']) or clean_name(displayed_name, native=True),
                      Exits=[dict(Id=e['id'], Destination=e['destination'], X=e['arrival'][0], Y=e['arrival'][1])
                             for e in info['exits']], Actors=[], Regions=[])
         try:
@@ -122,10 +122,12 @@ def build(game):
                 ExtractionWarnings=incomplete, MissingScripts=skipped), skipped
 
 
-def clean_name(value):
+def clean_name(value, native=False):
     if not value or value.startswith(('(Unused)', '(Event)', 'Map Not Specified', '???')):
         return None
-    return value.replace('\\', ', ').replace('->', 'to').replace('Ventillation', 'Ventilation')
+    # map.txt uses a soft line break, not a punctuation separator. Debug map
+    # titles above retain their floor/section separator.
+    return value.replace('\\', '' if native else ', ').replace('->', 'to').replace('Ventillation', 'Ventilation')
 
 
 def main():

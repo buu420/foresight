@@ -13,8 +13,21 @@ public sealed class MovieNarrationResourceTests : IDisposable
     public void ShippedCinemaMastersIncludeEpochAndEndNoLaterThanTheirMovies()
     {
         var tracks = MovieNarrationPack.Load();
-        Assert.Equal(["002.dat", "003.dat", "004.dat", "006.dat", "007.dat", "007-en.dat"], tracks.Select(track => track.Movie.FileName));
+        Assert.Equal(["002.dat", "003.dat", "004.dat", "005.dat", "006.dat", "007.dat", "007-en.dat", "008.dat"], tracks.Select(track => track.Movie.FileName));
         Assert.All(tracks, track => Assert.True(track.Samples / (double)track.SampleRate <= track.Movie.DurationSeconds));
+    }
+
+    [Theory]
+    [InlineData("005.dat", "8C78387E529CDBE1FB5BFC65374A4ECFC2A6891B0986D984C2A598549D996F5A", 24280981, 38.0713)]
+    [InlineData("008.dat", "4DAD7B7E5EE63B776E88A3F862ABBCE20CCF08B0D8267B321BB8B5BECC8A054D", 102062569, 159.893)]
+    public void NewlyDescribedFilmsKeepTheirExactOriginalIdentityAndFullLengthMaster(string file, string hash, int bytes, double duration)
+    {
+        var track = Assert.Single(MovieNarrationPack.Load(), track => track.Movie.FileName == file);
+        Assert.Equal(hash, track.Movie.DecodedSha256);
+        Assert.Equal(bytes, track.Movie.DecodedBytes);
+        Assert.Equal(duration, track.Movie.DurationSeconds);
+        Assert.Equal((int)(duration * 24000), track.Samples);
+        Assert.Equal(24000, track.SampleRate);
     }
 
     [Theory]

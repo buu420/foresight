@@ -1,8 +1,9 @@
 # Battle interface — native audit
 
 A bounded map of where the PC battle UI can be observed. This is a chronological research log;
-sections 15-16 correct earlier findings. Section 17 describes final integration. Research used
-the closed game's executable; no live battle capture or game control was performed.
+sections 15-16 correct earlier findings. Section 17 describes final integration. Section 18
+corrects the monster id cutoff and the enemy letters (0.3.88). Research used the closed game's
+executable; no live battle capture or game control was performed.
 
 * Executable `8FE9D75E4CDC279645C5BC932FC163FD67147255FC0C673AC45BBF0A6D2E00D7`, image base
   `0x400000`. Every address below is an RVA against that base.
@@ -833,6 +834,8 @@ root's presentation capture, which bounds the actor to 0-2.
 
 ### 16.2 Enemy names are a lookup table, not an enumeration
 
+> **The `0xFC` cutoff below is withdrawn by §18.1.** The lookup-table rule still holds.
+
 `BattlerNames` no longer letters identical enemies. Nothing in the battle module proves which enemy
 slots are occupied - `0x44B470` only ever names the single committed recipient, and only for
 battler >= 3 - so an unused slot can carry a stale or zero index that still resolves to a real
@@ -858,6 +861,72 @@ committed, built for packaging or deployed.
 
 Sections 14-16 record intermediate work, not earlier installed releases. Their test totals describe those review points. The integrated implementation is documented in [battle-feedback-native-audit.md](battle-feedback-native-audit.md).
 
+> **Letters are superseded by §18.2:** they now mark only duplicates the game's current candidates prove.
+
 Native capture returns raw names keyed by native slot. BattleSession adds a fixed A-H identity for enemy slots only when presenting a committed target or popup. These letters replace spatial sprite distinctions and never depend on inferred occupancy or a duplicate-name count; a lone enemy can have letter A. The lookup is never announced as a roster. A missing name falls back per target, preserving the remaining group's names. Applied status and renderer-backed group membership come from BattlePresentationCapture rather than the old single-target fallback. The HUD Status placeholder is decorated there.
 
 Version 0.3.17 includes the battle runtime, foreground hotkeys, six native hooks, and navigation/footstep lifetime integration. Read the release evidence in the companion audit for final test/deployment status. Live battle timing and coverage remain unverified.
+
+## 18. Correction (0.3.88): monster ids, current candidates and the Attack name label
+
+Static analysis of the same executable (`8FE9D75E…`) and resource archive (`09914BF4…`) through the
+retained `artifacts/research/engine-0332` corpus. No game was run.
+
+### 18.1 Monster ids above 0xFB
+
+§16.2 misread the evidence. `0x430606` lies in `0x4303E0`, the enemy action setup, not the name
+path. That routine treats name indices `0xFC`-`0xFE` (Steel, Alabaster and Crimson Shade) as real
+enemies, and remaps every id above `0x103` through the table at `0x398DA8`. The `0xFF` at
+`0x44B47C` is the "draw no label" argument to `0x46EDE0`. `0x4193B0` type `0x0D` reads
+`monster.txt` at the raw id, bounded only by the bank (`0x5B9060`).
+
+`monster.txt` has `0x17C` lines in all nine shipped languages; `0x5B8E20` keeps one entry per
+line. `0xFB` and `0x103` are blank. `0xFF`-`0x102` and `0x131`-`0x17B` are placeholders: "Dummy",
+French "Factice", and unused katakana names in Japanese, Korean and Chinese. `0x104`-`0x130` are the
+bonus monsters. `MonsterNameData.dat` is 0 for every Shade and bonus id, so the game labels them.
+
+`BattleCapture` reads ids below `0xFC` as before. It reads `0xFC`-`0xFE` and `0x104`-`0x130` only
+from a loaded bank of exactly `0x17C` lines, and names no other id. Placeholders are excluded by
+index, never by their text.
+
+### 18.2 Current targets and enemy letters
+
+At every selection `0x44B770` resets twelve dwords each at `canvas + 0x1A140` (candidates),
+`0x1ACD4` (committed) and `0x1AEB8` (touch) to `0xFF`. `0x44B9C0` or a sibling builder fills the
+candidates with slots that are present (`0x19FA0`) and pass three more checks. Area builders
+(`0x44D4C0`) replace them with the area group, and `0x44C550` commits a group. The cursor
+(`0x44B100`/`0x44B160`) walks only these cells. A failed build sets `0x19F08` to `0x80`, and
+`0x44BD20` can leave a stale cell under that flag.
+
+`BattlePresentationCapture.CandidateSlots` is read twice, only behind the committed-target gates:
+phase, actor, the invalid flag and a drawn arrow. A repeated slot or one above 10 rejects it, and
+the committed slots are reported either way. `ReadBattlerNames` is still not a roster.
+
+`BattleSession` letters an enemy (A-H for slots 3-10) only when another current candidate or
+committed enemy has the same native name. A proven (slot, name) keeps its letter for the rest of
+the battle, so damage for the survivor matches targeting. The letter ends when that slot shows a
+different name, and all letters clear on a new menu owner, close or disable. A unique enemy has no
+letter even if an unused slot repeats its name. "Enemy A"-"Enemy H" remains the fallback for an
+unreadable name. Enemy labels are part of the target focus identity, so a letter proven a frame
+late is announced.
+
+### 18.3 The Attack name label
+
+`0x44B390` draws the arrows. In its single-target branch, for slot 3 or more and while the panel
+mode byte (battle data `0x42F0`, `canvas + 0x19E90`) is zero, meaning an Attack, it passes the
+name index to `0x46ED80`. That routine checks `0x46EDE0`, which allows one label per change of slot,
+then calls `0x19940` type `0x0D`, which writes the unchanged name into the label at `menu + 0x234`.
+In the HP-reveal state (`0x1A20C`/`0x1A1E0`) it calls `0x46ECD0` instead, which shows `battle.txt`
+line `0x30`, `<NAME_MON>    <NUMBER>/<NUMBER>`. Flagged names pass `0xFF` and draw nothing. The
+2026-10-30 log shows the old result for Red Ghaj (`0x11A`): "Target. Enemy A." then "Red Ghaj".
+
+The target focus already speaks the name, so `NameLabelSlot` marks this branch. The session then
+treats exactly that raw name as already spoken, on both the HUD tick and the `0x19940` hook. A
+silenced label stays the current presentation until hidden or replaced. The HP-reveal form, all
+other text, and matching text during Tech or Item targeting, groups or allies are still spoken.
+Suppression also requires the matching target focus to have already been published in the
+foreground for this battle owner. A name popup received before the next HUD refresh remains
+readable when quick Confirm ends targeting before that refresh. BattleSpeechOrderingTests
+reproduces this lost-information case and verifies the additional focus check.
+
+Offline fixtures only. Live timing, the touch interface and every target type remain unverified.
