@@ -84,3 +84,10 @@ catalog/runtime as supported by reviewed clips; focused movie/story tests/docs.
 - Partial Opus review found an unproven third rider; corrected to visible winged reptiles. Unproven eye/smile and doorway-person claims removed. Native frame review also corrected cue starts and added a crowned man, kneeling/standing and an armor-clad watcher. Final27 clips pass ASR, clipping, format, windows and exact silence/placement; 177 previous recordings unchanged.
 - Root reproduced loss of a native enemy-name popup before a HUD refresh, then added a foreground presented-focus check. The regression fails before that fix and passes with all31 battle-session/runtime checks.
 - 84 preliminary original-mover traces pass, including exact681/1785 direct and Story routes. Final packaged assembly binding remains required.
+
+- Final independent Opus review cleared the code after the explicit swordsman
+  wording and two new Fish takes. The last unknown-name punctuation minor now
+  includes the native Spanish form; all six area tests and 29 movie-resource
+  checks pass together. Final expected full count is 5,788. Native byte/DWORD
+  conservatism is documented. No sword handover or hidden watcher identity is
+  inferred. Public release still waits for package-bound and deployment checks.

@@ -1,10 +1,10 @@
 # Bonus-area names in 0.3.88
 
-The debug-map string bank ends at scene495. Bonus field scenes instead read the
+The debug-map string bank ends at scene 495. Bonus field scenes instead read the
 name that the game's top menu builds at EXE RVA 0x0B1D10. The current game owner at
 image + 0x41B4C4 supplies scene + 0x120C0 and the unpacked MapMsgDataTable pointer + 0xFE28,
 with count + 0xFE2C. The scene-indexed pointer identifies a record whose DWORD + 4 is a one-based
-map.txt name row. Zero,255, missing rows and invalid counts provide no name.
+map.txt name row. Zero, 255, missing rows and invalid counts provide no name.
 
 Bank 0x22 in the loaded text manager supplies localized MSG_FIELD_* text. Keys
 are named, such as MSG_FIELD_MENU_36, rather than numeric row IDs. The reader
@@ -22,3 +22,7 @@ This includes the Truce Canyon alias in bonus scene 634. A corpus-anchored test
 checks scene 614, row 139, key MSG_FIELD_MENU_45. The supported executable/resource hashes and
 native battle-name findings are recorded with the release evidence and battle
 interface audit.
+
+For speech, a native question-mark-only name is announced as "Unidentified area"
+so its meaning remains available with punctuation speech disabled. The captured
+name stays unchanged.

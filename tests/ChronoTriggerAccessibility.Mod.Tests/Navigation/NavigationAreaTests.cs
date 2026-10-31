@@ -6,6 +6,16 @@ namespace ChronoTriggerAccessibility.Mod.Tests.Navigation;
 
 public sealed class NavigationAreaTests
 {
+    [Theory]
+    [InlineData("? ? ?")] [InlineData("？？？")] [InlineData("¿...?")]
+    public void AQuestionMarkOnlyNativeNameGetsAWordedAnnouncement(string nativeName)
+    {
+        var speech=new List<string>();var announcer=new NavigationAreaAnnouncer(speech.Add,_=>{});
+        var frame=new NavigationFrame("field:634",true,new(0,0,1),[],
+            new WorldNavigationGraph(new byte[6144],new byte[512])){AreaName=nativeName};
+        announcer.Observe(frame);announcer.Observe(frame);
+        Assert.Equal(["Unidentified area."],speech);
+    }
     [Fact]
     public void AreaAnnouncementsFollowTheRoundTripAndDoNotRepeatEverySample()
     {

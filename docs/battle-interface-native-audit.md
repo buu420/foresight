@@ -920,7 +920,9 @@ In the HP-reveal state (`0x1A20C`/`0x1A1E0`) it calls `0x46ECD0` instead, which 
 line `0x30`, `<NAME_MON>    <NUMBER>/<NUMBER>`. Flagged names pass `0xFF` and draw nothing. The
 2026-10-30 log shows the old result for Red Ghaj (`0x11A`): "Target. Enemy A." then "Red Ghaj".
 
-The target focus already speaks the name, so `NameLabelSlot` marks this branch. The session then
+The capture conservatively requires the full mode DWORD to be zero. Unknown upper bits retain
+the native feedback rather than suppressing it. The target focus already speaks the name, so
+`NameLabelSlot` marks this branch. The session then
 treats exactly that raw name as already spoken, on both the HUD tick and the `0x19940` hook. A
 silenced label stays the current presentation until hidden or replaced. The HP-reveal form, all
 other text, and matching text during Tech or Item targeting, groups or allies are still spoken.
