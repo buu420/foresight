@@ -60,12 +60,12 @@ catalog/runtime as supported by reviewed clips; focused movie/story tests/docs.
 
 ### Task4: Review, deployment and public0.3.88
 
-- [ ] Resolve fresh whole-branch Opus5.5 max review findings with reproduced evidence.
-- [ ] Run full solution and exact packaged x86/native checks, confirm real counts and commit identities.
-- [ ] Package standalone/AMM without a crash collector; compare every wrapped payload entry.
-- [ ] Deploy while the game is closed; verify every installed byte and protected-file hashes.
-- [ ] Publish immutable beta/tag and catalog, anonymously verify downloads and preserve history.
-- [ ] Record a handoff/closure with explicit unperformed live tests.
+- [x] Resolve fresh whole-branch Opus5.5 max review findings with reproduced evidence.
+- [x] Run full solution and exact packaged x86/native checks, confirm real counts and commit identities.
+- [x] Package standalone/AMM without a crash collector; compare every wrapped payload entry.
+- [x] Deploy while the game is closed; verify every installed byte and protected-file hashes.
+- [x] Publish immutable beta/tag and catalog, anonymously verify downloads and preserve history.
+- [x] Record a handoff/closure with explicit unperformed live tests.
 
 ## Ledger
 
@@ -74,20 +74,34 @@ catalog/runtime as supported by reviewed clips; focused movie/story tests/docs.
   reject this nested repository, so the established ignored Git fallback is used.
 - Scope approved: Yes, cover all of those. New log copied after user's recheck.
 - Supported EXE/resources hashes freshly match8FE9D75E.../09914BF4....
-- Descript project210c466d-d712-4a02-a8ae-292b7595d569 unchanged by read-only
-  audit. First job succeeds with limited screenshots; second fails unexpectedly.
-- No product change has been made yet. Native naming/narration questions remain
-  with read-only Opus5.5 max collaborators; final designs follow their evidence.
-
-- Pre-commit verification: all 5,785 checks pass (Core245, Native1566, Mod3964, Prism10), zero build warnings/errors. Final review and payload-bound native/deployment/publication verification remain.
+- Descript's imported-footage render failed. Timestamped local frame sequences,
+  original native assets and Ghidra timing evidence verify the two new films.
+- Final payload/tag b4b4d5daf7f09c2d4668bbf79a59443fbe415b0c. Fresh full
+  Release verification passes all 5,788 tests (Core245, Native1566, Mod3967,
+  Prism10), with zero build warnings/errors.
 - Native names are limited to verified bonus-field tables and supported monster ranges. Existing base-area naming policy is unchanged. Borrowed bonus names retain the native discovery bits.
 - Partial Opus review found an unproven third rider; corrected to visible winged reptiles. Unproven eye/smile and doorway-person claims removed. Native frame review also corrected cue starts and added a crowned man, kneeling/standing and an armor-clad watcher. Final27 clips pass ASR, clipping, format, windows and exact silence/placement; 177 previous recordings unchanged.
 - Root reproduced loss of a native enemy-name popup before a HUD refresh, then added a foreground presented-focus check. The regression fails before that fix and passes with all31 battle-session/runtime checks.
-- 84 preliminary original-mover traces pass, including exact681/1785 direct and Story routes. Final packaged assembly binding remains required.
+- All 84 original-mover traces pass, including exact681/1785 direct and Story
+  routes. Final Core/Mod hashes and informational versions match the package.
 
 - Final independent Opus review cleared the code after the explicit swordsman
   wording and two new Fish takes. The last unknown-name punctuation minor now
   includes the native Spanish form; all six area tests and 29 movie-resource
-  checks pass together. Final expected full count is 5,788. Native byte/DWORD
+  checks pass together. Native byte/DWORD
   conservatism is documented. No sword handover or hidden watcher identity is
-  inferred. Public release still waits for package-bound and deployment checks.
+  inferred.
+- The immutable package passes 1,037 checks in private 32-bit .NET, nine silent
+  native movie checks, four release-package tests and six AMM manifest tests.
+  All 275 standalone files match the 277-entry wrapper and local installation;
+  303 fresh deployment checks pass. The game stayed closed.
+- Published https://github.com/buu420/foresight/releases/tag/v0.3.88 and catalog
+  commit3e9fba02c6ca705158bb8e20a4b665ef6302b941. All three assets and the
+  catalog were anonymously downloaded and verified. Historical/unrelated
+  records are preserved; indexPublished/liveVerified/directorySubmitted pass.
+- The original 244-file protection audit remains retained: 243 unchanged files
+  and one approved source voice-manifest metadata addition for005/008. All177
+  previous recordings and both user-owned source files are unchanged.
+- Handoff: artifacts/handoffs/2026-10-31-volcano-names-narration-0388.md.
+  Live gameplay, physical input, audible speech and recipient-PC tests remain
+  explicitly unperformed; the texture-creation crash remains unresolved.
