@@ -25,7 +25,7 @@ public sealed partial class FieldTechDetailsCapture(IReadableMemory memory)
         // 1CDD70 replaces it with the row manager. A failed row read cannot use
         // the previous character selection as a fallback.
         if (Word(node + 0x308, out var rowManager) && rowManager == 0)
-            return CaptureCharacter(image, node);
+            return TargetWindowOpen(node) ? CaptureTarget(image, node) : CaptureCharacter(image, node);
         var state = ReadState(image, node);
         if (state is null) return null;
         var selected = rendered.Read(state.Control);
