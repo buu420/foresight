@@ -55,7 +55,8 @@ public sealed class FieldSubmenuSource(IReadableMemory memory)
             return Word(node + 0x304, out var own) && own == manager;
         if (vt == image + FieldSubmenuCapture.ClassicTechNodeVtableRva)
             return (Word(node + 0x308, out var techManager) && techManager == manager) ||
-                (Word(node + 0x2E8, out var characterManager) && characterManager == manager);
+                (Word(node + 0x2E8, out var characterManager) && characterManager == manager) ||
+                tech.OwnsTargetManager(image, node, manager);
         return fields.OwnsManager(image, node, manager);
     }
     private bool Word(nuint p, out uint value)
